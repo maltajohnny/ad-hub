@@ -12,6 +12,7 @@ import {
   BarChart3,
   UsersRound,
   Star,
+  Columns3,
 } from "lucide-react";
 import norterLogo from "@/assets/norterlogo.png";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -39,6 +40,8 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   const path = location.pathname;
   const clientesListActive = path === "/clientes";
   const favoritosActive = path === "/clientes/favoritos";
+  const dashboardActive = path === "/";
+  const boardActive = path === "/board";
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -59,7 +62,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           <button
             onClick={() => navigate("/")}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
-              path === "/"
+              dashboardActive
                 ? "gradient-brand text-primary-foreground font-medium"
                 : "text-sidebar-foreground hover:bg-sidebar-accent"
             }`}
@@ -67,6 +70,30 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             <LayoutDashboard size={18} className="flex-shrink-0" />
             {!collapsed && <span>Dashboard</span>}
           </button>
+
+          {!collapsed ? (
+            <button
+              onClick={() => navigate("/board")}
+              className={`w-full flex items-center gap-3 pl-8 pr-3 py-2 rounded-lg text-xs transition-all ${
+                boardActive
+                  ? "bg-sidebar-accent text-foreground font-medium"
+                  : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
+              }`}
+            >
+              <Columns3 size={15} className="flex-shrink-0 opacity-90" />
+              <span>Board</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => navigate("/board")}
+              title="Board"
+              className={`w-full flex items-center justify-center py-2 rounded-lg transition-all ${
+                boardActive ? "bg-sidebar-accent text-primary" : "text-muted-foreground hover:bg-sidebar-accent"
+              }`}
+            >
+              <Columns3 size={18} />
+            </button>
+          )}
 
           <button
             onClick={() => navigate("/clientes")}

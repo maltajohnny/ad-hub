@@ -7,9 +7,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { FavoritesProvider } from "@/contexts/FavoritesContext";
+import { KanbanProvider } from "@/contexts/KanbanContext";
 import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
+import Board from "@/pages/Board";
 import Clientes from "@/pages/Clientes";
 import ClientesFavoritos from "@/pages/ClientesFavoritos";
 import Campanhas from "@/pages/Campanhas";
@@ -34,6 +36,7 @@ const ProtectedRoutes = () => {
     <AppLayout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/board" element={<Board />} />
         <Route path="/clientes/favoritos" element={<ClientesFavoritos />} />
         <Route path="/clientes" element={<Clientes />} />
         <Route path="/campanhas" element={<Campanhas />} />
@@ -68,12 +71,14 @@ const App = () => (
         <Sonner />
         <AuthProvider>
           <FavoritesProvider>
+            <KanbanProvider>
             <BrowserRouter>
               <Routes>
                 <Route path="/login" element={<LoginRoute />} />
                 <Route path="/*" element={<ProtectedRoutes />} />
               </Routes>
             </BrowserRouter>
+            </KanbanProvider>
           </FavoritesProvider>
         </AuthProvider>
       </TooltipProvider>
