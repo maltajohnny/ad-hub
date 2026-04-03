@@ -2,17 +2,28 @@ import { ReactNode, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, Users, UserCircle, LogOut, ChevronLeft, ChevronRight, TrendingUp,
-  Settings, BarChart3
+  LayoutDashboard,
+  Users,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  TrendingUp,
+  Settings,
+  BarChart3,
+  UsersRound,
 } from "lucide-react";
 import norterLogo from "@/assets/norterlogo.png";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
 
-const menuItems = [
+type MenuItem = { icon: typeof LayoutDashboard; label: string; path: string; adminOnly?: boolean };
+
+const menuItems: MenuItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Users, label: "Clientes", path: "/clientes" },
   { icon: BarChart3, label: "Campanhas", path: "/campanhas" },
   { icon: TrendingUp, label: "IA & ROI", path: "/ia-roi" },
-  { icon: UserCircle, label: "Perfil", path: "/perfil" },
+  { icon: UsersRound, label: "Usuários", path: "/usuarios", adminOnly: true },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
 
@@ -22,9 +33,11 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
 
+  const isAdmin = user?.role === "admin";
+  const visibleMenu = menuItems.filter((item) => !item.adminOnly || isAdmin);
+
   return (
     <div className="min-h-screen flex bg-background">
-      {/* Sidebar */}
       <aside
         className={`${collapsed ? "w-20" : "w-64"} transition-all duration-300 bg-sidebar border-r border-sidebar-border flex flex-col`}
       >
@@ -39,8 +52,11 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         </div>
 
         <nav className="flex-1 p-3 space-y-1">
-          {menuItems.map((item) => {
-            const active = location.pathname === item.path;
+          {visibleMenu.map((item) => {
+            const active =
+              item.path === "/"
+                ? location.pathname === "/"
+                : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
             return (
               <button
                 key={item.path}
@@ -60,8 +76,23 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
 
         <div className="p-3 border-t border-sidebar-border space-y-2">
           {!collapsed && (
-            <div className="px-3 py-2 text-xs text-muted-foreground">
-              Logado como <span className="text-foreground font-medium">{user?.name}</span>
+            <div className="px-3 py-2 flex items-start gap-3">
+              <UserAvatarDisplay user={user} className="h-9 w-9" iconSize={20} />
+              <div className="text-xs text-muted-foreground min-w-0 flex-1">
+                Logado como <span className="text-foreground font-medium block truncate">{user?.name}</span>
+                {user?.role === "admin" ? (
+                  <span className="block text-[10px] text-primary/90 mt-0.5">Administrador</span>
+                ) : (
+                  <span className="block text-[10px] text-muted-foreground/90 mt-1 leading-snug">
+                    Perfil padrão — permissões detalhadas em breve.
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+          {collapsed && user && (
+            <div className="flex justify-center pb-1">
+              <UserAvatarDisplay user={user} className="h-9 w-9" iconSize={20} />
             </div>
           )}
           <button
@@ -80,9 +111,13 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-auto">
-        <div className="p-6 lg:p-8 max-w-7xl mx-auto">{children}</div>
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="flex items-center justify-end gap-3 px-6 lg:px-8 pt-6 pb-2 border-b border-border/40 bg-background/80 backdrop-blur-sm shrink-0">
+          <ThemeToggle />
+        </div>
+        <div className="flex-1 overflow-auto">
+          <div className="p-6 lg:p-8 max-w-7xl mx-auto">{children}</div>
+        </div>
       </main>
     </div>
   );

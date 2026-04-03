@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
 import { Card } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, DollarSign, Eye, MousePointerClick, Target, ArrowUpRight } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
+import { TrendingUp, DollarSign, Eye, MousePointerClick, Target, ArrowUpRight } from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from "recharts";
 
 const kpis = [
   { label: "Investimento Total", value: "R$ 45.230", change: "+12%", up: true, icon: DollarSign },
@@ -33,11 +35,25 @@ const aiRecommendations = [
 ];
 
 const Dashboard = () => {
+  const [mounted, setMounted] = useState(false);
+  const { resolvedTheme } = useTheme();
+  useEffect(() => setMounted(true), []);
+
+  const isLight = mounted && resolvedTheme === "light";
+  const chartGrid = isLight ? "hsl(220, 13%, 88%)" : "hsl(220, 14%, 18%)";
+  const chartAxis = isLight ? "hsl(220, 9%, 42%)" : "hsl(215, 12%, 55%)";
+  const tooltipStyle = {
+    background: isLight ? "hsl(0, 0%, 100%)" : "hsl(220, 18%, 10%)",
+    border: `1px solid ${isLight ? "hsl(220, 13%, 90%)" : "hsl(220, 14%, 18%)"}`,
+    borderRadius: "8px",
+    color: isLight ? "hsl(222, 47%, 11%)" : "hsl(210, 20%, 95%)",
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
+      <div className="space-y-1">
         <h1 className="text-2xl font-display font-bold">Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">Visão geral do tráfego pago — Junho 2026</p>
+        <p className="text-muted-foreground text-sm">Visão geral do tráfego pago — Junho 2026</p>
       </div>
 
       {/* KPIs */}
@@ -77,10 +93,10 @@ const Dashboard = () => {
                   <stop offset="95%" stopColor="hsl(40, 90%, 55%)" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 18%)" />
-              <XAxis dataKey="month" stroke="hsl(215, 12%, 55%)" fontSize={12} />
-              <YAxis stroke="hsl(215, 12%, 55%)" fontSize={12} />
-              <Tooltip contentStyle={{ background: "hsl(220, 18%, 10%)", border: "1px solid hsl(220, 14%, 18%)", borderRadius: "8px", color: "hsl(210, 20%, 95%)" }} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+              <XAxis dataKey="month" stroke={chartAxis} fontSize={12} />
+              <YAxis stroke={chartAxis} fontSize={12} />
+              <Tooltip contentStyle={tooltipStyle} />
               <Area type="monotone" dataKey="meta" stroke="hsl(174, 72%, 52%)" fill="url(#metaGrad)" strokeWidth={2} name="Meta Ads" />
               <Area type="monotone" dataKey="google" stroke="hsl(230, 60%, 60%)" fill="url(#googleGrad)" strokeWidth={2} name="Google Ads" />
               <Area type="monotone" dataKey="instagram" stroke="hsl(40, 90%, 55%)" fill="url(#igGrad)" strokeWidth={2} name="Instagram" />
@@ -93,9 +109,9 @@ const Dashboard = () => {
           <h3 className="font-display font-semibold mb-4">ROI por Plataforma</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={platformROI} layout="vertical">
-              <XAxis type="number" stroke="hsl(215, 12%, 55%)" fontSize={12} />
-              <YAxis type="category" dataKey="name" stroke="hsl(215, 12%, 55%)" fontSize={12} width={90} />
-              <Tooltip contentStyle={{ background: "hsl(220, 18%, 10%)", border: "1px solid hsl(220, 14%, 18%)", borderRadius: "8px", color: "hsl(210, 20%, 95%)" }} />
+              <XAxis type="number" stroke={chartAxis} fontSize={12} />
+              <YAxis type="category" dataKey="name" stroke={chartAxis} fontSize={12} width={90} />
+              <Tooltip contentStyle={tooltipStyle} />
               <Bar dataKey="value" radius={[0, 6, 6, 0]} name="ROI">
                 {platformROI.map((entry, index) => (
                   <Cell key={index} fill={entry.color} />

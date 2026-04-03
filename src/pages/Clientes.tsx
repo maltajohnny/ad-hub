@@ -1,83 +1,1066 @@
+import { useMemo, useState, useEffect } from "react";
+import { useTheme } from "next-themes";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Search, TrendingUp, DollarSign, BarChart3 } from "lucide-react";
-import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import {
+  Search,
+  TrendingUp,
+  DollarSign,
+  BarChart3,
+  Sparkles,
+  HelpCircle,
+  Users,
+  Target,
+  MousePointerClick,
+  Eye,
+  Brain,
+  Send,
+  CheckCircle2,
+  ArrowRight,
+  Plug,
+  Database,
+  LineChart as LineChartIconLucide,
+  BrainCircuit,
+  SlidersHorizontal,
+  CircleCheck,
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
 
-const clientsData = [
-  { id: 1, name: "TechFlow Solutions", segment: "SaaS", spend: "R$ 18.500", roi: "4.2x", status: "Ativo", platforms: ["Meta", "Google"] },
-  { id: 2, name: "Bella Cosmetics", segment: "E-commerce", spend: "R$ 12.300", roi: "3.8x", status: "Ativo", platforms: ["Instagram", "Meta"] },
-  { id: 3, name: "AutoPrime Veículos", segment: "Automotivo", spend: "R$ 25.000", roi: "2.9x", status: "Ativo", platforms: ["Google", "Meta"] },
-  { id: 4, name: "FitLife Academia", segment: "Fitness", spend: "R$ 5.800", roi: "5.1x", status: "Ativo", platforms: ["Instagram"] },
-  { id: 5, name: "Gourmet Express", segment: "Food Delivery", spend: "R$ 8.200", roi: "3.5x", status: "Pausado", platforms: ["Meta", "Instagram"] },
-  { id: 6, name: "EduSmart Cursos", segment: "Educação", spend: "R$ 15.700", roi: "4.6x", status: "Ativo", platforms: ["Google", "Meta", "Instagram"] },
-  { id: 7, name: "Habitat Imóveis", segment: "Imobiliário", spend: "R$ 22.400", roi: "2.7x", status: "Ativo", platforms: ["Google", "Meta"] },
-  { id: 8, name: "PetHappy Store", segment: "Pet Shop", spend: "R$ 6.900", roi: "4.0x", status: "Ativo", platforms: ["Instagram", "Meta"] },
+type SortKey = "cpa_desc" | "cpa_asc" | "name_asc";
+
+export type Client = {
+  id: number;
+  name: string;
+  segment: string;
+  email: string;
+  cnpj: string;
+  spend: string;
+  spendNumeric: number;
+  roi: string;
+  status: "Ativo" | "Pausado";
+  platforms: string[];
+  budgetLabel: string;
+  leads: number;
+  conversions: number;
+  leadsChangePct: number;
+  convChangePct: number;
+  impressions: number;
+  clicks: number;
+  cpa: number;
+  cpc: number;
+  cpm: number;
+  ctr: number;
+  aiInsight: string;
+};
+
+const CH_META = "#3B82F6";
+const CH_GOOGLE = "#10B981";
+const CH_INSTA = "#DB2777";
+
+const brl = (n: number) =>
+  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+type AiDecision = {
+  at: string;
+  title: string;
+  from: string;
+  to: string;
+  amountLabel: string;
+  reason: string;
+};
+
+type RoiTableRow = {
+  channel: "Meta Ads" | "Google Ads" | "Instagram Ads";
+  invested: number;
+  leads: number;
+  conversions: number;
+  revenue: number;
+  cpl: number;
+  roiMult: number;
+};
+
+type ClientDetail = {
+  decisions: AiDecision[];
+  performance: { month: string; meta: number; google: number; instagram: number }[];
+  budgetCurrent: { meta: number; google: number; instagram: number };
+  budgetRecommended: { meta: number; google: number; instagram: number };
+  roiRows: RoiTableRow[];
+};
+
+function getClientDetail(c: Client): ClientDetail {
+  const k = c.id * 7;
+  const performance = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"].map((month, i) => ({
+    month,
+    meta: 45 + (k % 20) + i * 8,
+    google: 38 + (k % 15) + i * 7,
+    instagram: 32 + (k % 18) + i * 6,
+  }));
+
+  const decisions: AiDecision[] = [
+    {
+      at: "2026-04-03 09:15",
+      title: `Redistribuição de verba do Instagram para Google Ads`,
+      from: "Instagram Ads",
+      to: "Google Ads",
+      amountLabel: "R$ 2.000",
+      reason: `${c.name.split(" ")[0]}: Instagram Ads apresenta CPL 2× acima da média do mix. Google Search mantém CPA estável — realocação sugere melhor uso de verba.`,
+    },
+    {
+      at: "2026-04-01 14:22",
+      title: "Ajuste de lance em campanhas de conversão Meta",
+      from: "Meta Ads",
+      to: "Meta Ads",
+      amountLabel: "—",
+      reason: "CPA em leque de remarketing acima do alvo; redução de 8% no lance máximo até estabilizar frequência.",
+    },
+    {
+      at: "2026-03-28 11:40",
+      title: "Pausa temporária em criativo com CTR abaixo da média",
+      from: "Meta Ads",
+      to: "—",
+      amountLabel: "—",
+      reason: "CTR 40% abaixo do conjunto de anúncios vencedores; pausa evita gasto em impressões de baixa qualidade.",
+    },
+  ];
+
+  const t = c.spendNumeric / 1000;
+  const roiRows: RoiTableRow[] = [
+    {
+      channel: "Meta Ads",
+      invested: Math.round(t * 420),
+      leads: Math.round(c.leads * 0.42),
+      conversions: Math.round(c.conversions * 0.45),
+      revenue: Math.round(t * 1800),
+      cpl: c.cpa * 0.92,
+      roiMult: 3.2 + (k % 10) / 10,
+    },
+    {
+      channel: "Google Ads",
+      invested: Math.round(t * 380),
+      leads: Math.round(c.leads * 0.35),
+      conversions: Math.round(c.conversions * 0.38),
+      revenue: Math.round(t * 1650),
+      cpl: c.cpa * 0.88,
+      roiMult: 3.6 + (k % 8) / 10,
+    },
+    {
+      channel: "Instagram Ads",
+      invested: Math.round(t * 200),
+      leads: Math.round(c.leads * 0.23),
+      conversions: Math.round(c.conversions * 0.17),
+      revenue: Math.round(t * 890),
+      cpl: c.cpa * 1.15,
+      roiMult: 2.8 + (k % 12) / 10,
+    },
+  ];
+
+  const budgetCurrent = {
+    meta: 38 + (k % 8),
+    google: 35 + (k % 10),
+    instagram: 100 - (38 + (k % 8)) - (35 + (k % 10)),
+  };
+  const budgetRecommended = {
+    meta: Math.min(45, budgetCurrent.meta + 4),
+    google: Math.min(48, budgetCurrent.google + 6),
+    instagram: 100,
+  };
+  budgetRecommended.instagram = 100 - budgetRecommended.meta - budgetRecommended.google;
+
+  return { decisions, performance, budgetCurrent, budgetRecommended, roiRows };
+}
+
+const PROCESS_STEPS = [
+  { n: "01", title: "Conexão com APIs", desc: "Contas de anúncios vinculadas com permissões de leitura.", icon: Plug, active: true, border: "border-[#10B981]/50", iconBg: "text-[#10B981]", badge: "Conectado" as string | null },
+  { n: "02", title: "Coleta de Dados", desc: "Métricas sincronizadas por canal e campanha.", icon: Database, active: true, border: "border-[#3B82F6]/50", iconBg: "text-[#3B82F6]", badge: null },
+  { n: "03", title: "Análise & Dashboards", desc: "Painéis consolidados para o gestor e para a IA.", icon: LineChartIconLucide, active: true, border: "border-[#3B82F6]/50", iconBg: "text-[#3B82F6]", badge: null },
+  { n: "04", title: "IA — Otimização", desc: "Modelo analisa padrões e sugere redistribuições.", icon: BrainCircuit, active: true, border: "border-[#3B82F6]/50", iconBg: "text-[#3B82F6]", badge: null },
+  { n: "05", title: "Intervenção do Gestor", desc: "Aprovação ou ajuste manual antes de executar mudanças críticas.", icon: SlidersHorizontal, active: false, border: "border-border", iconBg: "text-muted-foreground", badge: null },
+  { n: "06", title: "Execução & Monitoramento", desc: "Alterações aplicadas e acompanhamento contínuo.", icon: CircleCheck, active: false, border: "border-border", iconBg: "text-muted-foreground", badge: null },
 ];
 
+const clientsData: Client[] = [
+  {
+    id: 1,
+    name: "TechFlow Solutions",
+    segment: "SaaS",
+    email: "contato@techflow.com.br",
+    cnpj: "12.345.678/0001-90",
+    spend: "R$ 18.500",
+    spendNumeric: 18500,
+    roi: "4.2x",
+    status: "Ativo",
+    platforms: ["Meta", "Google"],
+    budgetLabel: "R$ 20.000/mês",
+    leads: 420,
+    conversions: 352,
+    leadsChangePct: 5.2,
+    convChangePct: -2.1,
+    impressions: 890000,
+    clicks: 12200,
+    cpa: 52.6,
+    cpc: 1.52,
+    cpm: 20.8,
+    ctr: 1.37,
+    aiInsight:
+      "CPL em Meta Ads subiu 12% na última semana; Google Search mantém melhor CPA. Sugestão: realocar 10% do orçamento de Display para Search de marca.",
+  },
+  {
+    id: 2,
+    name: "Bella Cosméticos",
+    segment: "Beleza & Estética",
+    email: "marketing@bellacosmeticos.com.br",
+    cnpj: "45.678.901/0001-23",
+    spend: "R$ 12.300",
+    spendNumeric: 12300,
+    roi: "3.8x",
+    status: "Ativo",
+    platforms: ["Instagram", "Meta"],
+    budgetLabel: "R$ 25.000/mês",
+    leads: 685,
+    conversions: 278,
+    leadsChangePct: 8.2,
+    convChangePct: -3.2,
+    impressions: 2100000,
+    clicks: 98000,
+    cpa: 44.2,
+    cpc: 0.13,
+    cpm: 5.86,
+    ctr: 4.67,
+    aiInsight:
+      "Instagram apresenta CPL 2× acima da média do mix; Reels convertem melhor que Feed. Priorizar criativos de vídeo e testar orçamento em campanhas de conversão no Meta.",
+  },
+  {
+    id: 3,
+    name: "AutoPrime Veículos",
+    segment: "Automotivo",
+    email: "ads@autoprime.com.br",
+    cnpj: "33.222.111/0001-44",
+    spend: "R$ 25.000",
+    spendNumeric: 25000,
+    roi: "2.9x",
+    status: "Ativo",
+    platforms: ["Google", "Meta"],
+    budgetLabel: "R$ 30.000/mês",
+    leads: 310,
+    conversions: 198,
+    leadsChangePct: -1.4,
+    convChangePct: 4.5,
+    impressions: 1200000,
+    clicks: 18500,
+    cpa: 63.1,
+    cpc: 1.35,
+    cpm: 20.83,
+    ctr: 1.54,
+    aiInsight:
+      "CPA elevado em campanhas de remarketing no Google; audiências estão amplas demais. Refinar exclusões e reduzir lances em palavras genéricas.",
+  },
+  {
+    id: 4,
+    name: "FitLife Academia",
+    segment: "Fitness",
+    email: "growth@fitlife.com.br",
+    cnpj: "11.222.333/0001-55",
+    spend: "R$ 5.800",
+    spendNumeric: 5800,
+    roi: "5.1x",
+    status: "Ativo",
+    platforms: ["Instagram"],
+    budgetLabel: "R$ 8.000/mês",
+    leads: 290,
+    conversions: 142,
+    leadsChangePct: 12.0,
+    convChangePct: 6.1,
+    impressions: 450000,
+    clicks: 11200,
+    cpa: 40.8,
+    cpc: 0.52,
+    cpm: 12.89,
+    ctr: 2.49,
+    aiInsight:
+      "Performance estável; CTR acima da média do setor. Oportunidade de escalar orçamento em anúncios de carrossel com prova social.",
+  },
+  {
+    id: 5,
+    name: "Gourmet Express",
+    segment: "Food Delivery",
+    email: "parceiros@gourmetexpress.com.br",
+    cnpj: "98.765.432/0001-10",
+    spend: "R$ 8.200",
+    spendNumeric: 8200,
+    roi: "3.5x",
+    status: "Pausado",
+    platforms: ["Meta", "Instagram"],
+    budgetLabel: "R$ 10.000/mês",
+    leads: 180,
+    conversions: 95,
+    leadsChangePct: -4.0,
+    convChangePct: -8.0,
+    impressions: 620000,
+    clicks: 7400,
+    cpa: 86.3,
+    cpc: 1.11,
+    cpm: 13.23,
+    ctr: 1.19,
+    aiInsight:
+      "Campanhas pausadas com CPA histórico alto em horários de pico. Ao retomar, limitar entrega a raio menor e horários com melhor histórico de pedidos.",
+  },
+  {
+    id: 6,
+    name: "EduSmart Cursos",
+    segment: "Educação",
+    email: "media@edusmart.com.br",
+    cnpj: "55.444.333/0001-66",
+    spend: "R$ 15.700",
+    spendNumeric: 15700,
+    roi: "4.6x",
+    status: "Ativo",
+    platforms: ["Google", "Meta", "Instagram"],
+    budgetLabel: "R$ 18.000/mês",
+    leads: 512,
+    conversions: 401,
+    leadsChangePct: 3.1,
+    convChangePct: 1.8,
+    impressions: 1500000,
+    clicks: 42000,
+    cpa: 39.2,
+    cpc: 0.37,
+    cpm: 10.47,
+    ctr: 2.8,
+    aiInsight:
+      "Mix equilibrado entre canais; YouTube no Google puxa volume com CPA aceitável. Testar anúncios de resposta no Meta para leads quentes.",
+  },
+  {
+    id: 7,
+    name: "Habitat Imóveis",
+    segment: "Imobiliário",
+    email: "digital@habitatimoveis.com.br",
+    cnpj: "22.333.444/0001-77",
+    spend: "R$ 22.400",
+    spendNumeric: 22400,
+    roi: "2.7x",
+    status: "Ativo",
+    platforms: ["Google", "Meta"],
+    budgetLabel: "R$ 28.000/mês",
+    leads: 198,
+    conversions: 112,
+    leadsChangePct: -2.0,
+    convChangePct: -5.5,
+    impressions: 980000,
+    clicks: 8800,
+    cpa: 200.0,
+    cpc: 2.55,
+    cpm: 22.86,
+    ctr: 0.9,
+    aiInsight:
+      "CPA muito alto vs. ticket médio do lead. Revisar qualificação de formulário e excluir palavras de aluguel nas campanhas de compra.",
+  },
+  {
+    id: 8,
+    name: "PetHappy Store",
+    segment: "Pet Shop",
+    email: "loja@pethappy.com.br",
+    cnpj: "77.888.999/0001-88",
+    spend: "R$ 6.900",
+    spendNumeric: 6900,
+    roi: "4.0x",
+    status: "Ativo",
+    platforms: ["Instagram", "Meta"],
+    budgetLabel: "R$ 9.500/mês",
+    leads: 340,
+    conversions: 205,
+    leadsChangePct: 6.5,
+    convChangePct: 4.2,
+    impressions: 720000,
+    clicks: 15100,
+    cpa: 33.7,
+    cpc: 0.46,
+    cpm: 9.58,
+    ctr: 2.1,
+    aiInsight:
+      "Instagram com melhor ROAS no catálogo; considerar Advantage+ Shopping com orçamento mínimo estável por 14 dias para o algoritmo aprender.",
+  },
+];
+
+function MetricHint({ label, hint }: { label: string; hint: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+          aria-label={`Sobre ${label}`}
+        >
+          <span>{label}</span>
+          <HelpCircle className="h-3.5 w-3.5 opacity-70" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
+        {hint}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function ClientExpandedPanel({ client }: { client: Client }) {
+  const detail = useMemo(() => getClientDetail(client), [client.id]);
+  const [aiMode, setAiMode] = useState<"autonomous" | "supervised">("autonomous");
+  const [instruction, setInstruction] = useState("");
+
+  const [mounted, setMounted] = useState(false);
+  const { resolvedTheme } = useTheme();
+  useEffect(() => setMounted(true), []);
+
+  const isLight = mounted && resolvedTheme === "light";
+  const chartGrid = isLight ? "hsl(220, 13%, 88%)" : "hsl(220, 14%, 18%)";
+  const chartAxis = isLight ? "hsl(220, 9%, 42%)" : "hsl(215, 12%, 55%)";
+  const tooltipStyle = {
+    background: isLight ? "hsl(0, 0%, 100%)" : "hsl(220, 18%, 10%)",
+    border: `1px solid ${isLight ? "hsl(220, 13%, 90%)" : "hsl(220, 14%, 18%)"}`,
+    borderRadius: "8px",
+    color: isLight ? "hsl(222, 47%, 11%)" : "hsl(210, 20%, 95%)",
+  };
+
+  const pieCurrent = [
+    { name: "Meta Ads", value: detail.budgetCurrent.meta, color: CH_META },
+    { name: "Google Ads", value: detail.budgetCurrent.google, color: CH_GOOGLE },
+    { name: "Instagram", value: detail.budgetCurrent.instagram, color: CH_INSTA },
+  ];
+  const pieRec = [
+    { name: "Meta Ads", value: detail.budgetRecommended.meta, color: CH_META },
+    { name: "Google Ads", value: detail.budgetRecommended.google, color: CH_GOOGLE },
+    { name: "Instagram", value: detail.budgetRecommended.instagram, color: CH_INSTA },
+  ];
+
+  const latest = detail.decisions[0];
+
+  return (
+    <Card className="glass-card p-5 sm:p-6 border-primary/20 animate-fade-in space-y-6">
+      {/* Cabeçalho cliente */}
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-display font-bold">{client.name}</h2>
+          <p className="text-muted-foreground text-sm mt-1">
+            {client.segment} · Budget: {client.budgetLabel}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {client.email} · CNPJ {client.cnpj}
+          </p>
+        </div>
+        <Badge variant="outline" className="border-primary/40 text-primary w-fit shrink-0 mt-2 sm:mt-0">
+          <Sparkles className="h-3 w-3 mr-1" />
+          Visão detalhada · IA
+        </Badge>
+      </div>
+
+      {/* KPIs topo */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="rounded-lg bg-secondary/40 border border-border/50 p-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Investimento</span>
+            <DollarSign size={14} className="text-primary opacity-80" />
+          </div>
+          <p className="text-lg font-display font-bold tabular-nums">{client.spend}</p>
+          <span className="text-[10px] text-muted-foreground">período atual</span>
+        </div>
+        <div className="rounded-lg bg-secondary/40 border border-border/50 p-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Leads</span>
+            <Users size={14} className="text-accent opacity-80" />
+          </div>
+          <p className="text-lg font-display font-bold tabular-nums">{client.leads.toLocaleString("pt-BR")}</p>
+          <span
+            className={cn(
+              "text-[10px] font-medium",
+              client.leadsChangePct >= 0 ? "text-success" : "text-destructive",
+            )}
+          >
+            {client.leadsChangePct >= 0 ? "↗" : "↘"} {Math.abs(client.leadsChangePct)}%
+          </span>
+        </div>
+        <div className="rounded-lg bg-secondary/40 border border-border/50 p-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Conversões</span>
+            <Target size={14} className="text-primary opacity-80" />
+          </div>
+          <p className="text-lg font-display font-bold tabular-nums">{client.conversions.toLocaleString("pt-BR")}</p>
+          <span
+            className={cn(
+              "text-[10px] font-medium",
+              client.convChangePct >= 0 ? "text-success" : "text-destructive",
+            )}
+          >
+            {client.convChangePct >= 0 ? "↗" : "↘"} {Math.abs(client.convChangePct)}%
+          </span>
+        </div>
+        <div className="rounded-lg bg-secondary/40 border border-border/50 p-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">ROI</span>
+            <TrendingUp size={14} className="text-success opacity-80" />
+          </div>
+          <p className="text-lg font-display font-bold">{client.roi}</p>
+          <span className="text-[10px] text-muted-foreground">médio</span>
+        </div>
+      </div>
+
+      {/* Painel de Controle da IA (print 1) */}
+      <div className="rounded-xl border border-border/60 bg-card/40 p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg gradient-brand shadow-md">
+              <Brain className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h3 className="font-display font-semibold">Painel de Controle da IA</h3>
+              <p className="text-xs text-muted-foreground">Modo de execução e instruções para o agente</p>
+            </div>
+          </div>
+          <div className="flex rounded-lg border border-border/60 bg-secondary/30 p-1 gap-1">
+            <button
+              type="button"
+              onClick={() => setAiMode("autonomous")}
+              className={cn(
+                "flex-1 sm:flex-none rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                aiMode === "autonomous" ? "bg-success/20 text-success shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Autônoma
+            </button>
+            <button
+              type="button"
+              onClick={() => setAiMode("supervised")}
+              className={cn(
+                "flex-1 sm:flex-none rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                aiMode === "supervised" ? "bg-primary/20 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Supervisionada
+            </button>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "rounded-lg border px-3 py-2.5 text-xs mb-4 leading-relaxed",
+            aiMode === "autonomous" ? "border-success/40 bg-success/5 text-muted-foreground" : "border-primary/40 bg-primary/5 text-muted-foreground",
+          )}
+        >
+          {aiMode === "autonomous" ? (
+            <>
+              <strong className="text-foreground">Modo autônomo:</strong> a IA pode executar redistribuições dentro dos limites
+              definidos; o gestor acompanha pelo histórico abaixo.
+            </>
+          ) : (
+            <>
+              <strong className="text-foreground">Modo supervisionado:</strong> a IA apenas sugere alterações; você aprova antes
+              de qualquer mudança de orçamento.
+            </>
+          )}
+        </div>
+
+        <label className="text-xs text-muted-foreground block mb-1.5">Instrução para a IA</label>
+        <div className="flex gap-2">
+          <Input
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            placeholder="Ex.: priorizar Google Search nesta semana e limitar Instagram a R$ 3k..."
+            className="flex-1 bg-secondary/50 border-border/50 h-10"
+          />
+          <Button type="button" size="icon" className="h-10 w-10 shrink-0 bg-[#3B82F6] hover:bg-[#2563EB] text-white" aria-label="Enviar instrução">
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Destaque última decisão (estilo alerta dos prints) */}
+      <div className="rounded-xl border-l-4 border-l-[#3B82F6] border border-border/60 bg-secondary/20 p-4">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <Badge variant="outline" className="text-[10px] border-[#3B82F6]/50 text-[#3B82F6]">
+            Automática
+          </Badge>
+          <Badge variant="outline" className="text-[10px] border-success/50 text-success gap-1">
+            <CheckCircle2 className="h-3 w-3" />
+            Executada
+          </Badge>
+          <span className="text-[10px] text-muted-foreground ml-auto">{latest.at}</span>
+        </div>
+        <p className="text-sm font-semibold text-foreground">{latest.title}</p>
+        <p className="text-sm mt-1">
+          <span className="text-[#DB2777] font-medium">{latest.from}</span>
+          <ArrowRight className="inline h-3.5 w-3.5 mx-1 text-muted-foreground align-middle" />
+          <span className="text-[#10B981] font-medium">{latest.to}</span>
+          {latest.amountLabel !== "—" && (
+            <span className="text-foreground font-semibold ml-2">{latest.amountLabel}</span>
+          )}
+        </p>
+        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{latest.reason}</p>
+      </div>
+
+      {/* Histórico de Decisões da IA */}
+      <div>
+        <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          Histórico de Decisões da IA
+        </h3>
+        <div className="space-y-3">
+          {detail.decisions.map((d, i) => (
+            <div
+              key={`${d.at}-${i}`}
+              className="rounded-lg border border-border/50 bg-secondary/20 p-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="text-[10px]">
+                    Automática
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] border-success/40 text-success gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Executada
+                  </Badge>
+                </div>
+                <span className="text-[10px] text-muted-foreground tabular-nums">{d.at}</span>
+              </div>
+              <p className="text-sm font-semibold">{d.title}</p>
+              <p className="text-sm mt-1">
+                <span className="text-[#DB2777]">{d.from}</span>
+                <ArrowRight className="inline h-3.5 w-3.5 mx-1 text-muted-foreground align-middle" />
+                <span className="text-[#10B981]">{d.to}</span>
+                {d.amountLabel !== "—" && <span className="font-semibold ml-2">{d.amountLabel}</span>}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">{d.reason}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Desempenho por Canal */}
+      <div className="rounded-xl border border-border/60 bg-card/30 p-4 sm:p-5">
+        <h3 className="font-display font-semibold mb-1">Desempenho por Canal</h3>
+        <p className="text-xs text-muted-foreground mb-4">Receita / resultado agregado — últimos 6 meses (simulado)</p>
+        <div className="h-[260px] w-full min-w-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={detail.performance} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+              <XAxis dataKey="month" stroke={chartAxis} fontSize={11} />
+              <YAxis stroke={chartAxis} fontSize={11} />
+              <RechartsTooltip contentStyle={tooltipStyle} />
+              <Legend wrapperStyle={{ fontSize: "12px" }} />
+              <Line type="monotone" dataKey="meta" name="Meta Ads" stroke={CH_META} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+              <Line type="monotone" dataKey="google" name="Google Ads" stroke={CH_GOOGLE} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+              <Line type="monotone" dataKey="instagram" name="Instagram" stroke={CH_INSTA} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Redistribuição de Orçamento */}
+      <div className="grid md:grid-cols-[1fr_auto_1fr] gap-4 items-center">
+        <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-2 text-center">Distribuição atual</p>
+          <div className="h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieCurrent}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={48}
+                  outerRadius={72}
+                  paddingAngle={2}
+                  dataKey="value"
+                  nameKey="name"
+                >
+                  {pieCurrent.map((e, i) => (
+                    <Cell key={i} fill={e.color} />
+                  ))}
+                </Pie>
+                <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `${v}%`} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <ArrowRight className="h-6 w-6 text-[#3B82F6] hidden md:block shrink-0" />
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <p className="text-xs font-medium text-primary mb-2 text-center">Recomendado pela IA</p>
+          <div className="h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieRec}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={48}
+                  outerRadius={72}
+                  paddingAngle={2}
+                  dataKey="value"
+                  nameKey="name"
+                >
+                  {pieRec.map((e, i) => (
+                    <Cell key={`r-${i}`} fill={e.color} />
+                  ))}
+                </Pie>
+                <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `${v}%`} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Relatório Mensal de ROI */}
+      <div className="rounded-xl border border-border/60 overflow-hidden">
+        <div className="px-4 py-3 border-b border-border/50 bg-secondary/20">
+          <h3 className="font-display font-semibold">Relatório Mensal de ROI</h3>
+          <p className="text-xs text-muted-foreground">Junho 2026 — inputs e outputs por canal (simulado)</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border/50 text-left text-xs text-muted-foreground">
+                <th className="px-4 py-2 font-medium">Canal</th>
+                <th className="px-4 py-2 font-medium tabular-nums">Investido</th>
+                <th className="px-4 py-2 font-medium tabular-nums">Leads</th>
+                <th className="px-4 py-2 font-medium tabular-nums">Conversões</th>
+                <th className="px-4 py-2 font-medium tabular-nums">Receita</th>
+                <th className="px-4 py-2 font-medium tabular-nums">CPL</th>
+                <th className="px-4 py-2 font-medium tabular-nums">ROI</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.roiRows.map((row) => (
+                <tr key={row.channel} className="border-b border-border/30 hover:bg-secondary/10">
+                  <td className="px-4 py-2.5">
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{
+                          backgroundColor:
+                            row.channel === "Meta Ads" ? CH_META : row.channel === "Google Ads" ? CH_GOOGLE : CH_INSTA,
+                        }}
+                      />
+                      {row.channel}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 tabular-nums">{brl(row.invested)}</td>
+                  <td className="px-4 py-2.5 tabular-nums">{row.leads}</td>
+                  <td className="px-4 py-2.5 tabular-nums">{row.conversions}</td>
+                  <td className="px-4 py-2.5 tabular-nums text-success font-medium">{brl(row.revenue)}</td>
+                  <td className="px-4 py-2.5 tabular-nums">{brl(row.cpl)}</td>
+                  <td className="px-4 py-2.5 tabular-nums text-primary font-semibold">{row.roiMult.toFixed(1)}x</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Fluxo do Processo */}
+      <div>
+        <h3 className="font-display font-semibold mb-3">Fluxo do Processo</h3>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {PROCESS_STEPS.map((step) => (
+            <div
+              key={step.n}
+              className={cn(
+                "rounded-lg border p-3 relative",
+                step.border,
+                step.active ? "bg-card/50" : "bg-secondary/20 opacity-90",
+              )}
+            >
+              {step.badge && (
+                <Badge className="absolute top-2 right-2 text-[9px] h-5 bg-success/20 text-success border-0">{step.badge}</Badge>
+              )}
+              <div className="flex items-start gap-2">
+                <span className="text-[10px] font-mono text-muted-foreground">{step.n}</span>
+                <step.icon className={cn("h-4 w-4 shrink-0 mt-0.5", step.iconBg)} />
+              </div>
+              <p className="text-sm font-semibold mt-2 pr-12">{step.title}</p>
+              <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{step.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Separator className="bg-border/60" />
+
+      {/* Métricas funil CPA / CPC / CPM / CTR */}
+      <div>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+          Funil: impressão → clique → conversão · CPM / CTR / CPC / CPA
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div className="rounded-lg border border-border/60 bg-card/50 p-3">
+            <MetricHint
+              label="CPA"
+              hint="Custo por aquisição: gasto ÷ conversões. Quanto menor, melhor."
+            />
+            <p className="text-base font-display font-bold text-destructive/95 mt-1 tabular-nums">{brl(client.cpa)}</p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-card/50 p-3">
+            <MetricHint label="CPC" hint="Custo por clique: gasto ÷ cliques." />
+            <p className="text-base font-display font-bold text-foreground mt-1 tabular-nums">{brl(client.cpc)}</p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-card/50 p-3">
+            <MetricHint label="CPM" hint="(Gasto ÷ impressões) × 1000." />
+            <p className="text-base font-display font-bold text-foreground mt-1 tabular-nums">{brl(client.cpm)}</p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-card/50 p-3">
+            <MetricHint label="CTR" hint="(Cliques ÷ impressões) × 100." />
+            <p className="text-base font-display font-bold text-primary mt-1 tabular-nums">{client.ctr.toFixed(2)}%</p>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-2 text-[11px] text-muted-foreground mb-4">
+          <div className="flex items-center gap-2 rounded-md bg-secondary/30 px-2 py-1.5">
+            <Eye size={12} className="shrink-0 text-[#3B82F6]" />
+            Impressões:{" "}
+            <strong className="text-foreground">{client.impressions.toLocaleString("pt-BR")}</strong>
+          </div>
+          <div className="flex items-center gap-2 rounded-md bg-secondary/30 px-2 py-1.5">
+            <MousePointerClick size={12} className="shrink-0 text-[#10B981]" />
+            Cliques: <strong className="text-foreground">{client.clicks.toLocaleString("pt-BR")}</strong>
+          </div>
+          <div className="flex items-center gap-2 rounded-md bg-secondary/30 px-2 py-1.5">
+            <Target size={12} className="shrink-0 text-[#DB2777]" />
+            Base CPA: <strong className="text-foreground">{client.conversions} conv.</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Insight gestor */}
+      <div className="rounded-lg border border-success/25 bg-success/5 p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Sparkles className="h-4 w-4 text-primary shrink-0" />
+          <span className="text-sm font-semibold font-display">Insight da IA (gestor valida)</span>
+        </div>
+        <p className="text-sm text-muted-foreground leading-relaxed">{client.aiInsight}</p>
+        <p className="text-[11px] text-muted-foreground mt-3 pt-2 border-t border-border/40">
+          Análise assistida por IA — valide sempre nas plataformas antes de alterar orçamentos ou campanhas.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
 const Clientes = () => {
-  const [search, setSearch] = useState("");
-  const filtered = clientsData.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()));
+  const [filterName, setFilterName] = useState("");
+  const [filterEmail, setFilterEmail] = useState("");
+  const [filterCnpj, setFilterCnpj] = useState("");
+  const [sortBy, setSortBy] = useState<SortKey>("cpa_desc");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  const filtered = useMemo(() => {
+    const n = (s: string) => s.replace(/\D/g, "");
+    const qName = filterName.trim().toLowerCase();
+    const qEmail = filterEmail.trim().toLowerCase();
+    const qCnpj = n(filterCnpj);
+
+    const list = clientsData.filter((c) => {
+      if (qName && !c.name.toLowerCase().includes(qName)) return false;
+      if (qEmail && !c.email.toLowerCase().includes(qEmail)) return false;
+      if (qCnpj && !n(c.cnpj).includes(qCnpj)) return false;
+      return true;
+    });
+
+    return [...list].sort((a, b) => {
+      switch (sortBy) {
+        case "cpa_desc":
+          return b.cpa - a.cpa;
+        case "cpa_asc":
+          return a.cpa - b.cpa;
+        case "name_asc":
+          return a.name.localeCompare(b.name, "pt-BR");
+        default:
+          return 0;
+      }
+    });
+  }, [filterName, filterEmail, filterCnpj, sortBy]);
+
+  useEffect(() => {
+    if (expandedId !== null && !filtered.some((c) => c.id === expandedId)) {
+      setExpandedId(null);
+    }
+  }, [filtered, expandedId]);
+
+  const selected = expandedId !== null ? clientsData.find((c) => c.id === expandedId) : undefined;
+
+  const toggleCard = (id: number) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-display font-bold">Clientes</h1>
-          <p className="text-muted-foreground text-sm mt-1">{clientsData.length} clientes cadastrados</p>
-        </div>
-        <div className="relative w-72">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar cliente..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-secondary/50 border-border/50"
-          />
+          <p className="text-muted-foreground text-sm mt-1">
+            {filtered.length} de {clientsData.length} clientes
+            {sortBy === "cpa_desc" && " · CPA mais alto primeiro"}
+          </p>
         </div>
       </div>
+
+      <Card className="glass-card p-4 sm:p-5 border-border/60">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Filtros</p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
+          <div className="space-y-1.5 lg:col-span-1">
+            <label htmlFor="f-name" className="text-xs text-muted-foreground">
+              Nome do cliente
+            </label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                id="f-name"
+                placeholder="Buscar por nome..."
+                value={filterName}
+                onChange={(e) => setFilterName(e.target.value)}
+                className="pl-8 h-10 bg-secondary/50 border-border/50"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="f-email" className="text-xs text-muted-foreground">
+              E-mail
+            </label>
+            <Input
+              id="f-email"
+              type="email"
+              placeholder="contato@empresa.com"
+              value={filterEmail}
+              onChange={(e) => setFilterEmail(e.target.value)}
+              className="h-10 bg-secondary/50 border-border/50"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="f-cnpj" className="text-xs text-muted-foreground">
+              CNPJ
+            </label>
+            <Input
+              id="f-cnpj"
+              placeholder="00.000.000/0000-00"
+              value={filterCnpj}
+              onChange={(e) => setFilterCnpj(e.target.value)}
+              className="h-10 bg-secondary/50 border-border/50"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <span className="text-xs text-muted-foreground block">Ordenação</span>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
+              <SelectTrigger className="h-10 bg-secondary/50 border-border/50">
+                <SelectValue placeholder="Ordenar por" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cpa_desc">CPA mais alto primeiro</SelectItem>
+                <SelectItem value="cpa_asc">CPA mais baixo primeiro</SelectItem>
+                <SelectItem value="name_asc">Nome (A–Z)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Card>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filtered.map((client) => (
-          <Card key={client.id} className="glass-card p-5 hover:glow-primary transition-all cursor-pointer group">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h3 className="font-display font-semibold text-sm group-hover:gradient-brand-text transition-colors">
-                  {client.name}
-                </h3>
-                <span className="text-xs text-muted-foreground">{client.segment}</span>
-              </div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${client.status === "Ativo" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
-                {client.status}
-              </span>
-            </div>
-
-            <div className="space-y-2 mb-3">
-              <div className="flex items-center gap-2 text-sm">
-                <DollarSign size={14} className="text-primary" />
-                <span className="text-muted-foreground">Investimento:</span>
-                <span className="font-medium ml-auto">{client.spend}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <TrendingUp size={14} className="text-success" />
-                <span className="text-muted-foreground">ROI:</span>
-                <span className="font-medium ml-auto">{client.roi}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <BarChart3 size={14} className="text-accent" />
-                <span className="text-muted-foreground">Plataformas:</span>
-              </div>
-            </div>
-
-            <div className="flex gap-1.5 flex-wrap">
-              {client.platforms.map((p) => (
-                <span key={p} className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">
-                  {p}
+        {filtered.map((client) => {
+          const open = expandedId === client.id;
+          return (
+            <Card
+              key={client.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => toggleCard(client.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleCard(client.id);
+                }
+              }}
+              className={cn(
+                "glass-card p-5 hover:glow-primary transition-all cursor-pointer group text-left",
+                open && "ring-2 ring-primary/50 glow-primary",
+              )}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="font-display font-semibold text-sm group-hover:gradient-brand-text transition-colors">
+                    {client.name}
+                  </h3>
+                  <span className="text-xs text-muted-foreground">{client.segment}</span>
+                </div>
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
+                    client.status === "Ativo" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"
+                  }`}
+                >
+                  {client.status}
                 </span>
-              ))}
-            </div>
-          </Card>
-        ))}
+              </div>
+
+              <div className="space-y-2 mb-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <DollarSign size={14} className="text-primary shrink-0" />
+                  <span className="text-muted-foreground">Investimento:</span>
+                  <span className="font-medium ml-auto tabular-nums">{client.spend}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <TrendingUp size={14} className="text-success shrink-0" />
+                  <span className="text-muted-foreground">ROI:</span>
+                  <span className="font-medium ml-auto">{client.roi}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-sm pt-0.5">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Target size={14} className="text-destructive/90 shrink-0" />
+                    CPA:
+                  </span>
+                  <span className="font-semibold text-destructive/90 tabular-nums">{brl(client.cpa)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <BarChart3 size={14} className="text-accent shrink-0" />
+                  <span className="text-muted-foreground">Plataformas:</span>
+                </div>
+              </div>
+
+              <div className="flex gap-1.5 flex-wrap">
+                {client.platforms.map((p) => (
+                  <span
+                    key={p}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground"
+                  >
+                    {p}
+                  </span>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-3 pt-2 border-t border-border/40">
+                {open ? "Clique para recolher" : "Clique para painel completo (IA, gráficos, ROI)"}
+              </p>
+            </Card>
+          );
+        })}
       </div>
+
+      {selected && <ClientExpandedPanel key={selected.id} client={selected} />}
     </div>
   );
 };
