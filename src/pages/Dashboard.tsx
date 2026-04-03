@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Card } from "@/components/ui/card";
+import { FavoriteButton } from "@/components/FavoriteButton";
 import { TrendingUp, DollarSign, Eye, MousePointerClick, Target, ArrowUpRight } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from "recharts";
 
@@ -58,25 +59,48 @@ const Dashboard = () => {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {kpis.map((kpi) => (
-          <Card key={kpi.label} className="glass-card p-4 hover:glow-primary transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <kpi.icon size={16} className="text-primary" />
-              <span className={`text-xs font-medium ${kpi.up ? "text-success" : "text-destructive"}`}>
-                {kpi.change}
-              </span>
-            </div>
-            <p className="text-lg font-display font-bold">{kpi.value}</p>
-            <p className="text-xs text-muted-foreground mt-1">{kpi.label}</p>
-          </Card>
-        ))}
+        {kpis.map((kpi) => {
+          const slug = encodeURIComponent(kpi.label);
+          return (
+            <Card key={kpi.label} className="glass-card p-4 hover:glow-primary transition-shadow relative">
+              <div className="absolute top-2 right-2 z-10">
+                <FavoriteButton
+                  id={`dashboard:kpi:${slug}`}
+                  kind="dashboard-kpi"
+                  title={`KPI: ${kpi.label}`}
+                  path="/"
+                  subtitle={kpi.value}
+                  size="sm"
+                />
+              </div>
+              <div className="flex items-center justify-between mb-2 pr-6">
+                <kpi.icon size={16} className="text-primary" />
+                <span className={`text-xs font-medium ${kpi.up ? "text-success" : "text-destructive"}`}>
+                  {kpi.change}
+                </span>
+              </div>
+              <p className="text-lg font-display font-bold">{kpi.value}</p>
+              <p className="text-xs text-muted-foreground mt-1">{kpi.label}</p>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Charts row */}
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Area chart */}
-        <Card className="glass-card p-5 lg:col-span-2">
-          <h3 className="font-display font-semibold mb-4">Investimento por Plataforma</h3>
+        <Card className="glass-card p-5 lg:col-span-2 relative">
+          <div className="absolute top-4 right-4 z-10">
+            <FavoriteButton
+              id="dashboard:chart:investimento-plataforma"
+              kind="dashboard-chart"
+              title="Gráfico: Investimento por Plataforma"
+              path="/"
+              subtitle="Dashboard"
+              size="sm"
+            />
+          </div>
+          <h3 className="font-display font-semibold mb-4 pr-10">Investimento por Plataforma</h3>
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={monthlyData}>
               <defs>
@@ -105,8 +129,18 @@ const Dashboard = () => {
         </Card>
 
         {/* ROI by platform */}
-        <Card className="glass-card p-5">
-          <h3 className="font-display font-semibold mb-4">ROI por Plataforma</h3>
+        <Card className="glass-card p-5 relative">
+          <div className="absolute top-4 right-4 z-10">
+            <FavoriteButton
+              id="dashboard:chart:roi-plataforma"
+              kind="dashboard-chart"
+              title="Gráfico: ROI por Plataforma"
+              path="/"
+              subtitle="Dashboard"
+              size="sm"
+            />
+          </div>
+          <h3 className="font-display font-semibold mb-4 pr-10">ROI por Plataforma</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={platformROI} layout="vertical">
               <XAxis type="number" stroke={chartAxis} fontSize={12} />
@@ -142,8 +176,18 @@ const Dashboard = () => {
         </div>
         <div className="grid md:grid-cols-3 gap-4">
           {aiRecommendations.map((rec, i) => (
-            <div key={i} className="bg-secondary/50 rounded-lg p-4 space-y-2">
-              <div className="flex items-center justify-between">
+            <div key={i} className="bg-secondary/50 rounded-lg p-4 space-y-2 relative">
+              <div className="absolute top-2 right-2 z-10">
+                <FavoriteButton
+                  id={`dashboard:ai:${i}:${rec.platform}`}
+                  kind="dashboard-ai"
+                  title={`IA: ${rec.platform} — ${rec.action}`}
+                  path="/"
+                  subtitle={rec.priority}
+                  size="sm"
+                />
+              </div>
+              <div className="flex items-center justify-between pr-7">
                 <span className="text-sm font-medium gradient-brand-text">{rec.platform}</span>
                 <span className={`text-xs px-2 py-0.5 rounded-full ${rec.priority === "Alta" ? "bg-primary/20 text-primary" : "bg-warning/20 text-warning"}`}>
                   {rec.priority}

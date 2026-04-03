@@ -11,16 +11,16 @@ import {
   Settings,
   BarChart3,
   UsersRound,
+  Star,
 } from "lucide-react";
 import norterLogo from "@/assets/norterlogo.png";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
+import { UserMenuDropdown } from "@/components/UserMenuDropdown";
 
 type MenuItem = { icon: typeof LayoutDashboard; label: string; path: string; adminOnly?: boolean };
 
-const menuItems: MenuItem[] = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Users, label: "Clientes", path: "/clientes" },
+const menuAfterClientes: MenuItem[] = [
   { icon: BarChart3, label: "Campanhas", path: "/campanhas" },
   { icon: TrendingUp, label: "IA & ROI", path: "/ia-roi" },
   { icon: UsersRound, label: "Usuários", path: "/usuarios", adminOnly: true },
@@ -34,7 +34,11 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   const [collapsed, setCollapsed] = useState(false);
 
   const isAdmin = user?.role === "admin";
-  const visibleMenu = menuItems.filter((item) => !item.adminOnly || isAdmin);
+  const visibleRest = menuAfterClientes.filter((item) => !item.adminOnly || isAdmin);
+
+  const path = location.pathname;
+  const clientesListActive = path === "/clientes";
+  const favoritosActive = path === "/clientes/favoritos";
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -51,12 +55,60 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           )}
         </div>
 
-        <nav className="flex-1 p-3 space-y-1">
-          {visibleMenu.map((item) => {
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          <button
+            onClick={() => navigate("/")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+              path === "/"
+                ? "gradient-brand text-primary-foreground font-medium"
+                : "text-sidebar-foreground hover:bg-sidebar-accent"
+            }`}
+          >
+            <LayoutDashboard size={18} className="flex-shrink-0" />
+            {!collapsed && <span>Dashboard</span>}
+          </button>
+
+          <button
+            onClick={() => navigate("/clientes")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+              clientesListActive
+                ? "gradient-brand text-primary-foreground font-medium"
+                : "text-sidebar-foreground hover:bg-sidebar-accent"
+            }`}
+          >
+            <Users size={18} className="flex-shrink-0" />
+            {!collapsed && <span>Clientes</span>}
+          </button>
+
+          {!collapsed ? (
+            <button
+              onClick={() => navigate("/clientes/favoritos")}
+              className={`w-full flex items-center gap-3 pl-8 pr-3 py-2 rounded-lg text-xs transition-all ${
+                favoritosActive
+                  ? "bg-sidebar-accent text-foreground font-medium"
+                  : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
+              }`}
+            >
+              <Star size={15} className="flex-shrink-0 opacity-90" />
+              <span>Favoritos</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => navigate("/clientes/favoritos")}
+              title="Favoritos"
+              className={`w-full flex items-center justify-center py-2 rounded-lg transition-all ${
+                favoritosActive ? "bg-sidebar-accent text-primary" : "text-muted-foreground hover:bg-sidebar-accent"
+              }`}
+            >
+              <Star size={18} />
+            </button>
+          )}
+
+          {visibleRest.map((item) => {
             const active =
               item.path === "/"
-                ? location.pathname === "/"
-                : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+                ? path === "/"
+                : path === item.path || path.startsWith(`${item.path}/`);
             return (
               <button
                 key={item.path}
@@ -112,7 +164,8 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="flex items-center justify-end gap-3 px-6 lg:px-8 pt-6 pb-2 border-b border-border/40 bg-background/80 backdrop-blur-sm shrink-0">
+        <div className="flex items-center justify-between gap-3 px-6 lg:px-8 pt-6 pb-2 border-b border-border/40 bg-background/80 backdrop-blur-sm shrink-0">
+          <UserMenuDropdown />
           <ThemeToggle />
         </div>
         <div className="flex-1 overflow-auto">

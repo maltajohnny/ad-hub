@@ -3,15 +3,24 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth, OWNER_USERNAME } from "@/contexts/AuthContext";
-import { UsersRound, Trash2, Shield, User } from "lucide-react";
+import { clientsData } from "@/pages/Clientes";
+import { UsersRound, Trash2, Shield, User, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
 
 const Usuarios = () => {
-  const { user, listUsers, createUser, deleteUser, isOwner } = useAuth();
+  const { user, listUsers, createUser, deleteUser, isOwner, clientAssignments, assignClientToUser } = useAuth();
   const rows = listUsers();
+  const usersOnly = rows.filter((u) => u.role === "user");
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -108,6 +117,62 @@ const Usuarios = () => {
         <Button type="button" className="mt-4 gradient-brand text-primary-foreground" onClick={handleCreate}>
           Criar usuário
         </Button>
+      </Card>
+
+      <Card className="glass-card p-5 border-border/60">
+        <h3 className="font-display font-semibold mb-2 flex items-center gap-2">
+          <Building2 size={18} className="text-primary" />
+          Clientes por usuário
+        </h3>
+        <p className="text-xs text-muted-foreground mb-4">
+          Cada cliente pode ser atribuído a <strong className="text-foreground">apenas um</strong> usuário com perfil padrão.
+          Administradores continuam vendo todos os clientes.
+        </p>
+        <div className="overflow-x-auto rounded-lg border border-border/50">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border/50 bg-secondary/30 text-left text-xs text-muted-foreground">
+                <th className="px-3 py-2 font-medium">Cliente</th>
+                <th className="px-3 py-2 font-medium min-w-[200px]">Atribuído a</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clientsData.map((c) => {
+                const assigned = clientAssignments[c.id] ?? "";
+                return (
+                  <tr key={c.id} className="border-b border-border/30 hover:bg-secondary/10">
+                    <td className="px-3 py-2.5">
+                      <span className="font-medium">{c.name}</span>
+                      <span className="block text-[10px] text-muted-foreground">{c.segment}</span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Select
+                        value={assigned || "none"}
+                        onValueChange={(v) => {
+                          const res = assignClientToUser(c.id, v === "none" ? null : v);
+                          if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
+                          else toast.success("Atribuição atualizada.");
+                        }}
+                      >
+                        <SelectTrigger className="h-9 bg-secondary/50 border-border/50">
+                          <SelectValue placeholder="Nenhum" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhum</SelectItem>
+                          {usersOnly.map((u) => (
+                            <SelectItem key={u.username} value={u.username}>
+                              {u.name} (@{u.username})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       <Card className="glass-card p-0 overflow-hidden border-border/60">

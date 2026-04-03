@@ -6,10 +6,12 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { FavoritesProvider } from "@/contexts/FavoritesContext";
 import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Clientes from "@/pages/Clientes";
+import ClientesFavoritos from "@/pages/ClientesFavoritos";
 import Campanhas from "@/pages/Campanhas";
 import IaRoi from "@/pages/IaRoi";
 import Configuracoes from "@/pages/Configuracoes";
@@ -32,6 +34,7 @@ const ProtectedRoutes = () => {
     <AppLayout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/clientes/favoritos" element={<ClientesFavoritos />} />
         <Route path="/clientes" element={<Clientes />} />
         <Route path="/campanhas" element={<Campanhas />} />
         <Route path="/ia-roi" element={<IaRoi />} />
@@ -64,12 +67,14 @@ const App = () => (
         <Toaster />
         <Sonner />
         <AuthProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/login" element={<LoginRoute />} />
-              <Route path="/*" element={<ProtectedRoutes />} />
-            </Routes>
-          </BrowserRouter>
+          <FavoritesProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/login" element={<LoginRoute />} />
+                <Route path="/*" element={<ProtectedRoutes />} />
+              </Routes>
+            </BrowserRouter>
+          </FavoritesProvider>
         </AuthProvider>
       </TooltipProvider>
     </ThemeProvider>

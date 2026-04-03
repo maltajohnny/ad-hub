@@ -1,5 +1,8 @@
 import { useMemo, useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTheme } from "next-themes";
+import { FavoriteButton } from "@/components/FavoriteButton";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -202,7 +205,7 @@ const PROCESS_STEPS = [
   { n: "06", title: "Execução & Monitoramento", desc: "Alterações aplicadas e acompanhamento contínuo.", icon: CircleCheck, active: false, border: "border-border", iconBg: "text-muted-foreground", badge: null },
 ];
 
-const clientsData: Client[] = [
+export const clientsData: Client[] = [
   {
     id: 1,
     name: "TechFlow Solutions",
@@ -470,10 +473,19 @@ function ClientExpandedPanel({ client }: { client: Client }) {
             {client.email} · CNPJ {client.cnpj}
           </p>
         </div>
-        <Badge variant="outline" className="border-primary/40 text-primary w-fit shrink-0 mt-2 sm:mt-0">
-          <Sparkles className="h-3 w-3 mr-1" />
-          Visão detalhada · IA
-        </Badge>
+        <div className="flex items-center gap-2 shrink-0 mt-2 sm:mt-0">
+          <FavoriteButton
+            id={`client:${client.id}`}
+            kind="client"
+            title={client.name}
+            path={`/clientes?expand=${client.id}`}
+            subtitle={client.segment}
+          />
+          <Badge variant="outline" className="border-primary/40 text-primary w-fit">
+            <Sparkles className="h-3 w-3 mr-1" />
+            Visão detalhada · IA
+          </Badge>
+        </div>
       </div>
 
       {/* KPIs topo */}
@@ -866,11 +878,32 @@ function ClientExpandedPanel({ client }: { client: Client }) {
 }
 
 const Clientes = () => {
+  const { user, canUserSeeClient } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [filterName, setFilterName] = useState("");
   const [filterEmail, setFilterEmail] = useState("");
   const [filterCnpj, setFilterCnpj] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("cpa_desc");
   const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const ex = searchParams.get("expand");
+    if (!ex) {
+      setExpandedId(null);
+      return;
+    }
+    const id = parseInt(ex, 10);
+    if (Number.isNaN(id)) return;
+    if (!canUserSeeClient(id)) {
+      setExpandedId(null);
+      setSearchParams((p) => {
+        p.delete("expand");
+        return p;
+      });
+      return;
+    }
+    setExpandedId(id);
+  }, [searchParams, canUserSeeClient, setSearchParams]);
 
   const filtered = useMemo(() => {
     const n = (s: string) => s.replace(/\D/g, "");
@@ -899,16 +932,42 @@ const Clientes = () => {
     });
   }, [filterName, filterEmail, filterCnpj, sortBy]);
 
-  useEffect(() => {
-    if (expandedId !== null && !filtered.some((c) => c.id === expandedId)) {
-      setExpandedId(null);
-    }
-  }, [filtered, expandedId]);
+  const visibleClients = useMemo(() => {
+    if (user?.role === "admin") return filtered;
+    return filtered.filter((c) => canUserSeeClient(c.id));
+  }, [filtered, user?.role, canUserSeeClient]);
 
-  const selected = expandedId !== null ? clientsData.find((c) => c.id === expandedId) : undefined;
+  useEffect(() => {
+    if (expandedId !== null && !visibleClients.some((c) => c.id === expandedId)) {
+      setExpandedId(null);
+      setSearchParams((p) => {
+        p.delete("expand");
+        return p;
+      });
+    }
+  }, [visibleClients, expandedId, setSearchParams]);
+
+  const selected =
+    expandedId !== null && canUserSeeClient(expandedId)
+      ? clientsData.find((c) => c.id === expandedId)
+      : undefined;
 
   const toggleCard = (id: number) => {
-    setExpandedId((prev) => (prev === id ? null : id));
+    setExpandedId((prev) => {
+      const next = prev === id ? null : id;
+      if (next === null) {
+        setSearchParams((p) => {
+          p.delete("expand");
+          return p;
+        });
+      } else {
+        setSearchParams((p) => {
+          p.set("expand", String(next));
+          return p;
+        });
+      }
+      return next;
+    });
   };
 
   return (
@@ -917,8 +976,10 @@ const Clientes = () => {
         <div>
           <h1 className="text-2xl font-display font-bold">Clientes</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            {filtered.length} de {clientsData.length} clientes
-            {sortBy === "cpa_desc" && " · CPA mais alto primeiro"}
+            {user?.role === "admin"
+              ? `${visibleClients.length} de ${clientsData.length} clientes`
+              : `${visibleClients.length} cliente(s) atribuído(s) a você`}
+            {sortBy === "cpa_desc" && user?.role === "admin" && " · CPA mais alto primeiro"}
           </p>
         </div>
       </div>
@@ -982,8 +1043,15 @@ const Clientes = () => {
         </div>
       </Card>
 
+      {user?.role !== "admin" && visibleClients.length === 0 && (
+        <Card className="glass-card p-6 text-center text-muted-foreground text-sm">
+          Nenhum cliente atribuído à sua conta. Peça a um administrador para vincular clientes ao seu usuário em{" "}
+          <span className="text-foreground font-medium">Usuários</span>.
+        </Card>
+      )}
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filtered.map((client) => {
+        {visibleClients.map((client) => {
           const open = expandedId === client.id;
           return (
             <Card
@@ -998,11 +1066,21 @@ const Clientes = () => {
                 }
               }}
               className={cn(
-                "glass-card p-5 hover:glow-primary transition-all cursor-pointer group text-left",
+                "glass-card p-5 hover:glow-primary transition-all cursor-pointer group text-left relative",
                 open && "ring-2 ring-primary/50 glow-primary",
               )}
             >
-              <div className="flex items-start justify-between mb-3">
+              <div className="absolute top-3 right-3 z-10">
+                <FavoriteButton
+                  id={`client:${client.id}`}
+                  kind="client"
+                  title={client.name}
+                  path={`/clientes?expand=${client.id}`}
+                  subtitle={client.segment}
+                  size="sm"
+                />
+              </div>
+              <div className="flex items-start justify-between mb-3 pr-8">
                 <div>
                   <h3 className="font-display font-semibold text-sm group-hover:gradient-brand-text transition-colors">
                     {client.name}

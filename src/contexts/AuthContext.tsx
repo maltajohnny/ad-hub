@@ -15,8 +15,36 @@ export interface User {
 export const OWNER_USERNAME = "admin";
 
 const STORAGE_KEY = "norter_user_registry";
+const CLIENT_ASSIGNMENTS_KEY = "norter_client_assignments";
+
+/** clientId → username do usuário com perfil normal que pode ver o cliente (um cliente = um único usuário) */
+export type ClientAssignmentMap = Record<number, string | null>;
 
 type RegistryEntry = { password: string; user: User };
+
+function loadAssignments(): ClientAssignmentMap {
+  try {
+    const raw = localStorage.getItem(CLIENT_ASSIGNMENTS_KEY);
+    if (!raw) return {};
+    const o = JSON.parse(raw) as Record<string, string | null>;
+    const out: ClientAssignmentMap = {};
+    for (const [k, v] of Object.entries(o)) {
+      const id = parseInt(k, 10);
+      if (!Number.isNaN(id)) out[id] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function persistAssignments(map: ClientAssignmentMap) {
+  const serial: Record<string, string | null> = {};
+  for (const [k, v] of Object.entries(map)) {
+    serial[String(k)] = v;
+  }
+  localStorage.setItem(CLIENT_ASSIGNMENTS_KEY, JSON.stringify(serial));
+}
 
 const defaultRegistry: Record<string, RegistryEntry> = {
   [OWNER_USERNAME]: {
@@ -82,6 +110,10 @@ interface AuthContextType {
   }) => { ok: boolean; error?: string };
   deleteUser: (username: string) => { ok: boolean; error?: string };
   isOwner: (username: string) => boolean;
+  /** Mapa clientId → username (só perfil user). Admins ignoram para visualização. */
+  clientAssignments: ClientAssignmentMap;
+  assignClientToUser: (clientId: number, username: string | null) => { ok: boolean; error?: string };
+  canUserSeeClient: (clientId: number) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -94,6 +126,7 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [registry, setRegistry] = useState<Record<string, RegistryEntry>>(() => loadRegistry());
+  const [clientAssignments, setClientAssignments] = useState<ClientAssignmentMap>(() => loadAssignments());
   const [user, setUser] = useState<User | null>(() => {
     const saved = sessionStorage.getItem("norter_user");
     return saved ? JSON.parse(saved) : null;
@@ -206,12 +239,53 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const rest = { ...registry };
       delete rest[key];
       syncRegistry(rest);
+      setClientAssignments((prev) => {
+        const next = { ...prev };
+        for (const cid of Object.keys(next)) {
+          const id = parseInt(cid, 10);
+          if (next[id] === key) delete next[id];
+        }
+        persistAssignments(next);
+        return next;
+      });
       if (user.username === key) {
         setUser(null);
       }
       return { ok: true };
     },
     [user, registry, syncRegistry],
+  );
+
+  const assignClientToUser = useCallback(
+    (clientId: number, username: string | null): { ok: boolean; error?: string } => {
+      if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
+      if (username !== null) {
+        const target = registry[username];
+        if (!target) return { ok: false, error: "Usuário não encontrado." };
+        if (target.user.role !== "user") return { ok: false, error: "Atribua apenas a usuários com perfil padrão (não admin)." };
+      }
+      setClientAssignments((prev) => {
+        const next = { ...prev };
+        if (username === null) {
+          delete next[clientId];
+        } else {
+          next[clientId] = username;
+        }
+        persistAssignments(next);
+        return next;
+      });
+      return { ok: true };
+    },
+    [user, registry],
+  );
+
+  const canUserSeeClient = useCallback(
+    (clientId: number) => {
+      if (!user) return false;
+      if (user.role === "admin") return true;
+      return clientAssignments[clientId] === user.username;
+    },
+    [user, clientAssignments],
   );
 
   const isOwner = useCallback((username: string) => username === OWNER_USERNAME, []);
@@ -228,6 +302,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         createUser,
         deleteUser,
         isOwner,
+        clientAssignments,
+        assignClientToUser,
+        canUserSeeClient,
       }}
     >
       {children}
