@@ -31,7 +31,7 @@ const Login = () => {
       <div className="relative z-10 w-full max-w-sm px-6 animate-fade-in">
         <div className="flex flex-col items-center mb-8">
           <img src={norterLogo} alt="Norter" className="w-40 h-40 object-contain" />
-          <span className="text-foreground/20 font-display text-[10px] tracking-[0.3em] uppercase -mt-3">
+          <span className="text-foreground/20 font-display text-[10px] tracking-[0.3em] uppercase -mt-7">
             Aceleradora
           </span>
         </div>
