@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,16 @@ import {
 import { useAuth, OWNER_USERNAME } from "@/contexts/AuthContext";
 import { Switch } from "@/components/ui/switch";
 import { clientsData } from "@/pages/Clientes";
-import { UsersRound, Trash2, Shield, User, Building2 } from "lucide-react";
+import { UsersRound, Trash2, Shield, User, Building2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
+import {
+  isStrongPassword,
+  PASSWORD_FIELD_INLINE_ALERT_CLASS,
+  PASSWORD_INPUT_ERROR_GLOW_CLASS,
+  STRONG_PASSWORD_HINT,
+} from "@/lib/passwordPolicy";
 
 const Usuarios = () => {
   const { user, listUsers, createUser, deleteUser, isOwner, clientAssignments, assignClientToUser, setBoardSettingsPermission } =
@@ -30,8 +36,40 @@ const Usuarios = () => {
   const [email, setEmail] = useState("");
   const [isAdminRole, setIsAdminRole] = useState(false);
   const [grantBoardSettings, setGrantBoardSettings] = useState(false);
+  const [showInitialPassword, setShowInitialPassword] = useState(false);
+  const [initialPasswordError, setInitialPasswordError] = useState(false);
+
+  /** Utilizador (perfil padrão) para o qual se editam Negar/Permitir por cliente */
+  const [permUser, setPermUser] = useState("");
+
+  useEffect(() => {
+    if (usersOnly.length === 0) {
+      setPermUser("");
+      return;
+    }
+    if (!permUser || !usersOnly.some((u) => u.username === permUser)) {
+      setPermUser(usersOnly[0].username);
+    }
+  }, [usersOnly, permUser]);
+
+  const handleInitialPasswordBlur = () => {
+    const p = password.trim();
+    if (p.length === 0) {
+      setInitialPasswordError(false);
+      return;
+    }
+    if (!isStrongPassword(p)) {
+      setInitialPasswordError(true);
+    } else {
+      setInitialPasswordError(false);
+    }
+  };
 
   const handleCreate = () => {
+    if (!isStrongPassword(password)) {
+      setInitialPasswordError(true);
+      return;
+    }
     const res = createUser({
       username,
       password,
@@ -44,9 +82,12 @@ const Usuarios = () => {
       toast.error(res.error || "Não foi possível criar o usuário.");
       return;
     }
-    toast.success("Usuário criado.");
+    toast.success(
+      isAdminRole ? "Administrador criado." : "Usuário criado. No primeiro acesso será pedida uma nova senha.",
+    );
     setUsername("");
     setPassword("");
+    setInitialPasswordError(false);
     setName("");
     setEmail("");
     setIsAdminRole(false);
@@ -89,12 +130,39 @@ const Usuarios = () => {
           </div>
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Senha inicial</label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="bg-secondary/50 border-border/50 h-10"
-            />
+            <div className="relative">
+              <Input
+                type={showInitialPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPassword(v);
+                  if (v.trim() === "" || isStrongPassword(v)) setInitialPasswordError(false);
+                }}
+                onBlur={handleInitialPasswordBlur}
+                className={cn(
+                  "relative z-10 border-border/50 h-10 pr-10",
+                  initialPasswordError ? "bg-secondary" : "bg-secondary/50",
+                  initialPasswordError && PASSWORD_INPUT_ERROR_GLOW_CLASS,
+                )}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                className="absolute right-3 top-1/2 z-20 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setShowInitialPassword((s) => !s)}
+                aria-label={showInitialPassword ? "Ocultar senha" : "Mostrar senha"}
+              >
+                {showInitialPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {initialPasswordError && (
+              <p role="alert" className={PASSWORD_FIELD_INLINE_ALERT_CLASS}>
+                {STRONG_PASSWORD_HINT}
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Nome exibido</label>
@@ -144,54 +212,83 @@ const Usuarios = () => {
           Clientes por usuário
         </h3>
         <p className="text-xs text-muted-foreground mb-4">
-          Cada cliente pode ser atribuído a <strong className="text-foreground">apenas um</strong> usuário com perfil padrão.
-          Administradores continuam vendo todos os clientes.
+          Escolha o <strong className="text-foreground">utilizador (perfil padrão)</strong>. Para cada cliente, defina{" "}
+          <strong className="text-foreground">Negar</strong> (sem acesso, predefinido) ou <strong className="text-foreground">Permitir</strong>{" "}
+          (esse utilizador vê o cliente). Administradores continuam a ver todos os clientes.
         </p>
-        <div className="overflow-x-auto rounded-lg border border-border/50">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border/50 bg-secondary/30 text-left text-xs text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Cliente</th>
-                <th className="px-3 py-2 font-medium min-w-[200px]">Atribuído a</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clientsData.map((c) => {
-                const assigned = clientAssignments[c.id] ?? "";
-                return (
-                  <tr key={c.id} className="border-b border-border/30 hover:bg-secondary/10">
-                    <td className="px-3 py-2.5">
-                      <span className="font-medium">{c.name}</span>
-                      <span className="block text-[10px] text-muted-foreground">{c.segment}</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <Select
-                        value={assigned || "none"}
-                        onValueChange={(v) => {
-                          const res = assignClientToUser(c.id, v === "none" ? null : v);
-                          if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
-                          else toast.success("Atribuição atualizada.");
-                        }}
-                      >
-                        <SelectTrigger className="h-9 bg-secondary/50 border-border/50">
-                          <SelectValue placeholder="Nenhum" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhum</SelectItem>
-                          {usersOnly.map((u) => (
-                            <SelectItem key={u.username} value={u.username}>
-                              {u.name} (@{u.username})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </td>
+
+        {usersOnly.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">Crie um utilizador com perfil padrão para gerir permissões por cliente.</p>
+        ) : (
+          <>
+            <div className="mb-4 max-w-md space-y-1.5">
+              <label className="text-xs text-muted-foreground">Utilizador</label>
+              <Select value={permUser} onValueChange={setPermUser}>
+                <SelectTrigger className="h-10 bg-secondary/50 border-border/50">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {usersOnly.map((u) => (
+                    <SelectItem key={u.username} value={u.username}>
+                      {u.name} (@{u.username})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-border/50">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/50 bg-secondary/30 text-left text-xs text-muted-foreground">
+                    <th className="px-3 py-2 font-medium">Cliente</th>
+                    <th className="px-3 py-2 font-medium min-w-[180px]">Acesso</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {clientsData.map((c) => {
+                    const assigned = clientAssignments[c.id] ?? null;
+                    const mode = assigned === permUser ? "permitir" : "negar";
+                    return (
+                      <tr key={c.id} className="border-b border-border/30 hover:bg-secondary/10">
+                        <td className="px-3 py-2.5">
+                          <span className="font-medium">{c.name}</span>
+                          <span className="block text-[10px] text-muted-foreground">{c.segment}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Select
+                            value={mode}
+                            onValueChange={(v) => {
+                              if (v === "permitir") {
+                                const res = assignClientToUser(c.id, permUser);
+                                if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
+                                else toast.success("Permissão atualizada.");
+                              } else {
+                                if (assigned === permUser) {
+                                  const res = assignClientToUser(c.id, null);
+                                  if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
+                                  else toast.success("Permissão atualizada.");
+                                }
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-9 bg-secondary/50 border-border/50">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="negar">Negar</SelectItem>
+                              <SelectItem value="permitir">Permitir</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </Card>
 
       <Card className="glass-card p-0 overflow-hidden border-border/60">

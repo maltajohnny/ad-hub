@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link2, Webhook, Save, KeyRound, Camera, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { isStrongPassword, STRONG_PASSWORD_HINT } from "@/lib/passwordPolicy";
 import { toast } from "sonner";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
 
@@ -85,8 +86,8 @@ const Configuracoes = () => {
       toast.error("A nova senha e a confirmação não coincidem.");
       return;
     }
-    if (newPw.length < 4) {
-      toast.error("A nova senha deve ter pelo menos 4 caracteres.");
+    if (!isStrongPassword(newPw)) {
+      toast.error(STRONG_PASSWORD_HINT);
       return;
     }
     const ok = changePassword(currentPw, newPw);

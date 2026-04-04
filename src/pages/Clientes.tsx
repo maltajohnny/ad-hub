@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import {
   Search,
@@ -38,7 +39,23 @@ import {
   BrainCircuit,
   SlidersHorizontal,
   CircleCheck,
+  Settings,
+  Loader2,
+  ChevronDown,
+  ListChecks,
+  XCircle,
 } from "lucide-react";
+import { toast } from "sonner";
+import { buildTrafficPerformanceReport, sendManualReport } from "@/services/slackReportService";
+import {
+  analyzeCampaignPerformance,
+  analyzeCampaignWithInstruction,
+  campaignAnalysisInputFromReport,
+  isAiOptimizationConfigured,
+  type CampaignOptimizationResult,
+} from "@/services/aiOptimizationService";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ClientSettingsModal } from "@/components/ClientSettingsModal";
 import {
   LineChart,
   Line,
@@ -94,9 +111,21 @@ type AiDecision = {
   to: string;
   amountLabel: string;
   reason: string;
+  /** Gerada ao enviar instrução no painel (vs. entradas simuladas em getClientDetail). */
+  fromInstruction?: boolean;
+  /** autônomo = aplicado ao enviar; supervisionado = após o gestor aprovar. */
+  instructionMode?: "autonomous" | "supervised";
 };
 
-type RoiTableRow = {
+/** Instrução em modo supervisionado aguardando aprovação (por cliente). */
+export type SupervisedPendingItem = {
+  id: string;
+  instruction: string;
+  result: CampaignOptimizationResult;
+  createdAt: string;
+};
+
+export type RoiTableRow = {
   channel: "Meta Ads" | "Google Ads" | "Instagram Ads";
   invested: number;
   leads: number;
@@ -106,7 +135,7 @@ type RoiTableRow = {
   roiMult: number;
 };
 
-type ClientDetail = {
+export type ClientDetail = {
   decisions: AiDecision[];
   performance: { month: string; meta: number; google: number; instagram: number }[];
   budgetCurrent: { meta: number; google: number; instagram: number };
@@ -114,7 +143,7 @@ type ClientDetail = {
   roiRows: RoiTableRow[];
 };
 
-function getClientDetail(c: Client): ClientDetail {
+export function getClientDetail(c: Client): ClientDetail {
   const k = c.id * 7;
   const performance = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"].map((month, i) => ({
     month,
@@ -196,6 +225,80 @@ function getClientDetail(c: Client): ClientDetail {
   return { decisions, performance, budgetCurrent, budgetRecommended, roiRows };
 }
 
+function formatDecisionAtNow(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Valor monetário a mostrar na seta (ex.: montante realocado), a partir do texto da IA. */
+function pickTransferAmountLabel(text: string): string {
+  const normalized = text.replace(/\u00a0/g, " ");
+  const matches = [...normalized.matchAll(/R\$\s*[\d]{1,3}(?:\.\d{3})*(?:,\d{2})?/gi)].map((m) => m[0].replace(/\s+/g, " "));
+  if (matches.length === 0) return "—";
+  const restantes = matches.find((m) => {
+    const i = normalized.toLowerCase().indexOf(m.toLowerCase());
+    const ctx = normalized.slice(Math.max(0, i - 30), i + m.length + 30).toLowerCase();
+    return /restant|realoc|transfer|movid|elevando/i.test(ctx);
+  });
+  if (restantes) return restantes;
+  if (matches.length >= 2) return matches[1];
+  return matches[0];
+}
+
+function inferDecisionFromTo(instruction: string, result: CampaignOptimizationResult): { from: string; to: string } {
+  const blob = `${instruction} ${result.recommendations.join(" ")} ${result.analysis}`.toLowerCase();
+  if (blob.includes("instagram") && (blob.includes("google") || blob.includes("search"))) {
+    return { from: "Instagram Ads", to: "Google Ads" };
+  }
+  if (blob.includes("meta") && blob.includes("google") && !blob.includes("instagram")) {
+    return { from: "Meta Ads", to: "Google Ads" };
+  }
+  const hi = result.tiles.find((t) => t.priority === "Alta");
+  const other = result.tiles.find((t) => t.platform !== hi?.platform);
+  return {
+    from: other?.platform ?? hi?.platform ?? "—",
+    to: hi?.platform ?? other?.platform ?? "—",
+  };
+}
+
+/** Constrói o cartão de decisão alinhado à resposta da IA (destaque + histórico). */
+function aiDecisionFromInstructionResponse(
+  instruction: string,
+  result: CampaignOptimizationResult,
+  instructionMode: "autonomous" | "supervised" = "autonomous",
+): AiDecision {
+  const { from, to } = inferDecisionFromTo(instruction, result);
+  const primaryRec = result.recommendations[0]?.trim() ?? "";
+  const title =
+    instruction.trim().length > 0 && instruction.trim().length <= 120
+      ? instruction.trim()
+      : primaryRec.length > 0
+        ? primaryRec.length > 110
+          ? `${primaryRec.slice(0, 107)}…`
+          : primaryRec
+        : "Decisão sugerida pela IA";
+
+  const reasonSource = primaryRec || result.analysis;
+  const reason =
+    reasonSource.length > 360 ? `${reasonSource.slice(0, 357)}…` : reasonSource;
+
+  const amountLabel = pickTransferAmountLabel(
+    `${primaryRec} ${result.recommendations.slice(1).join(" ")} ${result.analysis}`,
+  );
+
+  return {
+    at: formatDecisionAtNow(),
+    title,
+    from,
+    to,
+    amountLabel,
+    reason,
+    fromInstruction: true,
+    instructionMode,
+  };
+}
+
 const PROCESS_STEPS = [
   { n: "01", title: "Conexão com APIs", desc: "Contas de anúncios vinculadas com permissões de leitura.", icon: Plug, active: true, border: "border-[#10B981]/50", iconBg: "text-[#10B981]", badge: "Conectado" as string | null },
   { n: "02", title: "Coleta de Dados", desc: "Métricas sincronizadas por canal e campanha.", icon: Database, active: true, border: "border-[#3B82F6]/50", iconBg: "text-[#3B82F6]", badge: null },
@@ -208,7 +311,7 @@ const PROCESS_STEPS = [
 export const clientsData: Client[] = [
   {
     id: 1,
-    name: "TechFlow Solutions",
+    name: "Tech Solutions",
     segment: "SaaS",
     email: "contato@techflow.com.br",
     cnpj: "12.345.678/0001-90",
@@ -283,7 +386,7 @@ export const clientsData: Client[] = [
   },
   {
     id: 4,
-    name: "FitLife Academia",
+    name: "FitLife Solutions",
     segment: "Fitness",
     email: "growth@fitlife.com.br",
     cnpj: "11.222.333/0001-55",
@@ -428,14 +531,143 @@ function MetricHint({ label, hint }: { label: string; hint: string }) {
   );
 }
 
-function ClientExpandedPanel({ client }: { client: Client }) {
+function ClientExpandedPanel({
+  client,
+  onOpenSettings,
+  supervisedPendingApprovals,
+  onSupervisedPendingChange,
+}: {
+  client: Client;
+  onOpenSettings: () => void;
+  supervisedPendingApprovals: SupervisedPendingItem[];
+  onSupervisedPendingChange: (
+    updater: SupervisedPendingItem[] | ((prev: SupervisedPendingItem[]) => SupervisedPendingItem[]),
+  ) => void;
+}) {
   const detail = useMemo(() => getClientDetail(client), [client.id]);
   const [aiMode, setAiMode] = useState<"autonomous" | "supervised">("autonomous");
   const [instruction, setInstruction] = useState("");
+  const [sendingSlack, setSendingSlack] = useState(false);
+  const [optLoading, setOptLoading] = useState(false);
+  const [optError, setOptError] = useState<string | null>(null);
+  const [optResult, setOptResult] = useState<CampaignOptimizationResult | null>(null);
+  const [panelAiLoading, setPanelAiLoading] = useState(false);
+  const [panelAiError, setPanelAiError] = useState<string | null>(null);
+  /** Só modo autônomo: última resposta abaixo do campo de instrução. */
+  const [panelAiResult, setPanelAiResult] = useState<CampaignOptimizationResult | null>(null);
+  /** Decisões derivadas das respostas reais da IA (instrução); aparecem no destaque e no histórico acima dos mocks. */
+  const [instructionDecisions, setInstructionDecisions] = useState<AiDecision[]>([]);
+  /** Qual item da lista de pendentes está expandido (análise + aprovar). */
+  const [expandedPendingId, setExpandedPendingId] = useState<string | null>(null);
+  const [pendingListOpen, setPendingListOpen] = useState(true);
+
+  const handleApprovePendingItem = (id: string) => {
+    const item = supervisedPendingApprovals.find((p) => p.id === id);
+    if (!item) return;
+    onSupervisedPendingChange((prev) => prev.filter((p) => p.id !== id));
+    setInstructionDecisions((prev) => [
+      aiDecisionFromInstructionResponse(item.instruction, item.result, "supervised"),
+      ...prev,
+    ]);
+    if (expandedPendingId === id) setExpandedPendingId(null);
+    toast.success("Decisão aprovada e registada no histórico.");
+  };
+
+  const handleRejectPendingItem = (id: string) => {
+    onSupervisedPendingChange((prev) => prev.filter((p) => p.id !== id));
+    if (expandedPendingId === id) setExpandedPendingId(null);
+    toast.message("Decisão rejeitada — não foi registada no histórico.");
+  };
+
+  const handleInstructionSubmit = async () => {
+    if (!isAiOptimizationConfigured()) {
+      toast.error("O serviço de IA não está disponível no momento.");
+      return;
+    }
+    setPanelAiLoading(true);
+    setPanelAiError(null);
+    try {
+      const report = buildTrafficPerformanceReport(client);
+      const input = campaignAnalysisInputFromReport(report);
+      const result = await analyzeCampaignWithInstruction(input, {
+        instruction,
+        mode: aiMode,
+      });
+      if (aiMode === "autonomous") {
+        setPanelAiResult(result);
+        onSupervisedPendingChange([]);
+        setInstructionDecisions((prev) => [
+          aiDecisionFromInstructionResponse(instruction, result, "autonomous"),
+          ...prev,
+        ]);
+        toast.success("Instrução aplicada — decisão registada no histórico.");
+      } else {
+        setPanelAiResult(null);
+        const newItem: SupervisedPendingItem = {
+          id: crypto.randomUUID(),
+          instruction: instruction.trim(),
+          result,
+          createdAt: formatDecisionAtNow(),
+        };
+        onSupervisedPendingChange((prev) => [newItem, ...prev]);
+        setExpandedPendingId(newItem.id);
+        setPendingListOpen(true);
+        setInstruction("");
+        toast.success("Análise pendente — abra «Aprovações pendentes» e aprove quando estiver pronto.");
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setPanelAiError(msg);
+      toast.error(msg.length > 120 ? `${msg.slice(0, 120)}…` : msg);
+    } finally {
+      setPanelAiLoading(false);
+    }
+  };
+
+  const handleGenerateOptimization = async () => {
+    if (!isAiOptimizationConfigured()) {
+      toast.error("O serviço de IA não está disponível no momento.");
+      return;
+    }
+    setOptLoading(true);
+    setOptError(null);
+    try {
+      const report = buildTrafficPerformanceReport(client);
+      const input = campaignAnalysisInputFromReport(report);
+      const result = await analyzeCampaignPerformance(input);
+      setOptResult(result);
+      toast.success("Análise de otimização gerada.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setOptError(msg);
+      toast.error(msg.length > 120 ? `${msg.slice(0, 120)}…` : msg);
+    } finally {
+      setOptLoading(false);
+    }
+  };
+
+  const handleSendSlackReport = async () => {
+    setSendingSlack(true);
+    try {
+      const r = await sendManualReport(client.id);
+      if (r.ok) toast.success("Relatório enviado para o Slack.");
+      else toast.error(r.error || "Não foi possível enviar o relatório.");
+    } finally {
+      setSendingSlack(false);
+    }
+  };
 
   const [mounted, setMounted] = useState(false);
   const { resolvedTheme } = useTheme();
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    setInstructionDecisions([]);
+    setPanelAiResult(null);
+    setPanelAiError(null);
+    setInstruction("");
+    setExpandedPendingId(null);
+  }, [client.id]);
 
   const isLight = mounted && resolvedTheme === "light";
   const chartGrid = isLight ? "hsl(220, 13%, 88%)" : "hsl(220, 14%, 18%)";
@@ -458,7 +690,11 @@ function ClientExpandedPanel({ client }: { client: Client }) {
     { name: "Instagram", value: detail.budgetRecommended.instagram, color: CH_INSTA },
   ];
 
-  const latest = detail.decisions[0];
+  const decisionsDisplay = useMemo(
+    () => [...instructionDecisions, ...detail.decisions],
+    [instructionDecisions, detail.decisions],
+  );
+  const latest = decisionsDisplay[0];
 
   return (
     <Card className="glass-card p-5 sm:p-6 border-primary/20 animate-fade-in space-y-6">
@@ -473,7 +709,33 @@ function ClientExpandedPanel({ client }: { client: Client }) {
             {client.email} · CNPJ {client.cnpj}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0 mt-2 sm:mt-0">
+        <div className="flex items-center gap-2 shrink-0 mt-2 sm:mt-0 flex-wrap justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 border-border/60"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenSettings();
+            }}
+          >
+            <Settings className="h-3.5 w-3.5" />
+            Settings
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 gap-1.5 shrink-0 bg-[#4A154B] hover:bg-[#4A154B]/90 text-white border-0"
+            disabled={sendingSlack}
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleSendSlackReport();
+            }}
+          >
+            {sendingSlack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            Enviar relatório agora
+          </Button>
           <FavoriteButton
             id={`client:${client.id}`}
             kind="client"
@@ -553,7 +815,12 @@ function ClientExpandedPanel({ client }: { client: Client }) {
           <div className="flex rounded-lg border border-border/60 bg-secondary/30 p-1 gap-1">
             <button
               type="button"
-              onClick={() => setAiMode("autonomous")}
+              onClick={() => {
+                onSupervisedPendingChange([]);
+                setPanelAiResult(null);
+                setExpandedPendingId(null);
+                setAiMode("autonomous");
+              }}
               className={cn(
                 "flex-1 sm:flex-none rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                 aiMode === "autonomous" ? "bg-success/20 text-success shadow-sm" : "text-muted-foreground hover:text-foreground",
@@ -582,13 +849,13 @@ function ClientExpandedPanel({ client }: { client: Client }) {
         >
           {aiMode === "autonomous" ? (
             <>
-              <strong className="text-foreground">Modo autônomo:</strong> a IA pode executar redistribuições dentro dos limites
-              definidos; o gestor acompanha pelo histórico abaixo.
+              <strong className="text-foreground">Modo autônomo:</strong> ao enviar uma instrução, a análise da IA é aplicada e
+              registada de imediato no histórico (com base na instrução e nos dados do cliente).
             </>
           ) : (
             <>
-              <strong className="text-foreground">Modo supervisionado:</strong> a IA apenas sugere alterações; você aprova antes
-              de qualquer mudança de orçamento.
+              <strong className="text-foreground">Modo supervisionado:</strong> a IA mostra a análise e os próximos passos;
+              só depois de você <strong className="text-foreground">aprovar</strong> a proposta é que ela entra no histórico.
             </>
           )}
         </div>
@@ -600,19 +867,193 @@ function ClientExpandedPanel({ client }: { client: Client }) {
             onChange={(e) => setInstruction(e.target.value)}
             placeholder="Ex.: priorizar Google Search nesta semana e limitar Instagram a R$ 3k..."
             className="flex-1 bg-secondary/50 border-border/50 h-10"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleInstructionSubmit();
+              }
+            }}
           />
-          <Button type="button" size="icon" className="h-10 w-10 shrink-0 bg-[#3B82F6] hover:bg-[#2563EB] text-white" aria-label="Enviar instrução">
-            <Send className="h-4 w-4" />
+          <Button
+            type="button"
+            size="icon"
+            className="h-10 w-10 shrink-0 bg-[#3B82F6] hover:bg-[#2563EB] text-white"
+            aria-label="Enviar instrução à IA"
+            disabled={panelAiLoading}
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleInstructionSubmit();
+            }}
+          >
+            {panelAiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
+
+        {panelAiError && (
+          <Alert variant="destructive" className="mt-3">
+            <AlertDescription className="text-sm">{panelAiError}</AlertDescription>
+          </Alert>
+        )}
+
+        {supervisedPendingApprovals.length > 0 && (
+          <Collapsible open={pendingListOpen} onOpenChange={setPendingListOpen} className="mt-4">
+            <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2.5 text-left text-sm font-medium text-foreground hover:bg-amber-500/15 transition-colors">
+              <span className="flex items-center gap-2">
+                Aprovações pendentes
+                <Badge
+                  variant="secondary"
+                  className="h-5 min-w-[1.25rem] justify-center rounded-full bg-amber-500/25 text-amber-900 dark:text-amber-100 tabular-nums px-1.5"
+                >
+                  {supervisedPendingApprovals.length}
+                </Badge>
+              </span>
+              <ChevronDown
+                className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", pendingListOpen && "rotate-180")}
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 space-y-2">
+              {supervisedPendingApprovals.map((item) => {
+                const open = expandedPendingId === item.id;
+                return (
+                  <div key={item.id} className="rounded-lg border border-border/60 bg-secondary/25 overflow-hidden">
+                    <button
+                      type="button"
+                      className="flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm hover:bg-secondary/40 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedPendingId(open ? null : item.id);
+                      }}
+                    >
+                      <span className="flex-1 min-w-0">
+                        <span className="line-clamp-2 text-foreground font-medium">{item.instruction || "(sem texto)"}</span>
+                        <span className="block text-[10px] text-muted-foreground mt-0.5 tabular-nums">{item.createdAt}</span>
+                      </span>
+                      <ChevronDown className={cn("h-4 w-4 shrink-0 mt-0.5 text-muted-foreground transition-transform", open && "rotate-180")} />
+                    </button>
+                    {open && (
+                      <div className="border-t border-border/50 bg-background/40 px-3 py-3 space-y-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Análise da IA (aguardando aprovação)
+                        </p>
+                        <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{item.result.analysis}</p>
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground mb-2">Próximos passos</p>
+                          <ul className="list-disc pl-4 space-y-1 text-sm text-foreground">
+                            {item.result.recommendations.map((line, i) => (
+                              <li key={i} className="leading-snug">
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground mb-2">Prioridades por canal</p>
+                          <div className="grid sm:grid-cols-3 gap-2">
+                            {item.result.tiles.map((t, i) => (
+                              <div key={i} className="rounded-md border border-border/60 bg-secondary/20 p-2.5 text-xs space-y-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-medium text-primary truncate">{t.platform}</span>
+                                  <span
+                                    className={cn(
+                                      "shrink-0 text-[10px] px-1.5 py-0.5 rounded-full",
+                                      t.priority === "Alta" ? "bg-primary/20 text-primary" : "bg-warning/15 text-warning",
+                                    )}
+                                  >
+                                    {t.priority}
+                                  </span>
+                                </div>
+                                <p className="font-medium text-foreground leading-snug">{t.action}</p>
+                                <p className="text-muted-foreground leading-snug line-clamp-3">{t.reason}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap gap-2 pt-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full sm:w-auto gap-2 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRejectPendingItem(item.id);
+                            }}
+                          >
+                            <XCircle className="h-4 w-4" />
+                            Rejeitar
+                          </Button>
+                          <Button
+                            type="button"
+                            className="w-full sm:w-auto gap-2 bg-success hover:bg-success/90 text-success-foreground"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleApprovePendingItem(item.id);
+                            }}
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                            Aprovar decisão
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
+        {aiMode === "autonomous" && panelAiResult && (
+          <div className="mt-4 rounded-lg border border-primary/20 bg-background/50 p-4 space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resposta da IA à instrução</p>
+            <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{panelAiResult.analysis}</p>
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Recomendações</p>
+              <ul className="list-disc pl-4 space-y-1 text-sm text-foreground">
+                {panelAiResult.recommendations.map((line, i) => (
+                  <li key={i} className="leading-snug">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Prioridades por canal</p>
+              <div className="grid sm:grid-cols-3 gap-2">
+                {panelAiResult.tiles.map((t, i) => (
+                  <div key={i} className="rounded-md border border-border/60 bg-secondary/20 p-2.5 text-xs space-y-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-medium text-primary truncate">{t.platform}</span>
+                      <span
+                        className={cn(
+                          "shrink-0 text-[10px] px-1.5 py-0.5 rounded-full",
+                          t.priority === "Alta" ? "bg-primary/20 text-primary" : "bg-warning/15 text-warning",
+                        )}
+                      >
+                        {t.priority}
+                      </span>
+                    </div>
+                    <p className="font-medium text-foreground leading-snug">{t.action}</p>
+                    <p className="text-muted-foreground leading-snug line-clamp-3">{t.reason}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Destaque última decisão (estilo alerta dos prints) */}
       <div className="rounded-xl border-l-4 border-l-[#3B82F6] border border-border/60 bg-secondary/20 p-4">
         <div className="flex flex-wrap items-center gap-2 mb-2">
-          <Badge variant="outline" className="text-[10px] border-[#3B82F6]/50 text-[#3B82F6]">
-            Automática
-          </Badge>
+          {latest.fromInstruction ? (
+            <Badge variant="outline" className="text-[10px] border-primary/50 text-primary">
+              {latest.instructionMode === "supervised" ? "Instrução · aprovada" : "Instrução do gestor"}
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] border-[#3B82F6]/50 text-[#3B82F6]">
+              Automática
+            </Badge>
+          )}
           <Badge variant="outline" className="text-[10px] border-success/50 text-success gap-1">
             <CheckCircle2 className="h-3 w-3" />
             Executada
@@ -638,16 +1079,22 @@ function ClientExpandedPanel({ client }: { client: Client }) {
           Histórico de Decisões da IA
         </h3>
         <div className="space-y-3">
-          {detail.decisions.map((d, i) => (
+          {decisionsDisplay.map((d, i) => (
             <div
-              key={`${d.at}-${i}`}
+              key={`${d.fromInstruction ? "i" : "m"}-${d.at}-${i}-${d.title.slice(0, 24)}`}
               className="rounded-lg border border-border/50 bg-secondary/20 p-4"
             >
               <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="text-[10px]">
-                    Automática
-                  </Badge>
+                  {d.fromInstruction ? (
+                    <Badge variant="outline" className="text-[10px] border-primary/50 text-primary">
+                      {d.instructionMode === "supervised" ? "Instrução · aprovada" : "Instrução do gestor"}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px]">
+                      Automática
+                    </Badge>
+                  )}
                   <Badge variant="outline" className="text-[10px] border-success/40 text-success gap-1">
                     <CheckCircle2 className="h-3 w-3" />
                     Executada
@@ -745,9 +1192,24 @@ function ClientExpandedPanel({ client }: { client: Client }) {
 
       {/* Relatório Mensal de ROI */}
       <div className="rounded-xl border border-border/60 overflow-hidden">
-        <div className="px-4 py-3 border-b border-border/50 bg-secondary/20">
-          <h3 className="font-display font-semibold">Relatório Mensal de ROI</h3>
-          <p className="text-xs text-muted-foreground">Junho 2026 — inputs e outputs por canal (simulado)</p>
+        <div className="px-4 py-3 border-b border-border/50 bg-secondary/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h3 className="font-display font-semibold">Relatório Mensal de ROI</h3>
+            <p className="text-xs text-muted-foreground">Junho 2026 — inputs e outputs por canal (simulado)</p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="shrink-0 gap-2 bg-[#4A154B] hover:bg-[#4A154B]/90 text-white border-0"
+            disabled={sendingSlack}
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleSendSlackReport();
+            }}
+          >
+            {sendingSlack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            Enviar relatório agora
+          </Button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -862,14 +1324,65 @@ function ClientExpandedPanel({ client }: { client: Client }) {
         </div>
       </div>
 
-      {/* Insight gestor */}
-      <div className="rounded-lg border border-success/25 bg-success/5 p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Sparkles className="h-4 w-4 text-primary shrink-0" />
-          <span className="text-sm font-semibold font-display">Insight da IA (gestor valida)</span>
+      {/* Insight gestor + análise OpenAI */}
+      <div className="rounded-lg border border-success/25 bg-success/5 p-4 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary shrink-0" />
+            <span className="text-sm font-semibold font-display">Insight da IA (gestor valida)</span>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="shrink-0 gap-2 border border-border/60"
+            disabled={optLoading}
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleGenerateOptimization();
+            }}
+          >
+            {optLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BrainCircuit className="h-4 w-4" />}
+            Gerar análise IA
+          </Button>
         </div>
         <p className="text-sm text-muted-foreground leading-relaxed">{client.aiInsight}</p>
-        <p className="text-[11px] text-muted-foreground mt-3 pt-2 border-t border-border/40">
+
+        {optError && (
+          <Alert variant="destructive">
+            <AlertDescription className="text-sm">{optError}</AlertDescription>
+          </Alert>
+        )}
+
+        {optResult && (
+          <div className="rounded-md border border-primary/25 bg-background/60 dark:bg-background/30 p-4 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Análise</p>
+            <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{optResult.analysis}</p>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Recomendações</p>
+              <ul className="list-disc pl-4 space-y-1.5 text-sm text-foreground">
+                {optResult.recommendations.map((line, i) => (
+                  <li key={i} className="leading-snug">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Resumo por canal</p>
+              <div className="grid sm:grid-cols-3 gap-2">
+                {optResult.tiles.map((t, i) => (
+                  <div key={i} className="rounded-md border border-border/50 bg-secondary/15 p-2 text-[11px] space-y-1">
+                    <span className="font-medium text-primary">{t.platform}</span>
+                    <p className="text-foreground leading-snug">{t.action}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <p className="text-[11px] text-muted-foreground pt-2 border-t border-border/40">
           Análise assistida por IA — valide sempre nas plataformas antes de alterar orçamentos ou campanhas.
         </p>
       </div>
@@ -885,6 +1398,9 @@ const Clientes = () => {
   const [filterCnpj, setFilterCnpj] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("cpa_desc");
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [settingsClientId, setSettingsClientId] = useState<number | null>(null);
+  /** Aprovações supervisionadas pendentes por cliente (persistem ao recolher o card). */
+  const [pendingByClientId, setPendingByClientId] = useState<Record<number, SupervisedPendingItem[]>>({});
 
   useEffect(() => {
     const ex = searchParams.get("expand");
@@ -1053,6 +1569,7 @@ const Clientes = () => {
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {visibleClients.map((client) => {
           const open = expandedId === client.id;
+          const pendingApprovalCount = pendingByClientId[client.id]?.length ?? 0;
           return (
             <Card
               key={client.id}
@@ -1080,8 +1597,8 @@ const Clientes = () => {
                   size="sm"
                 />
               </div>
-              <div className="flex items-start justify-between mb-3 pr-8">
-                <div>
+              <div className="flex items-start justify-between mb-3 pr-8 gap-2">
+                <div className="min-w-0">
                   <h3 className="font-display font-semibold text-sm group-hover:gradient-brand-text transition-colors">
                     {client.name}
                   </h3>
@@ -1114,6 +1631,20 @@ const Clientes = () => {
                   </span>
                   <span className="font-semibold text-destructive/90 tabular-nums">{brl(client.cpa)}</span>
                 </div>
+                {pendingApprovalCount > 0 && (
+                  <div className="flex items-center justify-between gap-2 text-sm pt-0.5">
+                    <span className="text-muted-foreground flex items-center gap-1.5 min-w-0">
+                      <ListChecks size={14} className="text-amber-500 shrink-0" />
+                      <span className="truncate">Aprovações pendentes:</span>
+                    </span>
+                    <span
+                      className="shrink-0 flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-amber-950 shadow-sm tabular-nums"
+                      title={`${pendingApprovalCount} aprovação(ões) a rever no painel expandido`}
+                    >
+                      {pendingApprovalCount}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-sm">
                   <BarChart3 size={14} className="text-accent shrink-0" />
                   <span className="text-muted-foreground">Plataformas:</span>
@@ -1138,7 +1669,32 @@ const Clientes = () => {
         })}
       </div>
 
-      {selected && <ClientExpandedPanel key={selected.id} client={selected} />}
+      {selected && (
+        <ClientExpandedPanel
+          key={selected.id}
+          client={selected}
+          onOpenSettings={() => setSettingsClientId(selected.id)}
+          supervisedPendingApprovals={pendingByClientId[selected.id] ?? []}
+          onSupervisedPendingChange={(updater) => {
+            setPendingByClientId((m) => {
+              const id = selected.id;
+              const prev = m[id] ?? [];
+              const next = typeof updater === "function" ? updater(prev) : updater;
+              if (next.length === 0) {
+                const { [id]: _, ...rest } = m;
+                return rest;
+              }
+              return { ...m, [id]: next };
+            });
+          }}
+        />
+      )}
+
+      <ClientSettingsModal
+        clientId={settingsClientId}
+        open={settingsClientId !== null}
+        onClose={() => setSettingsClientId(null)}
+      />
     </div>
   );
 };

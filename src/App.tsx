@@ -72,12 +72,12 @@ const App = () => (
         <AuthProvider>
           <FavoritesProvider>
             <KanbanProvider>
-            <BrowserRouter>
-              <Routes>
-                <Route path="/login" element={<LoginRoute />} />
-                <Route path="/*" element={<ProtectedRoutes />} />
-              </Routes>
-            </BrowserRouter>
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/login" element={<LoginRoute />} />
+                  <Route path="/*" element={<ProtectedRoutes />} />
+                </Routes>
+              </BrowserRouter>
             </KanbanProvider>
           </FavoritesProvider>
         </AuthProvider>

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react";
+import { isStrongPassword } from "@/lib/passwordPolicy";
 
 export interface User {
   role: "admin" | "user";
@@ -11,6 +12,8 @@ export interface User {
   avatarDataUrl?: string | null;
   /** Pode abrir Settings do Board (colunas). Admins sempre podem. */
   canManageBoard?: boolean;
+  /** Conta criada por admin: obriga troca de senha no primeiro acesso. */
+  mustChangePassword?: boolean;
 }
 
 /** Quem pode gerir colunas e settings do Kanban (admin ou permissão explícita). */
@@ -65,6 +68,7 @@ const defaultRegistry: Record<string, RegistryEntry> = {
       email: "admin@norter.com",
       phone: "(11) 99999-0000",
       document: "000.000.000-00",
+      mustChangePassword: false,
     },
   },
   norter: {
@@ -76,6 +80,7 @@ const defaultRegistry: Record<string, RegistryEntry> = {
       email: "contato@norter.com",
       phone: "(11) 98888-0000",
       document: "111.111.111-11",
+      mustChangePassword: false,
     },
   },
 };
@@ -108,6 +113,8 @@ interface AuthContextType {
   logout: () => void;
   updateProfile: (data: Partial<User>) => void;
   changePassword: (currentPassword: string, newPassword: string) => boolean;
+  /** Primeiro acesso: valida senha atual e define nova senha (remove `mustChangePassword`). */
+  completeFirstPasswordChange: (currentPassword: string, newPassword: string) => { ok: boolean; error?: string };
   /** Somente admins */
   listUsers: () => User[];
   createUser: (input: {
@@ -154,12 +161,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     else sessionStorage.removeItem("norter_user");
   }, [user]);
 
+  /** Mantém a sessão alinhada ao registo (ex.: `mustChangePassword` após refresh). */
+  useEffect(() => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const entry = registry[prev.username];
+      if (!entry) return prev;
+      return { ...entry.user };
+    });
+  }, [registry]);
+
   const login = useCallback(
     (username: string, password: string) => {
-      const key = username.trim();
+      const key = username.trim().toLowerCase();
       const entry = registry[key];
       if (entry && entry.password === password) {
-        setUser(entry.user);
+        setUser({ ...entry.user });
         return true;
       }
       return false;
@@ -193,13 +210,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!user) return false;
       const entry = registry[user.username];
       if (!entry || entry.password !== currentPassword) return false;
-      if (!newPassword || newPassword.length < 4) return false;
+      if (!isStrongPassword(newPassword)) return false;
       const nextReg = {
         ...registry,
-        [user.username]: { ...entry, password: newPassword },
+        [user.username]: {
+          ...entry,
+          password: newPassword,
+          user: { ...entry.user, mustChangePassword: false },
+        },
       };
       syncRegistry(nextReg);
+      setUser((prev) => (prev ? { ...prev, mustChangePassword: false } : prev));
       return true;
+    },
+    [user, registry, syncRegistry],
+  );
+
+  const completeFirstPasswordChange = useCallback(
+    (currentPassword: string, newPassword: string): { ok: boolean; error?: string } => {
+      if (!user) return { ok: false, error: "Sessão inválida." };
+      if (!user.mustChangePassword) return { ok: false, error: "Não é necessário alterar a senha agora." };
+      const entry = registry[user.username];
+      if (!entry || entry.password !== currentPassword) {
+        return { ok: false, error: "Senha atual incorreta." };
+      }
+      if (!isStrongPassword(newPassword)) {
+        return {
+          ok: false,
+          error: "A nova senha deve ter no mínimo 6 caracteres, com maiúscula, minúscula e caractere especial.",
+        };
+      }
+      const nextReg = {
+        ...registry,
+        [user.username]: {
+          ...entry,
+          password: newPassword,
+          user: { ...entry.user, mustChangePassword: false },
+        },
+      };
+      syncRegistry(nextReg);
+      setUser({ ...user, mustChangePassword: false });
+      return { ok: true };
     },
     [user, registry, syncRegistry],
   );
@@ -223,7 +274,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const u = input.username.trim().toLowerCase();
       if (!u || !/^[a-z0-9._-]+$/i.test(u)) return { ok: false, error: "Usuário inválido (use letras, números, . _ -)." };
       if (registry[u]) return { ok: false, error: "Este login já existe." };
-      if (!input.password || input.password.length < 4) return { ok: false, error: "Senha muito curta (mín. 4 caracteres)." };
+      if (!isStrongPassword(input.password)) {
+        return {
+          ok: false,
+          error: "Senha inicial inválida: mínimo 6 caracteres, com maiúscula, minúscula e caractere especial.",
+        };
+      }
       const newUser: User = {
         username: u,
         name: input.name.trim() || u,
@@ -232,7 +288,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         document: "",
         role: input.role,
         avatarDataUrl: null,
-        ...(input.role === "user" ? { canManageBoard: input.canManageBoard === true } : {}),
+        ...(input.role === "user"
+          ? { mustChangePassword: true as const, canManageBoard: input.canManageBoard === true }
+          : { mustChangePassword: false as const }),
       };
       const nextReg = {
         ...registry,
@@ -332,6 +390,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         logout,
         updateProfile,
         changePassword,
+        completeFirstPasswordChange,
         listUsers,
         createUser,
         deleteUser,
