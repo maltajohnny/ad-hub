@@ -38,9 +38,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Columns3, GripVertical, Settings, Tag } from "lucide-react";
+import { BookOpen, ChevronLeft, GripVertical, Plus, Search, Settings, Tag } from "lucide-react";
 
 const TYPE_LABEL: Record<WorkItemType, string> = {
   epic: "Épico",
@@ -69,6 +70,132 @@ function findContainer(id: string, items: Record<string, string[]>): string | un
 function userByUsername(users: User[], username: string | null | undefined): User | undefined {
   if (!username) return undefined;
   return users.find((u) => u.username === username);
+}
+
+/** Largura de coluna alinhada ao Kanban Azure (~220–350px). */
+const COL_WIDTH_CLASS = "w-[302px] min-w-[220px] max-w-[350px] shrink-0 box-border";
+
+/**
+ * Atribuição estilo Azure: na lista mostra nome + e-mail; fechado mostra só avatar + nome.
+ */
+function AssigneePicker({
+  value,
+  onChange,
+  users,
+  disabled,
+  placeholder = "Não atribuído",
+}: {
+  value: string | null;
+  onChange: (username: string | null) => void;
+  users: User[];
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = userByUsername(users, value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          className="w-full justify-start h-auto min-h-9 py-1.5 px-2 font-normal border-border bg-background hover:bg-muted/50"
+        >
+          <div className="flex items-center gap-2 min-w-0 w-full text-left">
+            {selected ? (
+              <>
+                <UserAvatarDisplay user={selected} className="h-6 w-6 shrink-0" iconSize={14} />
+                <span className="truncate text-sm">{selected.name}</span>
+              </>
+            ) : value ? (
+              <>
+                <span className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
+                  {value.slice(0, 2).toUpperCase()}
+                </span>
+                <span className="truncate text-sm">@{value}</span>
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground">{placeholder}</span>
+            )}
+          </div>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[min(calc(100vw-2rem),320px)] p-0" align="start">
+        <div className="max-h-72 overflow-y-auto p-1">
+          <button
+            type="button"
+            className={cn(
+              "w-full rounded-sm px-2 py-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+            )}
+            onClick={() => {
+              onChange(null);
+              setOpen(false);
+            }}
+          >
+            {placeholder}
+          </button>
+          {users.map((u) => (
+            <button
+              key={u.username}
+              type="button"
+              className="w-full flex items-start gap-2 rounded-sm px-2 py-2 text-left hover:bg-accent hover:text-accent-foreground"
+              onClick={() => {
+                onChange(u.username);
+                setOpen(false);
+              }}
+            >
+              <UserAvatarDisplay user={u} className="h-8 w-8 shrink-0 mt-0.5" iconSize={18} />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium leading-tight text-foreground">{u.name}</div>
+                <div className="text-[11px] text-muted-foreground truncate">{u.email}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Ícone estilo Azure: pilhas de “pills” (Épico laranja, Feature roxa, Task verde). */
+function StackPillsTypeIcon({ type, className }: { type: "epic" | "feature" | "task"; className?: string }) {
+  const fill =
+    type === "epic"
+      ? "#f97316"
+      : type === "feature"
+        ? "#a855f7"
+        : "#34d399";
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      className={cn("shrink-0", className)}
+      aria-hidden
+    >
+      <rect x="1" y="1" width="7" height="3.2" rx="0.9" fill={fill} />
+      <rect x="1" y="5.5" width="7" height="3.2" rx="0.9" fill={fill} />
+      <rect x="1" y="10" width="7" height="3.2" rx="0.9" fill={fill} />
+      <rect x="10" y="5.5" width="7" height="3.2" rx="0.9" fill={fill} />
+      <rect x="10" y="10" width="7" height="3.2" rx="0.9" fill={fill} />
+    </svg>
+  );
+}
+
+/** Ícone por tipo de work item — só nos cards, não nos títulos das colunas. */
+function WorkItemTypeIcon({ type, className }: { type: WorkItemType; className?: string }) {
+  if (type === "user_story") {
+    return (
+      <BookOpen
+        className={cn("h-[18px] w-[18px] shrink-0 text-cyan-400", className)}
+        strokeWidth={2}
+        aria-hidden
+      />
+    );
+  }
+  return <StackPillsTypeIcon type={type} className={className} />;
 }
 
 function CardTitleField({
@@ -133,13 +260,11 @@ function SortableKanbanCard({
     transition,
   };
 
-  const assignee = userByUsername(platformUsers, card.assigneeUsername);
-
   return (
     <div ref={setNodeRef} style={style} className={cn(isDragging && "z-50 opacity-90")}>
       <Card
         className={cn(
-          "glass-card p-3 text-sm shadow-sm border-border/60",
+          "glass-card p-3 text-sm shadow-sm border-border/60 border-l-4 border-l-primary pl-2.5",
           dimmed && "opacity-35 pointer-events-none",
         )}
       >
@@ -157,8 +282,9 @@ function SortableKanbanCard({
             <GripVertical size={16} />
           </button>
           <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <Badge variant="outline" className="text-[10px] shrink-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <WorkItemTypeIcon type={card.type} />
+              <Badge variant="outline" className="text-[10px] shrink-0 border-border/60">
                 {TYPE_LABEL[card.type]}
               </Badge>
             </div>
@@ -174,32 +300,14 @@ function SortableKanbanCard({
             </div>
             <div>
               <Label className="text-[10px] text-muted-foreground">Atribuído a</Label>
-              <Select
-                value={card.assigneeUsername ?? "__none"}
-                onValueChange={(v) => onAssignee(v === "__none" ? null : v)}
-                disabled={dimmed}
-              >
-                <SelectTrigger className="mt-1 h-auto min-h-9 py-1.5 text-left">
-                  <div className="flex items-center gap-2 min-w-0 w-full">
-                    {assignee ? (
-                      <UserAvatarDisplay user={assignee} className="h-6 w-6 shrink-0" iconSize={14} />
-                    ) : card.assigneeUsername ? (
-                      <span className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
-                        {card.assigneeUsername.slice(0, 2).toUpperCase()}
-                      </span>
-                    ) : null}
-                    <SelectValue placeholder="Não atribuído" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  <SelectItem value="__none">Não atribuído</SelectItem>
-                  {platformUsers.map((u) => (
-                    <SelectItem key={u.username} value={u.username}>
-                      {u.name} — {u.email}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="mt-1">
+                <AssigneePicker
+                  value={card.assigneeUsername}
+                  onChange={onAssignee}
+                  users={platformUsers}
+                  disabled={!!dimmed}
+                />
+              </div>
             </div>
             {parentTitle && (
               <p className="text-xs text-muted-foreground">
@@ -241,7 +349,7 @@ function ColumnBody({ columnId, children }: { columnId: string; children: React.
   return (
     <div
       ref={setNodeRef}
-      className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-320px)] min-h-[120px]"
+      className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-380px)] min-h-[120px]"
     >
       {children}
     </div>
@@ -547,7 +655,8 @@ const Board = () => {
                 <SelectItem value="__unassigned">Não atribuído</SelectItem>
                 {platformUsers.map((u) => (
                   <SelectItem key={u.username} value={u.username}>
-                    {u.name}
+                    <span className="block truncate">{u.name}</span>
+                    <span className="block text-[11px] text-muted-foreground font-normal truncate">{u.email}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -603,86 +712,125 @@ const Board = () => {
           onDragEnd={filterActive ? undefined : onDragEnd}
           onDragCancel={onDragCancel}
         >
-          <div className="flex gap-0 min-w-max items-start">
-            {sortedColumns.map((col, colIndex) => {
-              const ids = items[col.id] ?? [];
-              const visibleIds = ids.filter((id) => {
-                const c = cardById(id);
-                return c && matchesFilters(c);
-              });
-
-              return (
-                <div
-                  key={col.id}
-                  className={cn(
-                    "w-[min(100vw-2rem,300px)] shrink-0 flex flex-col rounded-lg bg-card/30 min-h-[280px] px-1",
-                    colIndex < sortedColumns.length - 1 && "border-r border-border/60 pr-4 mr-1",
-                  )}
-                >
-                  <div className="px-3 pt-3 pb-2 border-b border-border/50 space-y-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Columns3 size={16} className="text-primary shrink-0" />
-                      <h2 className="font-semibold text-sm truncate">{col.title}</h2>
-                      <span className="text-[11px] text-muted-foreground tabular-nums ml-auto">
+          {/* Estrutura tipo Azure: faixa única de títulos; divisórias só na área dos cards */}
+          <div className="min-w-max rounded-md border border-border/60 bg-background shadow-sm">
+            <div className="sticky top-0 z-20 flex bg-background border-b border-border">
+              {sortedColumns.map((col, colIndex) => {
+                const ids = items[col.id] ?? [];
+                const visibleIds = ids.filter((id) => {
+                  const c = cardById(id);
+                  return c && matchesFilters(c);
+                });
+                return (
+                  <div key={`hdr-${col.id}`} className={cn(COL_WIDTH_CLASS, "px-4 pt-4 pb-2")}>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {colIndex === 0 && (
+                        <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground opacity-80" aria-hidden />
+                      )}
+                      <h2 className="font-semibold text-sm truncate text-foreground flex-1 min-w-0">{col.title}</h2>
+                      <span className="text-[11px] font-semibold tabular-nums text-emerald-600 dark:text-emerald-400 shrink-0">
                         {visibleIds.length}/{ids.length}
                       </span>
                     </div>
-                    {colIndex === 0 && (
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex bg-background border-b border-border">
+              {sortedColumns.map((col, colIndex) => (
+                <div key={`tb-${col.id}`} className={cn(COL_WIDTH_CLASS, "px-3 py-2")}>
+                  {colIndex === 0 && (
+                    <div className="flex items-stretch gap-2">
                       <Button
                         type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="w-full justify-center gap-1.5"
+                        variant="outline"
+                        className="flex-1 min-h-9 h-9 border-border bg-background text-foreground hover:bg-muted/70 gap-2 font-normal shadow-sm"
                         onClick={openNewCard}
                       >
-                        + Novo item
+                        <Plus className="h-4 w-4 shrink-0" strokeWidth={2} />
+                        Novo item
                       </Button>
-                    )}
-                  </div>
-
-                  <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-                    <ColumnBody columnId={col.id}>
-                      {ids.map((id) => {
-                        const c = cardById(id);
-                        if (!c) return null;
-                        const parent = c.parentId ? cardById(c.parentId) : null;
-                        const dimmed = filterActive && !matchesFilters(c);
-                        return (
-                          <SortableKanbanCard
-                            key={id}
-                            card={c}
-                            parentTitle={parent?.title ?? null}
-                            columnTitle={columnTitleById[c.columnId] ?? "—"}
-                            filterActive={filterActive}
-                            dimmed={dimmed}
-                            onEditTags={() => openTagsEdit(c)}
-                            platformUsers={platformUsers}
-                            onSaveTitle={(t) => {
-                              const r = updateCardTitle(c.id, t);
-                              if (!r.ok) toast.error(r.error ?? "Título inválido.");
-                            }}
-                            onAssignee={(username) => updateCardAssignee(c.id, username)}
-                          />
-                        );
-                      })}
-                      {visibleIds.length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center py-8 px-2">
-                          {ids.length === 0 ? "Nenhum card." : "Nenhum card corresponde ao filtro."}
-                        </p>
-                      )}
-                    </ColumnBody>
-                  </SortableContext>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 shrink-0 border-border bg-background hover:bg-muted/70 shadow-sm"
+                        title="Ir para filtro por palavra"
+                        onClick={() => document.getElementById("board-keyword")?.focus()}
+                      >
+                        <Search className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              );
-            })}
+              ))}
+            </div>
+
+            <div className="flex">
+              {sortedColumns.map((col, colIndex) => {
+                const ids = items[col.id] ?? [];
+                const visibleIds = ids.filter((id) => {
+                  const c = cardById(id);
+                  return c && matchesFilters(c);
+                });
+
+                return (
+                  <div
+                    key={col.id}
+                    className={cn(
+                      COL_WIDTH_CLASS,
+                      "flex flex-col min-h-[240px] border-t-2 border-t-border/70 bg-muted/20 dark:bg-muted/10",
+                      colIndex > 0 && "border-l border-border/50",
+                    )}
+                  >
+                    <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+                      <ColumnBody columnId={col.id}>
+                        {ids.map((id) => {
+                          const c = cardById(id);
+                          if (!c) return null;
+                          const parent = c.parentId ? cardById(c.parentId) : null;
+                          const dimmed = filterActive && !matchesFilters(c);
+                          return (
+                            <SortableKanbanCard
+                              key={id}
+                              card={c}
+                              parentTitle={parent?.title ?? null}
+                              columnTitle={columnTitleById[c.columnId] ?? "—"}
+                              filterActive={filterActive}
+                              dimmed={dimmed}
+                              onEditTags={() => openTagsEdit(c)}
+                              platformUsers={platformUsers}
+                              onSaveTitle={(t) => {
+                                const r = updateCardTitle(c.id, t);
+                                if (!r.ok) toast.error(r.error ?? "Título inválido.");
+                              }}
+                              onAssignee={(username) => updateCardAssignee(c.id, username)}
+                            />
+                          );
+                        })}
+                        {visibleIds.length === 0 && (
+                          <p className="text-xs text-muted-foreground text-center py-8 px-2">
+                            {ids.length === 0 ? "Nenhum card." : "Nenhum card corresponde ao filtro."}
+                          </p>
+                        )}
+                      </ColumnBody>
+                    </SortableContext>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <DragOverlay dropAnimation={null}>
             {activeCard ? (
-              <Card className="glass-card p-3 w-[280px] shadow-lg border-primary/30">
-                <Badge variant="outline" className="text-[10px] mb-2">
-                  {TYPE_LABEL[activeCard.type]}
-                </Badge>
+              <Card className="glass-card p-3 w-[280px] shadow-lg border-primary/30 border-l-4 border-l-primary pl-2.5">
+                <div className="flex items-center gap-2 mb-2">
+                  <WorkItemTypeIcon type={activeCard.type} />
+                  <Badge variant="outline" className="text-[10px] border-border/60">
+                    {TYPE_LABEL[activeCard.type]}
+                  </Badge>
+                </div>
                 <p className="text-sm font-medium">{activeCard.title}</p>
               </Card>
             ) : null}
@@ -800,22 +948,9 @@ const Board = () => {
             </div>
             <div>
               <Label>Atribuído a</Label>
-              <Select
-                value={cardAssignee ?? "__none"}
-                onValueChange={(v) => setCardAssignee(v === "__none" ? null : v)}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Não atribuído" />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  <SelectItem value="__none">Não atribuído</SelectItem>
-                  {platformUsers.map((u) => (
-                    <SelectItem key={u.username} value={u.username}>
-                      {u.name} — {u.email}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="mt-1">
+                <AssigneePicker value={cardAssignee} onChange={setCardAssignee} users={platformUsers} />
+              </div>
             </div>
             <div>
               <Label htmlFor="card-tags">Tags (separadas por vírgula)</Label>
