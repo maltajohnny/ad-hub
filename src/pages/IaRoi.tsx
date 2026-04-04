@@ -1,6 +1,8 @@
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { Zap, Brain, ArrowRight } from "lucide-react";
+import { Brain, ArrowRight, LayoutDashboard, Users } from "lucide-react";
 
 const flowSteps = [
   { step: 1, title: "Coleta de Dados", desc: "APIs do Meta, Google e Instagram enviam dados de campanhas", input: "Tokens de acesso das plataformas", output: "Impressões, cliques, conversões, gastos" },
@@ -17,10 +19,33 @@ const budgetAllocation = [
 
 const IaRoi = () => (
   <div className="space-y-6 animate-fade-in">
-    <div>
-      <h1 className="text-2xl font-display font-bold">IA & Análise de ROI</h1>
-      <p className="text-muted-foreground text-sm mt-1">Fluxo de tomada de decisão baseado em IA</p>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h1 className="text-2xl font-display font-bold">IA & Análise de ROI</h1>
+        <p className="text-muted-foreground text-sm mt-1">Fluxo de tomada de decisão baseado em IA</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" size="sm" className="gap-1.5" asChild>
+          <Link to="/">
+            <LayoutDashboard className="h-3.5 w-3.5" />
+            Dashboard — Gerar com IA
+          </Link>
+        </Button>
+        <Button type="button" variant="outline" size="sm" className="gap-1.5" asChild>
+          <Link to="/clientes">
+            <Users className="h-3.5 w-3.5" />
+            Clientes — Painel IA
+          </Link>
+        </Button>
+      </div>
     </div>
+
+    <Card className="glass-card p-4 border-primary/20">
+      <p className="text-sm text-foreground">
+        As análises em tempo real estão no <strong>Dashboard</strong> (recomendações) e em{" "}
+        <strong>Clientes</strong> (painel de controlo, instruções e insight).
+      </p>
+    </Card>
 
     {/* Flow */}
     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
