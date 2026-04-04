@@ -39,9 +39,22 @@ import {
 } from "@/components/ui/select";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { BookOpen, ChevronLeft, GripVertical, Plus, Search, Settings, Tag } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  GripVertical,
+  Plus,
+  Search,
+  Settings,
+  Tag,
+  X,
+} from "lucide-react";
 
 const TYPE_LABEL: Record<WorkItemType, string> = {
   epic: "Épico",
@@ -395,10 +408,13 @@ const Board = () => {
   const [items, setItems] = useState<Record<string, string[]>>(() => buildItemsMap(state.cards, columnIds));
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  const [keyword, setKeyword] = useState("");
+  /** Busca rápida na coluna (não é o mesmo que filtros do topo). */
+  const [boardSearch, setBoardSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<WorkItemType | "all">("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string | "all">("all");
   const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [tagFilterMode, setTagFilterMode] = useState<"or" | "and">("or");
+  const [tagsMenuQuery, setTagsMenuQuery] = useState("");
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newColTitle, setNewColTitle] = useState("");
@@ -421,23 +437,29 @@ const Board = () => {
   }, [state.cards]);
 
   const filterActive =
-    keyword.trim().length > 0 ||
+    boardSearch.trim().length > 0 ||
     typeFilter !== "all" ||
     assigneeFilter !== "all" ||
     tagFilter.length > 0;
 
   const matchesFilters = useCallback(
     (card: KanbanCard) => {
-      if (keyword.trim() && !card.title.toLowerCase().includes(keyword.trim().toLowerCase())) return false;
+      if (boardSearch.trim() && !card.title.toLowerCase().includes(boardSearch.trim().toLowerCase())) return false;
       if (typeFilter !== "all" && card.type !== typeFilter) return false;
       if (assigneeFilter !== "all") {
         if (assigneeFilter === "__unassigned" && card.assigneeUsername) return false;
         if (assigneeFilter !== "__unassigned" && card.assigneeUsername !== assigneeFilter) return false;
       }
-      if (tagFilter.length && !tagFilter.every((t) => card.tags.includes(t))) return false;
+      if (tagFilter.length) {
+        if (tagFilterMode === "and") {
+          if (!tagFilter.every((t) => card.tags.includes(t))) return false;
+        } else {
+          if (!tagFilter.some((t) => card.tags.includes(t))) return false;
+        }
+      }
       return true;
     },
-    [keyword, typeFilter, assigneeFilter, tagFilter],
+    [boardSearch, typeFilter, assigneeFilter, tagFilter, tagFilterMode],
   );
 
   useEffect(() => {
@@ -592,6 +614,12 @@ const Board = () => {
     setTagFilter((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
   };
 
+  const tagsForMenu = useMemo(() => {
+    const q = tagsMenuQuery.trim().toLowerCase();
+    if (!q) return allTags;
+    return allTags.filter((t) => t.toLowerCase().includes(q));
+  }, [allTags, tagsMenuQuery]);
+
   return (
     <div className="space-y-4 animate-fade-in max-w-none w-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -611,24 +639,12 @@ const Board = () => {
 
       {filterActive && (
         <p className="text-xs text-amber-600 dark:text-amber-400/90">
-          Filtros ativos: arrastar cards está desativado até limpar os filtros.
+          Com busca na coluna ou filtros ativos, arrastar cards fica desativado até limpar.
         </p>
       )}
 
       <Card className="glass-card border-border/60 p-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:flex-wrap xl:items-end">
-          <div className="flex-1 min-w-[180px]">
-            <Label htmlFor="board-keyword" className="text-xs text-muted-foreground">
-              Filtrar por palavra
-            </Label>
-            <Input
-              id="board-keyword"
-              placeholder="Título…"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              className="mt-1"
-            />
-          </div>
           <div className="w-full sm:w-44">
             <Label className="text-xs text-muted-foreground">Tipo</Label>
             <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as WorkItemType | "all")}>
@@ -662,39 +678,109 @@ const Board = () => {
               </SelectContent>
             </Select>
           </div>
-          {allTags.length > 0 && (
-            <div className="flex-1 min-w-[200px]">
-              <Label className="text-xs text-muted-foreground">Tags</Label>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {allTags.map((t) => (
-                  <button
-                    key={t}
+          <div className="w-full sm:w-auto">
+            <Label className="text-xs text-muted-foreground">Tags</Label>
+            <Popover>
+                <PopoverTrigger asChild>
+                  <Button
                     type="button"
-                    onClick={() => toggleTagFilter(t)}
-                    className={cn(
-                      "rounded-full border px-2 py-0.5 text-[11px] transition-colors",
-                      tagFilter.includes(t)
-                        ? "border-primary bg-primary/15 text-foreground"
-                        : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50",
-                    )}
+                    variant="outline"
+                    size="sm"
+                    className="mt-1 h-9 w-full sm:w-[140px] justify-between gap-2 font-normal border-border bg-muted/20 hover:bg-muted/40"
                   >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {(keyword || typeFilter !== "all" || assigneeFilter !== "all" || tagFilter.length > 0) && (
+                    <span className="flex items-center gap-2 min-w-0">
+                      <Check
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0",
+                          tagFilter.length === 0 ? "opacity-25" : "text-primary",
+                        )}
+                      />
+                      <span className="truncate">Tags</span>
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-0" align="start">
+                  <div className="p-2 border-b border-border/60">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                      <Input
+                        value={tagsMenuQuery}
+                        onChange={(e) => setTagsMenuQuery(e.target.value)}
+                        placeholder="Pesquisar tags"
+                        className="h-8 pl-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div className="px-3 py-2 border-b border-border/60">
+                    <RadioGroup
+                      value={tagFilterMode}
+                      onValueChange={(v) => setTagFilterMode(v as "or" | "and")}
+                      className="flex flex-row gap-6"
+                    >
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="or" id="board-tag-or" />
+                        <Label htmlFor="board-tag-or" className="text-xs font-normal cursor-pointer">
+                          Ou (Or)
+                        </Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="and" id="board-tag-and" />
+                        <Label htmlFor="board-tag-and" className="text-xs font-normal cursor-pointer">
+                          E (And)
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                  <div className="max-h-52 overflow-y-auto px-2 py-1">
+                    {tagsForMenu.length === 0 ? (
+                      <p className="text-xs text-muted-foreground px-2 py-3 text-center">Nenhuma tag.</p>
+                    ) : (
+                      tagsForMenu.map((t) => (
+                        <label
+                          key={t}
+                          className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-accent"
+                        >
+                          <Checkbox
+                            checked={tagFilter.includes(t)}
+                            onCheckedChange={() => toggleTagFilter(t)}
+                          />
+                          <span className="truncate">{t}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                  <div className="flex justify-end border-t border-border/60 p-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs gap-1"
+                      onClick={() => {
+                        setTagFilter([]);
+                        setTagsMenuQuery("");
+                      }}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Limpar
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+          </div>
+          {(typeFilter !== "all" || assigneeFilter !== "all" || tagFilter.length > 0 || boardSearch.trim()) && (
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className="shrink-0"
               onClick={() => {
-                setKeyword("");
+                setBoardSearch("");
                 setTypeFilter("all");
                 setAssigneeFilter("all");
                 setTagFilter([]);
+                setTagFilterMode("or");
+                setTagsMenuQuery("");
               }}
             >
               Limpar filtros
@@ -739,28 +825,43 @@ const Board = () => {
 
             <div className="flex bg-background border-b border-border">
               {sortedColumns.map((col, colIndex) => (
-                <div key={`tb-${col.id}`} className={cn(COL_WIDTH_CLASS, "px-3 py-2")}>
+                <div key={`tb-${col.id}`} className={cn(COL_WIDTH_CLASS, "px-2 py-1.5")}>
                   {colIndex === 0 && (
-                    <div className="flex items-stretch gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <Button
                         type="button"
                         variant="outline"
-                        className="flex-1 min-h-9 h-9 border-border bg-background text-foreground hover:bg-muted/70 gap-2 font-normal shadow-sm"
+                        size="sm"
+                        className="h-8 shrink-0 px-2.5 text-xs gap-1 border-border bg-background text-foreground hover:bg-muted/70 font-normal shadow-sm"
                         onClick={openNewCard}
                       >
-                        <Plus className="h-4 w-4 shrink-0" strokeWidth={2} />
+                        <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
                         Novo item
                       </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9 shrink-0 border-border bg-background hover:bg-muted/70 shadow-sm"
-                        title="Ir para filtro por palavra"
-                        onClick={() => document.getElementById("board-keyword")?.focus()}
-                      >
-                        <Search className="h-4 w-4" />
-                      </Button>
+                      <div className="relative min-w-0 flex-1">
+                        <Search
+                          className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                          aria-hidden
+                        />
+                        <Input
+                          id="board-column-search"
+                          value={boardSearch}
+                          onChange={(e) => setBoardSearch(e.target.value)}
+                          placeholder="Buscar cards…"
+                          className="h-8 pl-8 pr-8 text-xs border-border bg-background"
+                          aria-label="Buscar cards no board"
+                        />
+                        {boardSearch ? (
+                          <button
+                            type="button"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            onClick={() => setBoardSearch("")}
+                            aria-label="Limpar busca"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   )}
                 </div>
