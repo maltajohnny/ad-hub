@@ -9,6 +9,15 @@ export interface User {
   document: string;
   /** Foto de perfil (data URL). `null` ou ausente = avatar padrão */
   avatarDataUrl?: string | null;
+  /** Pode abrir Settings do Board (colunas). Admins sempre podem. */
+  canManageBoard?: boolean;
+}
+
+/** Quem pode gerir colunas e settings do Kanban (admin ou permissão explícita). */
+export function canManageKanbanBoard(u: User | null | undefined): boolean {
+  if (!u) return false;
+  if (u.role === "admin") return true;
+  return u.canManageBoard === true;
 }
 
 /** Conta proprietária — não pode ser excluída */
@@ -107,8 +116,11 @@ interface AuthContextType {
     name: string;
     email: string;
     role: "admin" | "user";
+    canManageBoard?: boolean;
   }) => { ok: boolean; error?: string };
   deleteUser: (username: string) => { ok: boolean; error?: string };
+  /** Somente admin: concede/revoga permissão de Settings do Board (usuários não-admin). */
+  setBoardSettingsPermission: (username: string, allowed: boolean) => { ok: boolean; error?: string };
   isOwner: (username: string) => boolean;
   /** Mapa clientId → username (só perfil user). Admins ignoram para visualização. */
   clientAssignments: ClientAssignmentMap;
@@ -205,6 +217,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       name: string;
       email: string;
       role: "admin" | "user";
+      canManageBoard?: boolean;
     }): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
       const u = input.username.trim().toLowerCase();
@@ -219,12 +232,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         document: "",
         role: input.role,
         avatarDataUrl: null,
+        ...(input.role === "user" ? { canManageBoard: input.canManageBoard === true } : {}),
       };
       const nextReg = {
         ...registry,
         [u]: { password: input.password, user: newUser },
       };
       syncRegistry(nextReg);
+      return { ok: true };
+    },
+    [user, registry, syncRegistry],
+  );
+
+  const setBoardSettingsPermission = useCallback(
+    (username: string, allowed: boolean): { ok: boolean; error?: string } => {
+      if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
+      const key = username.trim();
+      const entry = registry[key];
+      if (!entry) return { ok: false, error: "Usuário não encontrado." };
+      if (entry.user.role === "admin") return { ok: true };
+      const nextReg = {
+        ...registry,
+        [key]: { ...entry, user: { ...entry.user, canManageBoard: allowed } },
+      };
+      syncRegistry(nextReg);
+      if (user.username === key) {
+        setUser((prev) => (prev && prev.username === key ? { ...prev, canManageBoard: allowed } : prev));
+      }
       return { ok: true };
     },
     [user, registry, syncRegistry],
@@ -301,6 +335,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         listUsers,
         createUser,
         deleteUser,
+        setBoardSettingsPermission,
         isOwner,
         clientAssignments,
         assignClientToUser,

@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth, OWNER_USERNAME } from "@/contexts/AuthContext";
+import { Switch } from "@/components/ui/switch";
 import { clientsData } from "@/pages/Clientes";
 import { UsersRound, Trash2, Shield, User, Building2 } from "lucide-react";
 import { toast } from "sonner";
@@ -18,7 +19,8 @@ import { cn } from "@/lib/utils";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
 
 const Usuarios = () => {
-  const { user, listUsers, createUser, deleteUser, isOwner, clientAssignments, assignClientToUser } = useAuth();
+  const { user, listUsers, createUser, deleteUser, isOwner, clientAssignments, assignClientToUser, setBoardSettingsPermission } =
+    useAuth();
   const rows = listUsers();
   const usersOnly = rows.filter((u) => u.role === "user");
 
@@ -27,6 +29,7 @@ const Usuarios = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [isAdminRole, setIsAdminRole] = useState(false);
+  const [grantBoardSettings, setGrantBoardSettings] = useState(false);
 
   const handleCreate = () => {
     const res = createUser({
@@ -35,6 +38,7 @@ const Usuarios = () => {
       name,
       email,
       role: isAdminRole ? "admin" : "user",
+      canManageBoard: isAdminRole ? undefined : grantBoardSettings,
     });
     if (!res.ok) {
       toast.error(res.error || "Não foi possível criar o usuário.");
@@ -46,6 +50,7 @@ const Usuarios = () => {
     setName("");
     setEmail("");
     setIsAdminRole(false);
+    setGrantBoardSettings(false);
   };
 
   const handleDelete = (uname: string) => {
@@ -109,11 +114,25 @@ const Usuarios = () => {
           <input
             type="checkbox"
             checked={isAdminRole}
-            onChange={(e) => setIsAdminRole(e.target.checked)}
+            onChange={(e) => {
+              setIsAdminRole(e.target.checked);
+              if (e.target.checked) setGrantBoardSettings(false);
+            }}
             className="rounded border-border"
           />
           <span className="text-sm text-muted-foreground">Conceder perfil de administrador</span>
         </label>
+        {!isAdminRole && (
+          <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={grantBoardSettings}
+              onChange={(e) => setGrantBoardSettings(e.target.checked)}
+              className="rounded border-border"
+            />
+            <span className="text-sm text-muted-foreground">Permitir configurar Board Kanban (colunas e settings)</span>
+          </label>
+        )}
         <Button type="button" className="mt-4 gradient-brand text-primary-foreground" onClick={handleCreate}>
           Criar usuário
         </Button>
@@ -208,6 +227,22 @@ const Usuarios = () => {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                  {u.role === "user" && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <Switch
+                        id={`board-${u.username}`}
+                        checked={u.canManageBoard === true}
+                        onCheckedChange={(checked) => {
+                          const res = setBoardSettingsPermission(u.username, checked);
+                          if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
+                          else toast.success(checked ? "Permissão de Board concedida." : "Permissão de Board revogada.");
+                        }}
+                      />
+                      <label htmlFor={`board-${u.username}`} className="text-xs text-muted-foreground cursor-pointer">
+                        Configurar Board (colunas)
+                      </label>
+                    </div>
+                  )}
                 </div>
                 <Button
                   type="button"

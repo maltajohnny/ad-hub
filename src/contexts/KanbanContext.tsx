@@ -20,6 +20,8 @@ export type KanbanCard = {
   title: string;
   parentId: string | null;
   tags: string[];
+  /** Username do responsável (registo de utilizadores). */
+  assigneeUsername: string | null;
   order: number;
 };
 
@@ -37,7 +39,11 @@ function load(): KanbanState {
     if (!raw) return { columns: [...DEFAULT_COLUMNS], cards: [] };
     const p = JSON.parse(raw) as KanbanState;
     if (!p.columns?.length) return { columns: [...DEFAULT_COLUMNS], cards: p.cards ?? [] };
-    return { columns: p.columns, cards: p.cards ?? [] };
+    const cards = (p.cards ?? []).map((c) => ({
+      ...c,
+      assigneeUsername: (c as KanbanCard).assigneeUsername ?? null,
+    })) as KanbanCard[];
+    return { columns: p.columns, cards };
   } catch {
     return { columns: [...DEFAULT_COLUMNS], cards: [] };
   }
@@ -84,7 +90,10 @@ type KanbanContextType = {
     title: string;
     parentId: string | null;
     tags: string[];
+    assigneeUsername?: string | null;
   }) => { ok: boolean; error?: string };
+  updateCardTitle: (cardId: string, title: string) => { ok: boolean; error?: string };
+  updateCardAssignee: (cardId: string, assigneeUsername: string | null) => void;
   updateCardTags: (cardId: string, tags: string[]) => void;
   moveCard: (cardId: string, newColumnId: string, newIndex: number) => void;
   reorderInColumn: (columnId: string, orderedIds: string[]) => void;
@@ -141,6 +150,7 @@ export const KanbanProvider = ({ children }: { children: ReactNode }) => {
       title: string;
       parentId: string | null;
       tags: string[];
+      assigneeUsername?: string | null;
     }): { ok: boolean; error?: string } => {
       const title = input.title.trim();
       if (!title) return { ok: false, error: "Informe o título." };
@@ -160,6 +170,7 @@ export const KanbanProvider = ({ children }: { children: ReactNode }) => {
           title,
           parentId: input.parentId,
           tags: input.tags.map((t) => t.trim()).filter(Boolean),
+          assigneeUsername: input.assigneeUsername?.trim() || null,
           order,
         };
         const next = { ...s, cards: [...s.cards, card] };
@@ -171,6 +182,31 @@ export const KanbanProvider = ({ children }: { children: ReactNode }) => {
     },
     [],
   );
+
+  const updateCardTitle = useCallback((cardId: string, title: string): { ok: boolean; error?: string } => {
+    const t = title.trim();
+    if (!t) return { ok: false, error: "O título não pode ficar vazio." };
+    setState((s) => {
+      const next = {
+        ...s,
+        cards: s.cards.map((c) => (c.id === cardId ? { ...c, title: t } : c)),
+      };
+      persist(next);
+      return next;
+    });
+    return { ok: true };
+  }, []);
+
+  const updateCardAssignee = useCallback((cardId: string, assigneeUsername: string | null) => {
+    setState((s) => {
+      const next = {
+        ...s,
+        cards: s.cards.map((c) => (c.id === cardId ? { ...c, assigneeUsername } : c)),
+      };
+      persist(next);
+      return next;
+    });
+  }, []);
 
   const updateCardTags = useCallback((cardId: string, tags: string[]) => {
     setState((s) => {
@@ -255,13 +291,27 @@ export const KanbanProvider = ({ children }: { children: ReactNode }) => {
       addColumn,
       removeColumn,
       addCard,
+      updateCardTitle,
+      updateCardAssignee,
       updateCardTags,
       moveCard,
       reorderInColumn,
       applyBoardLayout,
       cardById,
     }),
-    [state, addColumn, removeColumn, addCard, updateCardTags, moveCard, reorderInColumn, applyBoardLayout, cardById],
+    [
+      state,
+      addColumn,
+      removeColumn,
+      addCard,
+      updateCardTitle,
+      updateCardAssignee,
+      updateCardTags,
+      moveCard,
+      reorderInColumn,
+      applyBoardLayout,
+      cardById,
+    ],
   );
 
   return <KanbanContext.Provider value={value}>{children}</KanbanContext.Provider>;

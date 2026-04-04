@@ -15,7 +15,8 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useAuth } from "@/contexts/AuthContext";
+import type { User } from "@/contexts/AuthContext";
+import { canManageKanbanBoard, useAuth } from "@/contexts/AuthContext";
 import { KanbanCard, useKanban, WorkItemType } from "@/contexts/KanbanContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -36,9 +37,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Columns3, GripVertical, Plus, Tag, Trash2 } from "lucide-react";
+import { Columns3, GripVertical, Settings, Tag } from "lucide-react";
 
 const TYPE_LABEL: Record<WorkItemType, string> = {
   epic: "Épico",
@@ -64,18 +66,63 @@ function findContainer(id: string, items: Record<string, string[]>): string | un
   return Object.keys(items).find((key) => items[key].includes(id));
 }
 
+function userByUsername(users: User[], username: string | null | undefined): User | undefined {
+  if (!username) return undefined;
+  return users.find((u) => u.username === username);
+}
+
+function CardTitleField({
+  cardId,
+  title,
+  onSave,
+  disabled,
+}: {
+  cardId: string;
+  title: string;
+  onSave: (next: string) => void;
+  disabled: boolean;
+}) {
+  const [local, setLocal] = useState(title);
+  useEffect(() => setLocal(title), [title, cardId]);
+
+  return (
+    <Input
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => {
+        const t = local.trim();
+        if (t && t !== title) onSave(t);
+        if (!t) setLocal(title);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className="font-medium text-foreground leading-snug h-auto min-h-0 py-1.5 px-2 border border-transparent bg-transparent hover:border-input/60 focus:border-input"
+      disabled={disabled}
+    />
+  );
+}
+
 function SortableKanbanCard({
   card,
   parentTitle,
+  columnTitle,
   filterActive,
   dimmed,
   onEditTags,
+  platformUsers,
+  onSaveTitle,
+  onAssignee,
 }: {
   card: KanbanCard;
   parentTitle: string | null;
+  columnTitle: string;
   filterActive: boolean;
   dimmed: boolean;
   onEditTags: () => void;
+  platformUsers: User[];
+  onSaveTitle: (title: string) => void;
+  onAssignee: (username: string | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
@@ -85,6 +132,8 @@ function SortableKanbanCard({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+
+  const assignee = userByUsername(platformUsers, card.assigneeUsername);
 
   return (
     <div ref={setNodeRef} style={style} className={cn(isDragging && "z-50 opacity-90")}>
@@ -113,7 +162,45 @@ function SortableKanbanCard({
                 {TYPE_LABEL[card.type]}
               </Badge>
             </div>
-            <p className="font-medium text-foreground leading-snug break-words">{card.title}</p>
+            <CardTitleField
+              cardId={card.id}
+              title={card.title}
+              onSave={onSaveTitle}
+              disabled={dimmed}
+            />
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/70 shrink-0" />
+              <span>{columnTitle}</span>
+            </div>
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Atribuído a</Label>
+              <Select
+                value={card.assigneeUsername ?? "__none"}
+                onValueChange={(v) => onAssignee(v === "__none" ? null : v)}
+                disabled={dimmed}
+              >
+                <SelectTrigger className="mt-1 h-auto min-h-9 py-1.5 text-left">
+                  <div className="flex items-center gap-2 min-w-0 w-full">
+                    {assignee ? (
+                      <UserAvatarDisplay user={assignee} className="h-6 w-6 shrink-0" iconSize={14} />
+                    ) : card.assigneeUsername ? (
+                      <span className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
+                        {card.assigneeUsername.slice(0, 2).toUpperCase()}
+                      </span>
+                    ) : null}
+                    <SelectValue placeholder="Não atribuído" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value="__none">Não atribuído</SelectItem>
+                  {platformUsers.map((u) => (
+                    <SelectItem key={u.username} value={u.username}>
+                      {u.name} — {u.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {parentTitle && (
               <p className="text-xs text-muted-foreground">
                 Pai: <span className="text-foreground/90">{parentTitle}</span>
@@ -154,7 +241,7 @@ function ColumnBody({ columnId, children }: { columnId: string; children: React.
   return (
     <div
       ref={setNodeRef}
-      className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-280px)] min-h-[120px]"
+      className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-320px)] min-h-[120px]"
     >
       {children}
     </div>
@@ -162,31 +249,59 @@ function ColumnBody({ columnId, children }: { columnId: string; children: React.
 }
 
 const Board = () => {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-  const { state, addColumn, removeColumn, addCard, applyBoardLayout, updateCardTags, cardById } = useKanban();
+  const { user, listUsers } = useAuth();
+  const canBoardSettings = canManageKanbanBoard(user);
+  const platformUsers = listUsers();
+
+  const {
+    state,
+    addColumn,
+    removeColumn,
+    addCard,
+    applyBoardLayout,
+    updateCardTags,
+    updateCardTitle,
+    updateCardAssignee,
+    cardById,
+  } = useKanban();
 
   const sortedColumns = useMemo(
     () => [...state.columns].sort((a, b) => a.order - b.order),
     [state.columns],
   );
   const columnIds = useMemo(() => sortedColumns.map((c) => c.id), [sortedColumns]);
+  const firstColumnId = sortedColumns[0]?.id ?? "";
+  const backlogColumnId = useMemo(() => {
+    const named = sortedColumns.find((c) => c.title.trim().toLowerCase() === "backlog");
+    return named?.id ?? firstColumnId;
+  }, [sortedColumns, firstColumnId]);
+
+  const columnTitleById = useMemo(() => {
+    const m: Record<string, string> = {};
+    sortedColumns.forEach((c) => {
+      m[c.id] = c.title;
+    });
+    return m;
+  }, [sortedColumns]);
 
   const [items, setItems] = useState<Record<string, string[]>>(() => buildItemsMap(state.cards, columnIds));
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const [keyword, setKeyword] = useState("");
   const [typeFilter, setTypeFilter] = useState<WorkItemType | "all">("all");
+  const [assigneeFilter, setAssigneeFilter] = useState<string | "all">("all");
   const [tagFilter, setTagFilter] = useState<string[]>([]);
 
-  const [colOpen, setColOpen] = useState(false);
-  const [colTitle, setColTitle] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [newColTitle, setNewColTitle] = useState("");
+
   const [cardOpen, setCardOpen] = useState(false);
-  const [cardColumnId, setCardColumnId] = useState<string>("");
   const [cardType, setCardType] = useState<WorkItemType>("user_story");
   const [cardTitle, setCardTitle] = useState("");
   const [cardParentId, setCardParentId] = useState<string | null>(null);
   const [cardTagsInput, setCardTagsInput] = useState("");
+  const [cardAssignee, setCardAssignee] = useState<string | null>(null);
+
   const [tagsEditOpen, setTagsEditOpen] = useState(false);
   const [tagsEditId, setTagsEditId] = useState<string | null>(null);
   const [tagsEditValue, setTagsEditValue] = useState("");
@@ -197,16 +312,24 @@ const Board = () => {
     return [...s].sort((a, b) => a.localeCompare(b));
   }, [state.cards]);
 
-  const filterActive = keyword.trim().length > 0 || typeFilter !== "all" || tagFilter.length > 0;
+  const filterActive =
+    keyword.trim().length > 0 ||
+    typeFilter !== "all" ||
+    assigneeFilter !== "all" ||
+    tagFilter.length > 0;
 
   const matchesFilters = useCallback(
     (card: KanbanCard) => {
       if (keyword.trim() && !card.title.toLowerCase().includes(keyword.trim().toLowerCase())) return false;
       if (typeFilter !== "all" && card.type !== typeFilter) return false;
+      if (assigneeFilter !== "all") {
+        if (assigneeFilter === "__unassigned" && card.assigneeUsername) return false;
+        if (assigneeFilter !== "__unassigned" && card.assigneeUsername !== assigneeFilter) return false;
+      }
       if (tagFilter.length && !tagFilter.every((t) => card.tags.includes(t))) return false;
       return true;
     },
-    [keyword, typeFilter, tagFilter],
+    [keyword, typeFilter, assigneeFilter, tagFilter],
   );
 
   useEffect(() => {
@@ -313,12 +436,16 @@ const Board = () => {
     return state.cards.filter((c) => c.type === "user_story");
   }, [cardType, state.cards]);
 
-  const openNewCard = (columnId: string) => {
-    setCardColumnId(columnId);
+  const openNewCard = () => {
+    if (!backlogColumnId) {
+      toast.error("Não há coluna para adicionar o card.");
+      return;
+    }
     setCardType("user_story");
     setCardTitle("");
     setCardParentId(null);
     setCardTagsInput("");
+    setCardAssignee(null);
     setCardOpen(true);
   };
 
@@ -328,11 +455,12 @@ const Board = () => {
       .map((t) => t.trim())
       .filter(Boolean);
     const res = addCard({
-      columnId: cardColumnId,
+      columnId: backlogColumnId,
       type: cardType,
       title: cardTitle,
       parentId: cardType === "epic" ? null : cardParentId,
       tags,
+      assigneeUsername: cardAssignee,
     });
     if (!res.ok) {
       toast.error(res.error ?? "Não foi possível criar o card.");
@@ -342,10 +470,11 @@ const Board = () => {
     setCardOpen(false);
   };
 
-  const submitColumn = () => {
-    addColumn(colTitle);
-    setColTitle("");
-    setColOpen(false);
+  const submitNewColumnFromSettings = () => {
+    const t = newColTitle.trim();
+    if (!t) return;
+    addColumn(t);
+    setNewColTitle("");
     toast.success("Coluna adicionada.");
   };
 
@@ -357,17 +486,17 @@ const Board = () => {
 
   return (
     <div className="space-y-4 animate-fade-in max-w-none w-full">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-display font-bold">Board</h1>
           <p className="text-muted-foreground text-sm">
             Kanban com hierarquia Scrum (Épico → Feature → User Story → Task). Arraste os cards entre as colunas.
           </p>
         </div>
-        {isAdmin && (
-          <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setColOpen(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Nova coluna
+        {canBoardSettings && (
+          <Button type="button" variant="outline" size="sm" className="shrink-0 gap-2" onClick={() => setSettingsOpen(true)}>
+            <Settings className="h-4 w-4" />
+            Settings
           </Button>
         )}
       </div>
@@ -378,72 +507,92 @@ const Board = () => {
         </p>
       )}
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
-        <div className="flex-1 min-w-[200px]">
-          <Label htmlFor="board-keyword" className="text-xs text-muted-foreground">
-            Filtrar por palavra
-          </Label>
-          <Input
-            id="board-keyword"
-            placeholder="Título…"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            className="mt-1"
-          />
-        </div>
-        <div className="w-full sm:w-48">
-          <Label className="text-xs text-muted-foreground">Tipo</Label>
-          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as WorkItemType | "all")}>
-            <SelectTrigger className="mt-1">
-              <SelectValue placeholder="Todos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="epic">{TYPE_LABEL.epic}</SelectItem>
-              <SelectItem value="feature">{TYPE_LABEL.feature}</SelectItem>
-              <SelectItem value="user_story">{TYPE_LABEL.user_story}</SelectItem>
-              <SelectItem value="task">{TYPE_LABEL.task}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        {allTags.length > 0 && (
-          <div className="flex-1 min-w-[200px]">
-            <Label className="text-xs text-muted-foreground">Tags</Label>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {allTags.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => toggleTagFilter(t)}
-                  className={cn(
-                    "rounded-full border px-2 py-0.5 text-[11px] transition-colors",
-                    tagFilter.includes(t)
-                      ? "border-primary bg-primary/15 text-foreground"
-                      : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50",
-                  )}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
+      <Card className="glass-card border-border/60 p-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:flex-wrap xl:items-end">
+          <div className="flex-1 min-w-[180px]">
+            <Label htmlFor="board-keyword" className="text-xs text-muted-foreground">
+              Filtrar por palavra
+            </Label>
+            <Input
+              id="board-keyword"
+              placeholder="Título…"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              className="mt-1"
+            />
           </div>
-        )}
-        {(keyword || typeFilter !== "all" || tagFilter.length > 0) && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="shrink-0"
-            onClick={() => {
-              setKeyword("");
-              setTypeFilter("all");
-              setTagFilter([]);
-            }}
-          >
-            Limpar filtros
-          </Button>
-        )}
-      </div>
+          <div className="w-full sm:w-44">
+            <Label className="text-xs text-muted-foreground">Tipo</Label>
+            <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as WorkItemType | "all")}>
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="epic">{TYPE_LABEL.epic}</SelectItem>
+                <SelectItem value="feature">{TYPE_LABEL.feature}</SelectItem>
+                <SelectItem value="user_story">{TYPE_LABEL.user_story}</SelectItem>
+                <SelectItem value="task">{TYPE_LABEL.task}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-full sm:w-56">
+            <Label className="text-xs text-muted-foreground">Atribuído a</Label>
+            <Select value={assigneeFilter} onValueChange={(v) => setAssigneeFilter(v as string | "all")}>
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="__unassigned">Não atribuído</SelectItem>
+                {platformUsers.map((u) => (
+                  <SelectItem key={u.username} value={u.username}>
+                    {u.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {allTags.length > 0 && (
+            <div className="flex-1 min-w-[200px]">
+              <Label className="text-xs text-muted-foreground">Tags</Label>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {allTags.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => toggleTagFilter(t)}
+                    className={cn(
+                      "rounded-full border px-2 py-0.5 text-[11px] transition-colors",
+                      tagFilter.includes(t)
+                        ? "border-primary bg-primary/15 text-foreground"
+                        : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                    )}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {(keyword || typeFilter !== "all" || assigneeFilter !== "all" || tagFilter.length > 0) && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="shrink-0"
+              onClick={() => {
+                setKeyword("");
+                setTypeFilter("all");
+                setAssigneeFilter("all");
+                setTagFilter([]);
+              }}
+            >
+              Limpar filtros
+            </Button>
+          )}
+        </div>
+      </Card>
 
       <div className="overflow-x-auto pb-2 -mx-6 lg:-mx-8 px-6 lg:px-8">
         <DndContext
@@ -454,8 +603,8 @@ const Board = () => {
           onDragEnd={filterActive ? undefined : onDragEnd}
           onDragCancel={onDragCancel}
         >
-          <div className="flex gap-4 min-w-max items-start">
-            {sortedColumns.map((col) => {
+          <div className="flex gap-0 min-w-max items-start">
+            {sortedColumns.map((col, colIndex) => {
               const ids = items[col.id] ?? [];
               const visibleIds = ids.filter((id) => {
                 const c = cardById(id);
@@ -465,37 +614,30 @@ const Board = () => {
               return (
                 <div
                   key={col.id}
-                  className="w-[300px] shrink-0 flex flex-col rounded-xl border border-border/60 bg-card/30 min-h-[280px]"
+                  className={cn(
+                    "w-[min(100vw-2rem,300px)] shrink-0 flex flex-col rounded-lg bg-card/30 min-h-[280px] px-1",
+                    colIndex < sortedColumns.length - 1 && "border-r border-border/60 pr-4 mr-1",
+                  )}
                 >
-                  <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/50">
+                  <div className="px-3 pt-3 pb-2 border-b border-border/50 space-y-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <Columns3 size={16} className="text-primary shrink-0" />
                       <h2 className="font-semibold text-sm truncate">{col.title}</h2>
-                      <span className="text-[11px] text-muted-foreground tabular-nums">
+                      <span className="text-[11px] text-muted-foreground tabular-nums ml-auto">
                         {visibleIds.length}/{ids.length}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => openNewCard(col.id)}>
-                        <Plus size={16} />
+                    {colIndex === 0 && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="w-full justify-center gap-1.5"
+                        onClick={openNewCard}
+                      >
+                        + Novo item
                       </Button>
-                      {isAdmin && sortedColumns.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => {
-                            if (confirm("Remover esta coluna? Os cards serão movidos para outra coluna.")) {
-                              removeColumn(col.id);
-                              toast.success("Coluna removida.");
-                            }
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                      )}
-                    </div>
+                    )}
                   </div>
 
                   <SortableContext items={ids} strategy={verticalListSortingStrategy}>
@@ -510,9 +652,16 @@ const Board = () => {
                             key={id}
                             card={c}
                             parentTitle={parent?.title ?? null}
+                            columnTitle={columnTitleById[c.columnId] ?? "—"}
                             filterActive={filterActive}
                             dimmed={dimmed}
                             onEditTags={() => openTagsEdit(c)}
+                            platformUsers={platformUsers}
+                            onSaveTitle={(t) => {
+                              const r = updateCardTitle(c.id, t);
+                              if (!r.ok) toast.error(r.error ?? "Título inválido.");
+                            }}
+                            onAssignee={(username) => updateCardAssignee(c.id, username)}
                           />
                         );
                       })}
@@ -541,21 +690,55 @@ const Board = () => {
         </DndContext>
       </div>
 
-      <Dialog open={colOpen} onOpenChange={setColOpen}>
-        <DialogContent>
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Nova coluna</DialogTitle>
+            <DialogTitle>Settings do Board</DialogTitle>
           </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Adicione ou remova colunas. Os cards de uma coluna excluída são movidos para outra coluna.
+          </p>
           <div className="space-y-2">
-            <Label htmlFor="col-title">Nome</Label>
-            <Input id="col-title" value={colTitle} onChange={(e) => setColTitle(e.target.value)} placeholder="Ex.: Em revisão" />
+            <Label htmlFor="settings-new-col">Nova coluna</Label>
+            <div className="flex gap-2">
+              <Input
+                id="settings-new-col"
+                value={newColTitle}
+                onChange={(e) => setNewColTitle(e.target.value)}
+                placeholder="Nome da coluna"
+                onKeyDown={(e) => e.key === "Enter" && submitNewColumnFromSettings()}
+              />
+              <Button type="button" onClick={submitNewColumnFromSettings} disabled={!newColTitle.trim()}>
+                Adicionar
+              </Button>
+            </div>
+          </div>
+          <div className="border border-border/50 rounded-lg divide-y divide-border/40 max-h-56 overflow-y-auto">
+            {sortedColumns.map((col) => (
+              <div key={col.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                <span className="truncate">{col.title}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive shrink-0"
+                  disabled={sortedColumns.length <= 1}
+                  onClick={() => {
+                    if (sortedColumns.length <= 1) return;
+                    if (confirm(`Remover a coluna "${col.title}"? Os cards serão movidos para outra coluna.`)) {
+                      removeColumn(col.id);
+                      toast.success("Coluna removida.");
+                    }
+                  }}
+                >
+                  Excluir
+                </Button>
+              </div>
+            ))}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setColOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={submitColumn} disabled={!colTitle.trim()}>
-              Criar
+            <Button type="button" variant="outline" onClick={() => setSettingsOpen(false)}>
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -564,8 +747,11 @@ const Board = () => {
       <Dialog open={cardOpen} onOpenChange={setCardOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Novo card</DialogTitle>
+            <DialogTitle>Novo item</DialogTitle>
           </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            O card será criado na coluna <strong className="text-foreground">{columnTitleById[backlogColumnId] ?? "Backlog"}</strong>.
+          </p>
           <div className="space-y-3">
             <div>
               <Label>Tipo</Label>
@@ -611,6 +797,25 @@ const Board = () => {
             <div>
               <Label htmlFor="card-title">Título</Label>
               <Input id="card-title" className="mt-1" value={cardTitle} onChange={(e) => setCardTitle(e.target.value)} />
+            </div>
+            <div>
+              <Label>Atribuído a</Label>
+              <Select
+                value={cardAssignee ?? "__none"}
+                onValueChange={(v) => setCardAssignee(v === "__none" ? null : v)}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Não atribuído" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value="__none">Não atribuído</SelectItem>
+                  {platformUsers.map((u) => (
+                    <SelectItem key={u.username} value={u.username}>
+                      {u.name} — {u.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="card-tags">Tags (separadas por vírgula)</Label>
