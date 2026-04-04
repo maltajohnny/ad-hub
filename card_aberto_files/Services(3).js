@@ -1,0 +1,3 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+define("TFS/WorkItemTracking/Services",["require","exports","VSS/SDK/Shim"],function(n,t,i){var r,u;Object.defineProperty(t,"__esModule",{value:!0});t.WorkItemFormService=t.WorkItemFormNavigationService=void 0,function(n){function t(t){return i.VSS.getService(n.contributionId,{webContext:t})}n.contributionId="ms.vss-work-web.work-item-form-navigation-service";n.getService=t}(r||(t.WorkItemFormNavigationService=r={})),function(n){function t(t){return i.VSS.getService(n.contributionId,{webContext:t})}n.contributionId="ms.vss-work-web.work-item-form";n.getService=t}(u||(t.WorkItemFormService=u={}))});
+

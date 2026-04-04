@@ -1,0 +1,3 @@
+/* CSS file: TestManagement/Scripts/Scenarios/CommonControls/Components/ConfirmationDialog */
+.confirm-discard-dialog{max-width:410px !important}
+

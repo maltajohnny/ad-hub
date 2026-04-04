@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<!-- saved from url=(0172)https://ms-devlabs.gallery.vsassets.io/_apis/public/gallery/publisher/ms-devlabs/extension/workitem-feature-timeline-extension/0.0.357/assetbyname/dist/featuretimeline.html -->
+<html lang="en" style="height:100%"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <!-- VSS Framework -->
+    <script src="./dist_libs_VSS.SDK.min.js"></script>
+<meta id="dcngeagmmhegagicpcmpinaoklddcgon"><link href="./vss-bundle-ext-core-css-vjapY0wXg0TR6OC6NvdB3QBXQvwBy2yRgojbz3lmWNas=" rel="stylesheet"><script type="text/javascript" src="./Content"></script><script type="text/javascript" src="./vss-bundle-ext-core-vMvJ1JbLOURkbciiwqrq6_oPpHifaCWYtDVEWVG6S7c8="></script><script type="text/javascript">require.config({"baseUrl":"https://ms-devlabs.gallery.vsassets.io/_apis/public/gallery/publisher/ms-devlabs/extension/workitem-feature-timeline-extension/0.0.357/assetbyname","contributionPaths":null,"paths":{"react":"dist/react","react-dom":"dist/react-dom","FeatureTimeline":"dist/FeatureTimeline","VSS":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/VSS","VSS/Resources":"https://dev.azure.com/brf-corp/_api/_ScriptResource/Module/M271_20260402.6/pt-BR/","q":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/q","knockout":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/knockout","mousetrap":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/mousetrap","mustache":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/mustache","react-transition-group":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/react-transition-group.15.3","jQueryUI":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/jQueryUI","jquery":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/jquery","OfficeFabric":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/OfficeFabric","tslib":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/tslib","@uifabric":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/@uifabric","VSSUI":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/VSSUI","ContentRendering":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/ContentRendering","ContentRendering/Resources":"https://dev.azure.com/brf-corp/_api/_ScriptResource/Module/M271_20260402.6/pt-BR/","TFSUI":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/TFSUI","TFSUI/Resources":"https://dev.azure.com/brf-corp/_api/_ScriptResource/Module/M271_20260402.6/pt-BR/","WidgetComponents":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/WidgetComponents","WidgetComponents/Resources":"https://dev.azure.com/brf-corp/_api/_ScriptResource/Module/M271_20260402.6/pt-BR/","Charts":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/Charts","Charts/Resources":"https://dev.azure.com/brf-corp/_api/_ScriptResource/Module/M271_20260402.6/pt-BR/","TFS":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/TFS","Notifications":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/Notifications","Presentation/Scripts/marked":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/Presentation/Scripts/marked","Presentation/Scripts/URI":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/Presentation/Scripts/URI","Presentation/Scripts/punycode":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/Presentation/Scripts/punycode","Presentation/Scripts/IPv6":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/Presentation/Scripts/IPv6","Presentation/Scripts/SecondLevelDomains":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/Presentation/Scripts/SecondLevelDomains","highcharts":"https://cdn.vsassets.io/3rdParty/_scripts/highcharts.v11.4.6","highcharts/highcharts-more":"https://cdn.vsassets.io/3rdParty/_scripts/highcharts-more.v11.4.6","highcharts/modules/accessibility":"https://cdn.vsassets.io/3rdParty/_scripts/highcharts-accessibility.v11.4.6","highcharts/modules/heatmap":"https://cdn.vsassets.io/3rdParty/_scripts/highcharts-heatmap.v11.4.6","highcharts/modules/funnel":"https://cdn.vsassets.io/3rdParty/_scripts/highcharts-funnel.v11.4.6","Analytics":"https://dev.azure.com/brf-corp/_static/tfs/M271_20260402.6/_scripts/TFS/min/Analytics","Analytics/Resources":"https://dev.azure.com/brf-corp/_api/_ScriptResource/Module/M271_20260402.6/pt-BR/"},"shim":{"jquery":{"deps":[],"exports":"jQuery"},"d3":{"deps":[]},"gridster":{"deps":[]},"signalR":{"deps":[]}}});</script></head>
+
+<body style="height:100%">
+    <script>
+        let FeatureTimeline = null;
+        VSS.init({
+            usePlatformStyles: true,
+            explicitNotifyLoaded: true,
+            usePlatformScripts: true,
+            extensionReusedCallback: registerContribution,
+            moduleLoaderConfig: {
+                paths: {
+                    "react": "dist/react",
+                    "react-dom": "dist/react-dom",
+                    "FeatureTimeline": "dist/FeatureTimeline"
+                }
+            }
+        });
+
+        // We need to register the new contribution if this extension host is reused
+        function registerContribution(contribution) {
+            if (contribution.type === "ms.vss-web.tab") {
+                let title = "Feature Timeline";
+                if (contribution.id === "ms-devlabs.workitem-feature-timeline-extension-dev.workitem-feature-timeline") {
+                    title = title + " Dev";
+                } else if (contribution.id === "ms-devlabs.workitem-feature-timeline-extension-beta.workitem-feature-timeline") {
+                    title = title + " Beta";
+                }
+                // Register the fully-qualified contribution id here.
+                // Because we're using the contribution id, we do NOT need to define a registeredObjectId in the extension manfiest.
+                VSS.register(contribution.id, {
+                    pageTitle: title,
+                    // We set the "dynamic" contribution property to true in the manifest so that it will get the tab name from this function.
+                    name: title,
+                    title: title,
+                    updateContext: updateConfiguration,
+                    isInvisible: function (state) {
+                        return false;
+                    }
+                });
+            }
+        }
+
+        let previousContext = null
+
+        function updateConfiguration(tabContext) {
+            // if (!isBackground() && typeof tabContext === "object" && FeatureTimeline && JSON.stringify(previousContext) !== JSON.stringify(tabContext)) {
+            //     FeatureTimeline.unmount();
+            //     FeatureTimeline.initialize();
+            //     previousContext = tabContext;
+            // }
+        }
+
+        VSS.ready(function () {
+            registerContribution(VSS.getContribution());
+
+            if (isBackground()) {
+                VSS.notifyLoadSucceeded();
+            } else {
+                // Load main entry point for extension 
+                VSS.require(["FeatureTimeline"], function (ft) {
+                    FeatureTimeline = ft;
+                    FeatureTimeline.initialize();
+                    // loading succeeded
+                    VSS.notifyLoadSucceeded();
+                });
+            }
+        });
+
+        function isBackground() {
+            const contributionContext = VSS.getConfiguration();
+            return contributionContext && contributionContext.host && contributionContext.host.background;
+        }
+    </script>
+    <div id="root">
+
+
+</div></body></html>
