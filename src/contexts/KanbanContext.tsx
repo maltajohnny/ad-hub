@@ -178,12 +178,13 @@ function normalizeOrders(cards: KanbanCard[]): KanbanCard[] {
 
 export function validateParent(type: WorkItemType, parentId: string | null, cards: KanbanCard[]): string | null {
   if (type === "epic") return parentId ? "Épico não possui pai." : null;
-  if (!parentId) return "Selecione um item pai na hierarquia.";
+  /** Pai opcional: se informado, deve respeitar a hierarquia Épico → Feature → User Story → Task. */
+  if (!parentId) return null;
   const parent = cards.find((c) => c.id === parentId);
   if (!parent) return "Pai não encontrado.";
-  if (type === "feature" && parent.type !== "epic") return "Feature deve estar sob um Épico.";
-  if (type === "user_story" && parent.type !== "feature") return "User Story deve estar sob uma Feature.";
-  if (type === "task" && parent.type !== "user_story") return "Task deve estar sob uma User Story.";
+  if (type === "feature" && parent.type !== "epic") return "Feature deve estar ligada a um Épico.";
+  if (type === "user_story" && parent.type !== "feature") return "User Story deve estar ligada a uma Feature.";
+  if (type === "task" && parent.type !== "user_story") return "Task deve estar ligada a uma User Story.";
   return null;
 }
 

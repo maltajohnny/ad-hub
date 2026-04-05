@@ -36,14 +36,20 @@ const Login = () => {
           </span>
         </div>
 
-        <form onSubmit={handleSubmit} className="glass-card rounded-xl p-8 space-y-5">
+        <form id="login-form" onSubmit={handleSubmit} className="glass-card rounded-xl p-8 space-y-5">
           <div className="space-y-2">
             <label className="text-sm text-muted-foreground">Usuário</label>
             <Input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Digite seu usuário"
+              autoComplete="username"
               className="bg-secondary/50 border-border/50 focus:border-primary"
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                (document.getElementById("login-form") as HTMLFormElement | null)?.requestSubmit();
+              }}
             />
           </div>
 
@@ -55,7 +61,13 @@ const Login = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Digite sua senha"
+                autoComplete="current-password"
                 className="bg-secondary/50 border-border/50 focus:border-primary pr-10"
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  (document.getElementById("login-form") as HTMLFormElement | null)?.requestSubmit();
+                }}
               />
               <button
                 type="button"

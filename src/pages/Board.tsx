@@ -859,7 +859,8 @@ const Board = () => {
     if (t === "epic") return [] as KanbanCard[];
     if (t === "feature") return state.cards.filter((c) => c.type === "epic");
     if (t === "user_story") return state.cards.filter((c) => c.type === "feature");
-    return state.cards.filter((c) => c.type === "user_story");
+    if (t === "task") return state.cards.filter((c) => c.type === "user_story");
+    return [] as KanbanCard[];
   }, [cardType, state.cards]);
 
   const openNewCard = () => {
@@ -1946,16 +1947,21 @@ const Board = () => {
             </div>
             {cardType !== "epic" && (
               <div>
-                <Label>Item pai</Label>
+                <Label>Item pai (opcional)</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {cardType === "feature" && "Ao associar, escolha um Épico existente."}
+                  {cardType === "user_story" && "Ao associar, escolha uma Feature existente."}
+                  {cardType === "task" && "Ao associar, escolha uma User Story existente."}
+                </p>
                 <Select
                   value={cardParentId ?? "__none"}
                   onValueChange={(v) => setCardParentId(v === "__none" ? null : v)}
                 >
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecione…" />
+                    <SelectValue placeholder="Sem pai ou selecione…" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none">— Selecione —</SelectItem>
+                    <SelectItem value="__none">Sem item pai</SelectItem>
                     {parentOptions.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
                         [{TYPE_SINGULAR[p.type]}] {p.title}

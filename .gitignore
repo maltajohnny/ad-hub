@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Artefatos de página salva no navegador (não versionar)
+Tina APP Team Stories Board - Boards_files/
+card_aberto_files/

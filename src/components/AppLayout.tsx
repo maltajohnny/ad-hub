@@ -99,11 +99,11 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   const boardActive = path === "/board";
 
   useEffect(() => {
-    if (path === "/board") setDashSubOpen(true);
+    if (path === "/" || path === "/board") setDashSubOpen(true);
   }, [path]);
 
   useEffect(() => {
-    if (path === "/clientes/favoritos") setClientesSubOpen(true);
+    if (path === "/clientes" || path === "/clientes/favoritos") setClientesSubOpen(true);
   }, [path]);
 
   return (
@@ -176,6 +176,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                     setDashSubOpen((o) => !o);
                   } else {
                     navigate("/");
+                    setDashSubOpen(true);
                   }
                 }}
                 className={cn(
@@ -239,6 +240,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                     setClientesSubOpen((o) => !o);
                   } else {
                     navigate("/clientes");
+                    setClientesSubOpen(true);
                   }
                 }}
                 className={cn(
