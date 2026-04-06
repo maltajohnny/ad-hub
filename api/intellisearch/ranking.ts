@@ -2,6 +2,7 @@
  * GET /api/intellisearch/ranking?keyword=&domain= — posição orgânica (SerpAPI), alinhado ao handler Go.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { getServerEnv } from "../lib/env";
 
 function normalizeDomain(d: string): string {
   return d
@@ -32,7 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const key = process.env.SERPAPI_KEY?.trim();
+  const key = getServerEnv("SERPAPI_KEY");
   const norm = normalizeDomain(domain);
 
   if (!key) {
