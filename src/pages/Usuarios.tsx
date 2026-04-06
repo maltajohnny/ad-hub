@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth, OWNER_USERNAME, type User } from "@/contexts/AuthContext";
 import { useTenant } from "@/contexts/TenantContext";
-import { listTenants, getTenantById } from "@/lib/tenantsStore";
+import { listTenants, getTenantById, BUILTIN_NORTER_ID } from "@/lib/tenantsStore";
 import { Switch } from "@/components/ui/switch";
 import { clientsData } from "@/pages/Clientes";
 import { UsersRound, Trash2, Shield, User, Building2, Eye, EyeOff, Pencil } from "lucide-react";
@@ -56,6 +56,10 @@ const Usuarios = () => {
   const { tenant } = useTenant();
   const scopeTenantId = tenant?.id ?? null;
   const platformOp = isPlatformOperator(user?.username);
+
+  /** Carteira de clientes da app é da org Norter; operadores Qtraffic só gerem organizações/contas, não esta tabela. */
+  const showNorterClientAssignments =
+    user?.role === "admin" && !platformOp && user.organizationId === BUILTIN_NORTER_ID;
 
   const rows = useMemo(() => {
     const all = listUsers();
@@ -488,100 +492,100 @@ const Usuarios = () => {
         </Card>
       )}
 
-      <Card className="glass-card p-5 border-border/60">
-        <h3 className="font-display font-semibold mb-2 flex items-center gap-2">
-          <Building2 size={18} className="text-primary" />
-          Clientes por usuário
-        </h3>
-        <p className="text-xs text-muted-foreground mb-4">
-          Escolha o <strong className="text-foreground">utilizador (perfil padrão)</strong>. Para cada cliente, defina{" "}
-          <strong className="text-foreground">Negar</strong> (sem acesso, predefinido) ou <strong className="text-foreground">Permitir</strong>{" "}
-          (esse utilizador vê o cliente). A tabela não se aplica a <strong className="text-foreground">administradores</strong>:{" "}
-          contas internas Qtraffic gerem utilizadores e organizações; a <strong className="text-foreground">carteira de clientes</strong>{" "}
-          é da Norter e só aparece a membros dessa organização (e permissões abaixo para perfil padrão).
-        </p>
+      {showNorterClientAssignments && (
+        <Card className="glass-card p-5 border-border/60">
+          <h3 className="font-display font-semibold mb-2 flex items-center gap-2">
+            <Building2 size={18} className="text-primary" />
+            Clientes por usuário
+          </h3>
+          <p className="text-xs text-muted-foreground mb-4">
+            Escolha o <strong className="text-foreground">utilizador (perfil padrão)</strong>. Para cada cliente, defina{" "}
+            <strong className="text-foreground">Negar</strong> (sem acesso, predefinido) ou <strong className="text-foreground">Permitir</strong>{" "}
+            (esse utilizador vê o cliente na sua conta Norter). Administradores da organização não usam esta tabela para o próprio acesso.
+          </p>
 
-        {usersOnly.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4">Crie um utilizador com perfil padrão para gerir permissões por cliente.</p>
-        ) : (
-          <>
-            <div className="mb-4 max-w-md space-y-1.5">
-              <label className="text-xs text-muted-foreground">Utilizador</label>
-              <Select value={permUser} onValueChange={setPermUser}>
-                <SelectTrigger className="h-10 bg-secondary/50 border-border/50">
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  {usersOnly.map((u) => (
-                    <SelectItem key={u.username} value={u.username}>
-                      {u.name} (@{u.username})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {usersOnly.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">Crie um utilizador com perfil padrão para gerir permissões por cliente.</p>
+          ) : (
+            <>
+              <div className="mb-4 max-w-md space-y-1.5">
+                <label className="text-xs text-muted-foreground">Utilizador</label>
+                <Select value={permUser} onValueChange={setPermUser}>
+                  <SelectTrigger className="h-10 bg-secondary/50 border-border/50">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {usersOnly.map((u) => (
+                      <SelectItem key={u.username} value={u.username}>
+                        {u.name} (@{u.username})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="overflow-x-auto rounded-lg border border-border/50">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/50 bg-secondary/30 text-left text-xs text-muted-foreground">
-                    <th className="px-3 py-2 font-medium">Cliente</th>
-                    <th className="px-3 py-2 font-medium min-w-[180px]">Acesso</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clientsData.map((c) => {
-                    const assigned = clientAssignments[c.id] ?? null;
-                    const mode = assigned === permUser ? "permitir" : "negar";
-                    return (
-                      <tr key={c.id} className="border-b border-border/30 hover:bg-secondary/10">
-                        <td className="px-3 py-2.5">
-                          <span className="font-medium">{c.name}</span>
-                          <span className="block text-[10px] text-muted-foreground">{c.segment}</span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <Select
-                            value={mode}
-                            onValueChange={(v) => {
-                              if (v === "permitir") {
-                                const res = assignClientToUser(
-                                  c.id,
-                                  permUser,
-                                  platformOp ? null : scopeTenantId,
-                                );
-                                if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
-                                else toast.success("Permissão atualizada.");
-                              } else {
-                                if (assigned === permUser) {
+              <div className="overflow-x-auto rounded-lg border border-border/50">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/50 bg-secondary/30 text-left text-xs text-muted-foreground">
+                      <th className="px-3 py-2 font-medium">Cliente</th>
+                      <th className="px-3 py-2 font-medium min-w-[180px]">Acesso</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientsData.map((c) => {
+                      const assigned = clientAssignments[c.id] ?? null;
+                      const mode = assigned === permUser ? "permitir" : "negar";
+                      return (
+                        <tr key={c.id} className="border-b border-border/30 hover:bg-secondary/10">
+                          <td className="px-3 py-2.5">
+                            <span className="font-medium">{c.name}</span>
+                            <span className="block text-[10px] text-muted-foreground">{c.segment}</span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <Select
+                              value={mode}
+                              onValueChange={(v) => {
+                                if (v === "permitir") {
                                   const res = assignClientToUser(
                                     c.id,
-                                    null,
+                                    permUser,
                                     platformOp ? null : scopeTenantId,
                                   );
                                   if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
                                   else toast.success("Permissão atualizada.");
+                                } else {
+                                  if (assigned === permUser) {
+                                    const res = assignClientToUser(
+                                      c.id,
+                                      null,
+                                      platformOp ? null : scopeTenantId,
+                                    );
+                                    if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
+                                    else toast.success("Permissão atualizada.");
+                                  }
                                 }
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="h-9 bg-secondary/50 border-border/50">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="negar">Negar</SelectItem>
-                              <SelectItem value="permitir">Permitir</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </Card>
+                              }}
+                            >
+                              <SelectTrigger className="h-9 bg-secondary/50 border-border/50">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="negar">Negar</SelectItem>
+                                <SelectItem value="permitir">Permitir</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
 
       <Card className="glass-card p-0 overflow-hidden border-border/60">
         <div className="px-5 py-3 border-b border-border/50 bg-secondary/20">
