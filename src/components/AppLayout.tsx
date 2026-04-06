@@ -38,6 +38,7 @@ import {
 } from "@/lib/saasTypes";
 import { isQtrafficTeamMember } from "@/lib/qtrafficAccess";
 import { IntelliSearchNewBadge } from "@/components/IntelliSearchNewBadge";
+import { QtrafficSidebarBrand } from "@/components/QtrafficSidebarBrand";
 
 type MenuItem = {
   icon: typeof LayoutDashboard;
@@ -206,14 +207,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                   decoding="async"
                 />
               ) : sidebarQtraffic ? (
-                <img
-                  src={qtrafficMark}
-                  alt="Qtraffic"
-                  width={220}
-                  height={180}
-                  className="h-[52px] w-auto max-w-[min(220px,100%)] shrink-0 object-contain object-left"
-                  decoding="async"
-                />
+                <QtrafficSidebarBrand />
               ) : sidebarNorterWordmark ? (
                 <img
                   src={isLight ? norterLogoDashboardLight : norterLogoDashboardDark}
