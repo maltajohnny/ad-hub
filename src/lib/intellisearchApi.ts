@@ -59,8 +59,11 @@ export async function fetchBusinessAnalysis(query: string): Promise<BusinessAnal
   try {
     parsed = JSON.parse(trimmed);
   } catch {
+    const html = trimmed.startsWith("<!") || trimmed.toLowerCase().includes("<html");
     throw new Error(
-      `Resposta inválida (HTTP ${res.status}). Verifique se a API IntelliSearch está ativa e devolve JSON.`,
+      html
+        ? `Resposta inválida (HTTP ${res.status}): o servidor devolveu HTML em vez de JSON (erro interno ou rota incorreta).`
+        : `Resposta inválida (HTTP ${res.status}). Verifique se a API IntelliSearch está ativa e devolve JSON.`,
     );
   }
   const json = parsed as BusinessAnalysis & { error?: string };

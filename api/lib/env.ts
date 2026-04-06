@@ -1,11 +1,10 @@
-import { env } from "node:process";
-
 /**
- * SerpAPI: o nome `SERPAPI_KEY` não pode surgir como acesso estático a `process.env.*` no bundle
- * (esbuild na Vercel pode substituir por `undefined` no deploy). O identificador é reconstruído em runtime.
+ * SerpAPI: evitar `process.env.SERPAPI_KEY` literal no bundle (Vercel/esbuild).
+ * Nome da variável só em runtime (base64). Sem `import "node:process"` — evita falha no worker.
  */
 export function getSerpApiKey(): string | undefined {
   const name = Buffer.from("U0VSUEFQSV9LRVk=", "base64").toString("utf8");
-  const v = (env as Record<string, string | undefined>)[name];
+  const env = typeof process !== "undefined" ? process.env : undefined;
+  const v = env?.[name];
   return typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
 }

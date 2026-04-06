@@ -397,24 +397,32 @@ async function analyzeBusinessOrError(query: string): Promise<BusinessAnalysis> 
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method === "OPTIONS") {
-    res.status(204).end();
-    return;
-  }
-  if (req.method !== "GET") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
-  const rawQ = req.query.query ?? req.query.q;
-  const q = Array.isArray(rawQ) ? rawQ[0] : rawQ;
-  const query = (q != null ? String(q) : "").trim();
-
   try {
-    const analysis = await analyzeBusinessOrError(query);
-    res.status(200).json(analysis);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Erro interno.";
-    res.status(400).json({ error: msg });
+    if (req.method === "OPTIONS") {
+      res.status(204).end();
+      return;
+    }
+    if (req.method !== "GET") {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+
+    const rawQ = req.query.query ?? req.query.q;
+    const q = Array.isArray(rawQ) ? rawQ[0] : rawQ;
+    const query = (q != null ? String(q) : "").trim();
+
+    try {
+      const analysis = await analyzeBusinessOrError(query);
+      res.status(200).json(analysis);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erro interno.";
+      res.status(400).json({ error: msg });
+    }
+  } catch (fatal) {
+    const msg = fatal instanceof Error ? fatal.message : String(fatal);
+    console.error("[api/intellisearch/business]", fatal);
+    if (!res.headersSent) {
+      res.status(500).json({ error: msg });
+    }
   }
 }
