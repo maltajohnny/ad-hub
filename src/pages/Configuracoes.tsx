@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link2, Webhook, Save, KeyRound, Camera, Trash2 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, OWNER_USERNAME } from "@/contexts/AuthContext";
+import { sanitizeLoginInput } from "@/lib/loginUsername";
 import { isStrongPassword, STRONG_PASSWORD_HINT } from "@/lib/passwordPolicy";
 import { toast } from "sonner";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
@@ -22,13 +23,14 @@ const initialIntegrations: Integration[] = [
 ];
 
 const Configuracoes = () => {
-  const { user, updateProfile, changePassword } = useAuth();
+  const { user, updateProfile, saveAccountProfile, changePassword } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get("tab") === "conta" ? "conta" : "integracoes";
 
   const [integrations, setIntegrations] = useState<Integration[]>(initialIntegrations);
 
   const [name, setName] = useState(user?.name || "");
+  const [loginField, setLoginField] = useState(user?.username || "");
   const [phone, setPhone] = useState(user?.phone || "");
   const [doc, setDoc] = useState(user?.document || "");
   const [email, setEmail] = useState(user?.email || "");
@@ -41,6 +43,7 @@ const Configuracoes = () => {
   useEffect(() => {
     if (!user) return;
     setName(user.name);
+    setLoginField(user.username);
     setPhone(user.phone);
     setDoc(user.document);
     setEmail(user.email);
@@ -51,8 +54,18 @@ const Configuracoes = () => {
   };
 
   const handleSaveProfile = () => {
-    updateProfile({ name, phone, document: doc, email });
-    toast.success("Perfil atualizado.");
+    const res = saveAccountProfile(
+      { name, email, phone, document: doc },
+      loginField,
+    );
+    if (!res.ok) {
+      toast.error(res.error ?? "Não foi possível salvar.");
+      return;
+    }
+    toast.success(res.loginChanged ? "Perfil e login atualizados. Recarregando…" : "Perfil atualizado.");
+    if (res.loginChanged) {
+      window.setTimeout(() => window.location.reload(), 400);
+    }
   };
 
   const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -196,8 +209,29 @@ const Configuracoes = () => {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm text-muted-foreground">Nome</label>
+                <label className="text-sm text-muted-foreground">Nome (exibido)</label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} className="bg-secondary/50 border-border/50" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Login</label>
+                <Input
+                  value={loginField}
+                  onChange={(e) => setLoginField(sanitizeLoginInput(e.target.value))}
+                  disabled={user?.username === OWNER_USERNAME}
+                  autoComplete="username"
+                  className="bg-secondary/50 border-border/50 font-mono text-sm"
+                  placeholder="ex.: maria.silva ou time@empresa"
+                />
+                {user?.username === OWNER_USERNAME ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    O login do administrador principal não pode ser alterado.
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    Sem espaços nem vírgulas. Pode usar letras, números, ponto, @ e outros símbolos. No próximo acesso, use
+                    este login.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">E-mail</label>

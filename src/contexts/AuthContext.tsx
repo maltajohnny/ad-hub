@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react";
 import { isStrongPassword } from "@/lib/passwordPolicy";
 import type { AppModule } from "@/lib/saasTypes";
+import { isValidLoginUsername, normalizeLoginKey, sanitizeLoginInput } from "@/lib/loginUsername";
+import { migrateStoredUsernameInLocalStorage } from "@/lib/migrateStoredUsername";
 
 export interface User {
   role: "admin" | "user";
@@ -123,7 +125,14 @@ interface AuthContextType {
   user: User | null;
   login: (username: string, password: string) => boolean;
   logout: () => void;
-  updateProfile: (data: Partial<User>) => void;
+  updateProfile: (data: Partial<Omit<User, "username">>) => void;
+  /** Nome exibido, contactos e login (exceto o owner `admin`, cujo login não pode mudar). */
+  saveAccountProfile: (fields: {
+    name: string;
+    email: string;
+    phone: string;
+    document: string;
+  }, loginRaw: string) => { ok: boolean; error?: string; loginChanged?: boolean };
   changePassword: (currentPassword: string, newPassword: string) => boolean;
   /** Primeiro acesso: valida senha atual e define nova senha (remove `mustChangePassword`). */
   completeFirstPasswordChange: (currentPassword: string, newPassword: string) => { ok: boolean; error?: string };
@@ -204,7 +213,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = () => setUser(null);
 
   const updateProfile = useCallback(
-    (data: Partial<User>) => {
+    (data: Partial<Omit<User, "username">>) => {
       if (!user) return;
       const nextUser = { ...user, ...data } as User;
       setUser(nextUser);
@@ -220,6 +229,79 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
     },
     [user],
+  );
+
+  const saveAccountProfile = useCallback(
+    (
+      fields: { name: string; email: string; phone: string; document: string },
+      loginRaw: string,
+    ): { ok: boolean; error?: string; loginChanged?: boolean } => {
+      if (!user) return { ok: false, error: "Sessão inválida." };
+      const sanitized = sanitizeLoginInput(loginRaw);
+      if (!isValidLoginUsername(sanitized)) {
+        return {
+          ok: false,
+          error: "Login inválido: sem espaços nem vírgulas, até 80 caracteres.",
+        };
+      }
+      const normalized = normalizeLoginKey(sanitized);
+      const currentKey = user.username.trim().toLowerCase();
+
+      if (currentKey === OWNER_USERNAME.toLowerCase() && normalized !== currentKey) {
+        return { ok: false, error: "O login do administrador principal não pode ser alterado." };
+      }
+
+      const mergeUser = (base: User): User => ({
+        ...base,
+        name: fields.name.trim(),
+        email: fields.email.trim(),
+        phone: fields.phone.trim(),
+        document: fields.document.trim(),
+        username: normalized,
+      });
+
+      if (normalized === currentKey) {
+        const entry = registry[currentKey];
+        if (!entry) return { ok: false, error: "Sessão inválida." };
+        const nextUser = mergeUser(entry.user);
+        const nextReg = { ...registry, [currentKey]: { ...entry, user: nextUser } };
+        syncRegistry(nextReg);
+        setUser(nextUser);
+        return { ok: true, loginChanged: false };
+      }
+
+      if (registry[normalized]) {
+        return { ok: false, error: "Este login já está em uso." };
+      }
+
+      const entry = registry[currentKey];
+      if (!entry) return { ok: false, error: "Sessão inválida." };
+
+      migrateStoredUsernameInLocalStorage(user.username, normalized);
+
+      const nextReg = { ...registry };
+      delete nextReg[currentKey];
+      const nextUser = mergeUser({ ...entry.user, username: normalized });
+      nextReg[normalized] = { ...entry, user: nextUser };
+
+      setClientAssignments((prev) => {
+        const next = { ...prev };
+        for (const cidStr of Object.keys(next)) {
+          const cid = parseInt(cidStr, 10);
+          const v = next[cid];
+          if (v != null && v.trim().toLowerCase() === currentKey) {
+            next[cid] = normalized;
+          }
+        }
+        persistAssignments(next);
+        return next;
+      });
+
+      syncRegistry(nextReg);
+      setUser(nextUser);
+      return { ok: true, loginChanged: true };
+    },
+    [user, registry, syncRegistry],
   );
 
   const changePassword = useCallback(
@@ -309,8 +391,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       allowedModules?: AppModule[] | null;
     }): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
-      const u = input.username.trim().toLowerCase();
-      if (!u || !/^[a-z0-9._-]+$/i.test(u)) return { ok: false, error: "Usuário inválido (use letras, números, . _ -)." };
+      const u = normalizeLoginKey(sanitizeLoginInput(input.username));
+      if (!isValidLoginUsername(sanitizeLoginInput(input.username))) {
+        return { ok: false, error: "Login inválido: sem espaços nem vírgulas, até 80 caracteres." };
+      }
       if (registry[u]) return { ok: false, error: "Este login já existe." };
       if (!isStrongPassword(input.password)) {
         return {
@@ -458,6 +542,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         login,
         logout,
         updateProfile,
+        saveAccountProfile,
         changePassword,
         completeFirstPasswordChange,
         listUsers,

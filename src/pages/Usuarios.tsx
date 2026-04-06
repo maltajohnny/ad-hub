@@ -25,6 +25,7 @@ import {
   PASSWORD_INPUT_ERROR_GLOW_CLASS,
   STRONG_PASSWORD_HINT,
 } from "@/lib/passwordPolicy";
+import { sanitizeLoginInput } from "@/lib/loginUsername";
 
 const Usuarios = () => {
   const {
@@ -159,9 +160,9 @@ const Usuarios = () => {
             <label className="text-xs text-muted-foreground">Login</label>
             <Input
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="ex.: maria.silva"
-              className="bg-secondary/50 border-border/50 h-10"
+              onChange={(e) => setUsername(sanitizeLoginInput(e.target.value))}
+              placeholder="ex.: maria.silva ou time@empresa"
+              className="bg-secondary/50 border-border/50 h-10 font-mono text-sm"
             />
           </div>
           <div className="space-y-1.5">
