@@ -30,6 +30,14 @@ export type KanbanAttachment = {
   dataUrl: string;
 };
 
+/** Comentário na discussion (estilo blog: vários blocos; só o autor edita/exclui). */
+export type DiscussionEntry = {
+  id: string;
+  authorUsername: string;
+  body: string;
+  createdAt: string;
+};
+
 export type KanbanCard = {
   id: string;
   /** Número exibido no board (único por cliente; sequencial tipo Azure). */
@@ -43,8 +51,12 @@ export type KanbanCard = {
   description: string;
   /** Critérios de aceite (Markdown). */
   acceptanceCriteria: string;
-  /** Discussão / comentários (Markdown). */
+  /** Legado: texto único migrado para `discussionEntries`. */
   discussion: string;
+  /** Discussion em thread (mais recente no fundo). */
+  discussionEntries: DiscussionEntry[];
+  /** Ligações manuais a outros cards (além de parent/child). */
+  relatedCardIds: string[];
   /** Ficheiros e imagens anexados ao card. */
   attachments: KanbanAttachment[];
   /** Username do responsável (registo de utilizadores). */
@@ -87,14 +99,30 @@ function migrateLegacyIfNeeded(clientId: number): KanbanState | null {
         description?: string;
         acceptanceCriteria?: string;
         discussion?: string;
+        discussionEntries?: DiscussionEntry[];
+        relatedCardIds?: string[];
         attachments?: KanbanAttachment[];
       };
+      const disc = k.discussion?.trim() ?? "";
+      let discussionEntries = k.discussionEntries ?? [];
+      if (discussionEntries.length === 0 && disc) {
+        discussionEntries = [
+          {
+            id: uid(),
+            authorUsername: "legacy",
+            body: disc,
+            createdAt: new Date().toISOString(),
+          },
+        ];
+      }
       return {
         ...c,
         workItemNumber: k.workItemNumber ?? 20001 + i,
         description: k.description ?? "",
         acceptanceCriteria: k.acceptanceCriteria ?? "",
         discussion: k.discussion ?? "",
+        discussionEntries,
+        relatedCardIds: k.relatedCardIds ?? [],
         attachments: k.attachments ?? [],
         assigneeUsername: k.assigneeUsername ?? null,
       } as KanbanCard;
@@ -129,14 +157,30 @@ function load(clientId: number): KanbanState {
         description?: string;
         acceptanceCriteria?: string;
         discussion?: string;
+        discussionEntries?: DiscussionEntry[];
+        relatedCardIds?: string[];
         attachments?: KanbanAttachment[];
       };
+      const disc = k.discussion?.trim() ?? "";
+      let discussionEntries = k.discussionEntries ?? [];
+      if (discussionEntries.length === 0 && disc) {
+        discussionEntries = [
+          {
+            id: uid(),
+            authorUsername: "legacy",
+            body: disc,
+            createdAt: new Date().toISOString(),
+          },
+        ];
+      }
       return {
         ...c,
         workItemNumber: k.workItemNumber ?? 20001 + i,
         description: k.description ?? "",
         acceptanceCriteria: k.acceptanceCriteria ?? "",
         discussion: k.discussion ?? "",
+        discussionEntries,
+        relatedCardIds: k.relatedCardIds ?? [],
         attachments: k.attachments ?? [],
         assigneeUsername: k.assigneeUsername ?? null,
       } as KanbanCard;
@@ -188,6 +232,18 @@ export function validateParent(type: WorkItemType, parentId: string | null, card
   return null;
 }
 
+/** Ligação manual Related: mesmo critério de tipo que um filho directo; não permite laço com descendentes. */
+export function canLinkRelated(from: KanbanCard, to: KanbanCard, cards: KanbanCard[]): boolean {
+  if (from.id === to.id) return false;
+  if ((from.relatedCardIds ?? []).includes(to.id)) return false;
+  const isDescendant = (rootId: string, targetId: string): boolean => {
+    const children = cards.filter((c) => c.parentId === rootId);
+    return children.some((c) => c.id === targetId || isDescendant(c.id, targetId));
+  };
+  if (isDescendant(from.id, to.id)) return false;
+  return validateParent(to.type, from.id, cards) === null;
+}
+
 type KanbanContextType = {
   boardClientId: number;
   setBoardClientId: (clientId: number) => void;
@@ -207,7 +263,11 @@ type KanbanContextType = {
   updateCardTitle: (cardId: string, title: string) => { ok: boolean; error?: string };
   updateCardDescription: (cardId: string, description: string) => void;
   updateCardAcceptanceCriteria: (cardId: string, acceptanceCriteria: string) => void;
-  updateCardDiscussion: (cardId: string, discussion: string) => void;
+  addDiscussionEntry: (cardId: string, body: string, authorUsername: string) => void;
+  updateDiscussionEntry: (cardId: string, entryId: string, body: string, authorUsername: string) => void;
+  deleteDiscussionEntry: (cardId: string, entryId: string, authorUsername: string) => void;
+  addRelatedCard: (fromCardId: string, toCardId: string) => { ok: boolean; error?: string };
+  removeRelatedCard: (fromCardId: string, toCardId: string) => void;
   updateCardAttachments: (cardId: string, attachments: KanbanAttachment[]) => void;
   updateCardAssignee: (cardId: string, assigneeUsername: string | null) => void;
   updateCardTags: (cardId: string, tags: string[]) => void;
@@ -215,6 +275,8 @@ type KanbanContextType = {
   reorderInColumn: (columnId: string, orderedIds: string[]) => void;
   applyBoardLayout: (layout: Record<string, string[]>) => void;
   cardById: (id: string) => KanbanCard | undefined;
+  /** Remove o card e limpa `parentId` de filhos que apontavam para ele. */
+  deleteCard: (cardId: string) => void;
 };
 
 const KanbanContext = createContext<KanbanContextType | null>(null);
@@ -353,6 +415,8 @@ export const KanbanProvider = ({ children }: { children: ReactNode }) => {
           description: (input.description ?? "").trim(),
           acceptanceCriteria: "",
           discussion: "",
+          discussionEntries: [],
+          relatedCardIds: [],
           attachments: [],
           assigneeUsername: input.assigneeUsername?.trim() || null,
           order,
@@ -412,12 +476,117 @@ export const KanbanProvider = ({ children }: { children: ReactNode }) => {
     [boardClientId],
   );
 
-  const updateCardDiscussion = useCallback(
-    (cardId: string, discussion: string) => {
+  const addDiscussionEntry = useCallback(
+    (cardId: string, body: string, authorUsername: string) => {
+      const t = body.trim();
+      if (!t) return;
+      setState((s) => {
+        const entry: DiscussionEntry = {
+          id: uid(),
+          authorUsername,
+          body: t,
+          createdAt: new Date().toISOString(),
+        };
+        const next = {
+          ...s,
+          cards: s.cards.map((c) =>
+            c.id === cardId ? { ...c, discussionEntries: [...(c.discussionEntries ?? []), entry] } : c,
+          ),
+        };
+        persist(boardClientId, next);
+        return next;
+      });
+    },
+    [boardClientId],
+  );
+
+  const updateDiscussionEntry = useCallback(
+    (cardId: string, entryId: string, body: string, authorUsername: string) => {
+      const t = body.trim();
+      if (!t) return;
       setState((s) => {
         const next = {
           ...s,
-          cards: s.cards.map((c) => (c.id === cardId ? { ...c, discussion } : c)),
+          cards: s.cards.map((c) => {
+            if (c.id !== cardId) return c;
+            const entries = (c.discussionEntries ?? []).map((e) =>
+              e.id === entryId && e.authorUsername === authorUsername ? { ...e, body: t } : e,
+            );
+            return { ...c, discussionEntries: entries };
+          }),
+        };
+        persist(boardClientId, next);
+        return next;
+      });
+    },
+    [boardClientId],
+  );
+
+  const deleteDiscussionEntry = useCallback(
+    (cardId: string, entryId: string, authorUsername: string) => {
+      setState((s) => {
+        const next = {
+          ...s,
+          cards: s.cards.map((c) => {
+            if (c.id !== cardId) return c;
+            return {
+              ...c,
+              discussionEntries: (c.discussionEntries ?? []).filter(
+                (e) => !(e.id === entryId && e.authorUsername === authorUsername),
+              ),
+            };
+          }),
+        };
+        persist(boardClientId, next);
+        return next;
+      });
+    },
+    [boardClientId],
+  );
+
+  const addRelatedCard = useCallback(
+    (fromCardId: string, toCardId: string): { ok: boolean; error?: string } => {
+      let out: { ok: boolean; error?: string } = { ok: true };
+      setState((s) => {
+        const from = s.cards.find((c) => c.id === fromCardId);
+        const to = s.cards.find((c) => c.id === toCardId);
+        if (!from || !to) {
+          out = { ok: false, error: "Card não encontrado." };
+          return s;
+        }
+        if (!canLinkRelated(from, to, s.cards)) {
+          out = { ok: false, error: "Não é possível relacionar estes itens (hierarquia ou duplicado)." };
+          return s;
+        }
+        const rel = [...(from.relatedCardIds ?? [])];
+        if (rel.includes(toCardId)) {
+          out = { ok: true };
+          return s;
+        }
+        rel.push(toCardId);
+        const next = {
+          ...s,
+          cards: s.cards.map((c) => (c.id === fromCardId ? { ...c, relatedCardIds: rel } : c)),
+        };
+        persist(boardClientId, next);
+        out = { ok: true };
+        return next;
+      });
+      return out;
+    },
+    [boardClientId],
+  );
+
+  const removeRelatedCard = useCallback(
+    (fromCardId: string, toCardId: string) => {
+      setState((s) => {
+        const next = {
+          ...s,
+          cards: s.cards.map((c) =>
+            c.id === fromCardId
+              ? { ...c, relatedCardIds: (c.relatedCardIds ?? []).filter((id) => id !== toCardId) }
+              : c,
+          ),
         };
         persist(boardClientId, next);
         return next;
@@ -543,6 +712,25 @@ export const KanbanProvider = ({ children }: { children: ReactNode }) => {
     [state.cards],
   );
 
+  const deleteCard = useCallback(
+    (cardId: string) => {
+      setState((s) => {
+        if (!s.cards.some((c) => c.id === cardId)) return s;
+        const nextCards = s.cards
+          .filter((c) => c.id !== cardId)
+          .map((c) => ({
+            ...c,
+            parentId: c.parentId === cardId ? null : c.parentId,
+            relatedCardIds: (c.relatedCardIds ?? []).filter((rid) => rid !== cardId),
+          }));
+        const next: KanbanState = { ...s, cards: normalizeOrders(nextCards) };
+        persist(boardClientId, next);
+        return next;
+      });
+    },
+    [boardClientId],
+  );
+
   const value = useMemo(
     () => ({
       boardClientId,
@@ -555,7 +743,11 @@ export const KanbanProvider = ({ children }: { children: ReactNode }) => {
       updateCardTitle,
       updateCardDescription,
       updateCardAcceptanceCriteria,
-      updateCardDiscussion,
+      addDiscussionEntry,
+      updateDiscussionEntry,
+      deleteDiscussionEntry,
+      addRelatedCard,
+      removeRelatedCard,
       updateCardAttachments,
       updateCardAssignee,
       updateCardTags,
@@ -563,6 +755,7 @@ export const KanbanProvider = ({ children }: { children: ReactNode }) => {
       reorderInColumn,
       applyBoardLayout,
       cardById,
+      deleteCard,
     }),
     [
       boardClientId,
@@ -575,7 +768,11 @@ export const KanbanProvider = ({ children }: { children: ReactNode }) => {
       updateCardTitle,
       updateCardDescription,
       updateCardAcceptanceCriteria,
-      updateCardDiscussion,
+      addDiscussionEntry,
+      updateDiscussionEntry,
+      deleteDiscussionEntry,
+      addRelatedCard,
+      removeRelatedCard,
       updateCardAttachments,
       updateCardAssignee,
       updateCardTags,
@@ -583,6 +780,7 @@ export const KanbanProvider = ({ children }: { children: ReactNode }) => {
       reorderInColumn,
       applyBoardLayout,
       cardById,
+      deleteCard,
     ],
   );
 

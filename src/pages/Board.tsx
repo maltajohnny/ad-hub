@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -9,16 +17,19 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCorners,
+  pointerWithin,
+  type CollisionDetection,
   useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { User } from "@/contexts/AuthContext";
-import { canManageKanbanBoard, useAuth } from "@/contexts/AuthContext";
-import type { KanbanAttachment, KanbanColumn } from "@/contexts/KanbanContext";
-import { KanbanCard, useKanban, WorkItemType } from "@/contexts/KanbanContext";
+import { canDeleteKanbanCards, canManageKanbanBoard, useAuth } from "@/contexts/AuthContext";
+import type { DiscussionEntry, KanbanAttachment, KanbanCard, KanbanColumn } from "@/contexts/KanbanContext";
+import { canLinkRelated, useKanban, WorkItemType } from "@/contexts/KanbanContext";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { clientsData } from "@/pages/Clientes";
 import { Button } from "@/components/ui/button";
@@ -32,6 +43,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -55,6 +67,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
+import {
+  formatCardMentionChunk,
+  getCaretClientRect,
+  getMentionRange,
+  placeMentionPanel,
+} from "@/lib/cardMention";
 import { markdownToHtml } from "@/lib/markdown";
 import { toast } from "sonner";
 import {
@@ -90,6 +108,13 @@ const TYPE_SINGULAR: Record<WorkItemType, string> = {
   task: "Task",
 };
 
+function nextChildWorkItemType(parent: WorkItemType): WorkItemType | null {
+  if (parent === "epic") return "feature";
+  if (parent === "feature") return "user_story";
+  if (parent === "user_story") return "task";
+  return null;
+}
+
 /** Filtros compactos à direita (pill, estilo coluna nos cards). */
 const BOARD_FILTER_PILL = cn(
   "inline-flex h-7 w-[6.75rem] shrink-0 items-center justify-between gap-1 rounded-full border border-transparent bg-transparent px-1.5 text-[11px] font-medium leading-none text-foreground shadow-none",
@@ -119,26 +144,82 @@ function findWipViolation(
   return null;
 }
 
-type DetailEditField = "title" | "description" | "acceptance" | "discussion" | "column" | "assignee" | null;
+type DetailEditField = "title" | "description" | "acceptance" | "column" | "assignee" | null;
+
+/** Referência a card guardada como `#n [título]` — usado para partir o Markdown e renderizar chips clicáveis. */
+const CARD_MENTION_TOKEN_RE = /(#\d+(?:\s+\[[^\]]+\])?)/g;
+
+function markdownPreviewSegments(
+  markdown: string,
+  cards: KanbanCard[],
+  onOpenCard: (cardId: string) => void,
+): ReactNode {
+  const parts = markdown.split(CARD_MENTION_TOKEN_RE);
+  return parts.map((part, i) => {
+    const m = part.match(/^#(\d+)(\s+\[[^\]]+\])?$/);
+    if (m) {
+      const num = parseInt(m[1], 10);
+      const card = cards.find((c) => c.workItemNumber === num);
+      if (card) {
+        return (
+          <button
+            key={i}
+            type="button"
+            data-card-mention-link
+            onPointerDown={blockDragStart}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenCard(card.id);
+            }}
+            className="pointer-events-auto inline cursor-pointer border-0 bg-transparent p-0 align-baseline text-left font-inherit hover:opacity-90"
+          >
+            <span className="font-mono font-semibold text-primary tabular-nums">#{m[1]}</span>
+            {m[2] ? <span className="text-foreground">{m[2]}</span> : null}
+          </button>
+        );
+      }
+      return (
+        <span key={i} className="text-muted-foreground">
+          {part}
+        </span>
+      );
+    }
+    if (part === "") return null;
+    const fragmentHtml = markdownToHtml(part);
+    return (
+      <span
+        key={i}
+        className="inline [&_p]:m-0 [&_p]:inline [&_p]:after:inline-block [&_p]:after:content-['\00a0'] [&_ul]:my-1 [&_ol]:my-1"
+        dangerouslySetInnerHTML={{ __html: fragmentHtml }}
+      />
+    );
+  });
+}
 
 function MarkdownPreviewBlock({
   markdown,
   emptyLabel,
   onRequestEdit,
+  cards,
+  onOpenCard,
 }: {
   markdown: string;
   emptyLabel: string;
   onRequestEdit: () => void;
+  cards: KanbanCard[];
+  onOpenCard: (cardId: string) => void;
 }) {
-  const html = useMemo(() => markdownToHtml(markdown || ""), [markdown]);
   const has = (markdown ?? "").trim().length > 0;
   return (
     <div
-      role="button"
       tabIndex={0}
-      onClick={onRequestEdit}
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest("[data-card-mention-link]")) return;
+        onRequestEdit();
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
+          if ((e.target as HTMLElement).closest("[data-card-mention-link]")) return;
           e.preventDefault();
           onRequestEdit();
         }
@@ -150,10 +231,9 @@ function MarkdownPreviewBlock({
       )}
     >
       {has ? (
-        <div
-          className="prose prose-sm dark:prose-invert max-w-none pointer-events-none"
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+        <div className="prose prose-sm dark:prose-invert max-w-none pointer-events-none text-left">
+          {markdownPreviewSegments(markdown, cards, onOpenCard)}
+        </div>
       ) : (
         <span>{emptyLabel}</span>
       )}
@@ -170,6 +250,66 @@ function InlineSaveCancel({ onSave, onCancel }: { onSave: () => void; onCancel: 
       <Button type="button" size="sm" onClick={onSave}>
         Salvar
       </Button>
+    </div>
+  );
+}
+
+function MarkdownReadOnly({ markdown }: { markdown: string }) {
+  const html = useMemo(() => markdownToHtml(markdown || ""), [markdown]);
+  return (
+    <div
+      className="prose prose-sm dark:prose-invert max-w-none rounded-md border border-border/40 bg-muted/10 px-3 py-2 text-sm"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
+function DiscussionBodyWithCardLinks({
+  body,
+  cards,
+  onOpenCard,
+}: {
+  body: string;
+  cards: KanbanCard[];
+  onOpenCard: (cardId: string) => void;
+}) {
+  const parts = (body || "").split(/(#\d+)/g);
+  return (
+    <div className="rounded-md border border-border/40 bg-muted/10 px-3 py-2 text-sm leading-relaxed">
+      {parts.map((part, i) => {
+        const m = part.match(/^#(\d+)$/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          const card = cards.find((c) => c.workItemNumber === n);
+          if (card) {
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onOpenCard(card.id)}
+                className="my-0.5 inline-flex max-w-full flex-wrap items-baseline gap-x-1.5 gap-y-0 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-left align-middle text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+              >
+                <span className="shrink-0 font-mono tabular-nums">#{card.workItemNumber}</span>
+                <span className="min-w-0 break-words text-foreground">{card.title}</span>
+              </button>
+            );
+          }
+          return (
+            <span key={i} className="text-muted-foreground">
+              {part}
+            </span>
+          );
+        }
+        if (part === "") return null;
+        const html = markdownToHtml(part);
+        return (
+          <span
+            key={i}
+            className="inline [&>p]:m-0 [&>p]:inline [&>p]:after:inline-block [&>p]:after:content-['\00a0']"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -371,6 +511,7 @@ function SortableKanbanCard({
   platformUsers,
   onAssignee,
   onOpenDetail,
+  onRequestDelete,
 }: {
   card: KanbanCard;
   parent: KanbanCard | null;
@@ -381,6 +522,8 @@ function SortableKanbanCard({
   platformUsers: User[];
   onAssignee: (username: string | null) => void;
   onOpenDetail: () => void;
+  /** Abre fluxo de exclusão com confirmação (só se o utilizador tiver permissão). */
+  onRequestDelete?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
@@ -423,7 +566,21 @@ function SortableKanbanCard({
           >
             <GripVertical size={16} />
           </span>
-          <div className="min-w-0 flex-1 space-y-2.5 pb-0">
+          <div className={cn("min-w-0 flex-1 space-y-2.5 pb-0 relative", onRequestDelete && "pr-8")}>
+            {onRequestDelete && (
+              <button
+                type="button"
+                onPointerDown={blockDragStart}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRequestDelete();
+                }}
+                className="absolute right-0 top-0 z-[1] rounded p-1 text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
+                aria-label={`Excluir card #${card.workItemNumber}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
             <button
               type="button"
               onClick={onOpenDetail}
@@ -542,21 +699,67 @@ function SortableKanbanCard({
   );
 }
 
-function ColumnBody({ columnId, children }: { columnId: string; children: React.ReactNode }) {
+/** Coluna completa (título + toolbar opcional + lista) como único droppable — evita falha ao passar o rato sobre o cabeçalho. */
+function KanbanColumnShell({
+  columnId,
+  colIndex,
+  highlighted,
+  header,
+  toolbar,
+  children,
+}: {
+  columnId: string;
+  colIndex: number;
+  highlighted: boolean;
+  header: React.ReactNode;
+  toolbar: React.ReactNode | null;
+  children: React.ReactNode;
+}) {
   const { setNodeRef } = useDroppable({ id: columnId });
   return (
     <div
       ref={setNodeRef}
-      className="flex-1 min-h-0 p-2 space-y-2 overflow-y-auto"
+      className={cn(
+        COL_WIDTH_CLASS,
+        "flex flex-col min-h-0 self-stretch border-t-2 border-t-border/70 bg-muted/20 transition-[box-shadow,background-color] duration-150 dark:bg-muted/10",
+        colIndex > 0 && "border-l border-border/50",
+        highlighted &&
+          "bg-primary/[0.09] ring-2 ring-inset ring-primary/45 shadow-[inset_0_0_20px_-8px_hsl(var(--primary)/0.25)] dark:bg-primary/[0.12]",
+      )}
     >
+      <div className="shrink-0 border-b border-border/50 bg-background px-3 pt-3 pb-2 sm:px-4">{header}</div>
+      {toolbar}
       {children}
     </div>
   );
 }
 
+const BOARD_TYPE_FILTER_STORAGE_KEY = (clientId: number) => `norter:boardTypeFilter:${clientId}`;
+
+function readBoardTypeFilter(clientId: number): WorkItemType | "all" {
+  try {
+    const raw = localStorage.getItem(BOARD_TYPE_FILTER_STORAGE_KEY(clientId));
+    if (raw === "all" || raw === "epic" || raw === "feature" || raw === "user_story" || raw === "task") {
+      return raw;
+    }
+  } catch {
+    /* ignore */
+  }
+  return "all";
+}
+
+/** Prioriza a coluna sob o ponteiro (scroll horizontal + várias colunas). */
+const boardCollisionDetection: CollisionDetection = (args) => {
+  const pointerHits = pointerWithin(args);
+  if (pointerHits.length > 0) return pointerHits;
+  return closestCorners(args);
+};
+
 const Board = () => {
   const { user, listUsers, canUserSeeClient } = useAuth();
+  const currentUsername = user?.username ?? "";
   const canBoardSettings = canManageKanbanBoard(user);
+  const canDeleteCards = canDeleteKanbanCards(user);
   /** `listUsers()` devolve um array novo a cada chamada — memoizar para não recriar o header do layout a cada render. */
   const platformUsers = useMemo(() => listUsers(), [listUsers]);
 
@@ -573,11 +776,16 @@ const Board = () => {
     updateCardTitle,
     updateCardDescription,
     updateCardAcceptanceCriteria,
-    updateCardDiscussion,
+    addDiscussionEntry,
+    updateDiscussionEntry,
+    deleteDiscussionEntry,
+    addRelatedCard,
+    removeRelatedCard,
     updateCardAttachments,
     updateCardAssignee,
     moveCard,
     cardById,
+    deleteCard,
   } = useKanban();
 
   const visibleClients = useMemo(
@@ -601,7 +809,6 @@ const Board = () => {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDesc, setDraftDesc] = useState("");
   const [draftAc, setDraftAc] = useState("");
-  const [draftDisc, setDraftDisc] = useState("");
   const [draftColumnId, setDraftColumnId] = useState("");
   const [draftAssignee, setDraftAssignee] = useState<string | null>(null);
   const [detailModalExpanded, setDetailModalExpanded] = useState(false);
@@ -609,6 +816,25 @@ const Board = () => {
   const [tagAddOpen, setTagAddOpen] = useState(false);
   const [newTagDraft, setNewTagDraft] = useState("");
   const newTagInputRef = useRef<HTMLInputElement>(null);
+
+  const [newDiscussionText, setNewDiscussionText] = useState("");
+  const [editingDiscussionEntry, setEditingDiscussionEntry] = useState<{ id: string; body: string } | null>(null);
+  /** Lista flutuante ao digitar `#` junto ao cursor (texto simples ou `apply` vindo do RichTextEditor). */
+  const [mentionUi, setMentionUi] = useState<{
+    target: string;
+    query: string;
+    range: { start: number; end: number };
+    pos: { top: number; left: number };
+    apply?: (workItemNumber: number, title: string) => void;
+  } | null>(null);
+  const mentionPopoverRef = useRef<HTMLDivElement>(null);
+  /** Índice na lista do dropdown `#` (setas / Enter). */
+  const [mentionHighlightIdx, setMentionHighlightIdx] = useState(0);
+  const [relatedLinkOpen, setRelatedLinkOpen] = useState(false);
+  const [relatedLinkQuery, setRelatedLinkQuery] = useState("");
+  const discussionInputRef = useRef<HTMLTextAreaElement>(null);
+  const discussionEditInputRef = useRef<HTMLTextAreaElement>(null);
+  const detailTitleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!detailCardId) setDetailModalExpanded(false);
@@ -618,7 +844,35 @@ const Board = () => {
     setDetailEditField(null);
     setTagAddOpen(false);
     setNewTagDraft("");
+    setNewDiscussionText("");
+    setEditingDiscussionEntry(null);
+    setMentionUi(null);
+    setMentionHighlightIdx(0);
   }, [detailCardId]);
+
+  useEffect(() => {
+    setMentionHighlightIdx(0);
+  }, [mentionUi?.query]);
+
+  useEffect(() => {
+    if (!mentionUi) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (discussionInputRef.current?.contains(t)) return;
+      if (discussionEditInputRef.current?.contains(t)) return;
+      if (detailTitleInputRef.current?.contains(t)) return;
+      if (mentionPopoverRef.current?.contains(t)) return;
+      if (t instanceof Element && t.closest("[data-card-mention-root]")) return;
+      setMentionUi(null);
+    };
+    const onScroll = () => setMentionUi(null);
+    document.addEventListener("mousedown", onDoc, true);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onDoc, true);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [mentionUi]);
 
   const cancelDetailEdit = useCallback(() => {
     setDetailEditField(null);
@@ -636,9 +890,6 @@ const Board = () => {
         break;
       case "acceptance":
         setDraftAc(detailCard.acceptanceCriteria ?? "");
-        break;
-      case "discussion":
-        setDraftDisc(detailCard.discussion ?? "");
         break;
       case "column":
         setDraftColumnId(detailCard.columnId);
@@ -697,7 +948,28 @@ const Board = () => {
 
   /** Busca rápida na coluna (não é o mesmo que filtros do topo). */
   const [boardSearch, setBoardSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<WorkItemType | "all">("all");
+  const [typeFilter, setTypeFilterState] = useState<WorkItemType | "all">(() =>
+    typeof window !== "undefined" ? readBoardTypeFilter(boardClientId) : "all",
+  );
+
+  useEffect(() => {
+    setTypeFilterState(readBoardTypeFilter(boardClientId));
+  }, [boardClientId]);
+
+  const setTypeFilter = useCallback(
+    (action: SetStateAction<WorkItemType | "all">) => {
+      setTypeFilterState((prev) => {
+        const next = typeof action === "function" ? (action as (p: WorkItemType | "all") => WorkItemType | "all")(prev) : action;
+        try {
+          localStorage.setItem(BOARD_TYPE_FILTER_STORAGE_KEY(boardClientId), next);
+        } catch {
+          /* ignore */
+        }
+        return next;
+      });
+    },
+    [boardClientId],
+  );
   const [assigneeFilter, setAssigneeFilter] = useState<string | "all">("all");
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [tagFilterMode, setTagFilterMode] = useState<"or" | "and">("or");
@@ -713,6 +985,11 @@ const Board = () => {
   const [cardParentId, setCardParentId] = useState<string | null>(null);
   const [cardTagsInput, setCardTagsInput] = useState("");
   const [cardAssignee, setCardAssignee] = useState<string | null>(null);
+
+  /** Modal de exclusão permanente (card #número). */
+  const [deleteModalCard, setDeleteModalCard] = useState<KanbanCard | null>(null);
+  /** Só dígitos — o # é mostrado fixo ao lado. */
+  const [deleteConfirmDigits, setDeleteConfirmDigits] = useState("");
 
   const allTags = useMemo(() => {
     const s = new Set<string>();
@@ -767,50 +1044,15 @@ const Board = () => {
     setDragHighlightColumnId(null);
   };
 
+  /** Só highlight: não mover o card entre colunas durante o arraste (evita o DOM saltar e o DragOverlay desalinar). */
   const onDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
+    const { over } = event;
     const overId = over?.id != null ? String(over.id) : null;
     if (!overId) {
       setDragHighlightColumnId(null);
       return;
     }
     setDragHighlightColumnId(findContainer(overId, itemsRef.current) ?? null);
-
-    setItems((prev) => {
-      const overContainer = findContainer(overId, prev);
-      const activeContainer = findContainer(String(active.id), prev);
-      if (!overContainer || !activeContainer || activeContainer === overContainer) return prev;
-
-      const activeItems = [...prev[activeContainer]];
-      const overItems = [...prev[overContainer]];
-      const activeIndex = activeItems.indexOf(String(active.id));
-      const overIndex = overItems.indexOf(overId);
-
-      let newIndex: number;
-      if (overId in prev) {
-        newIndex = overItems.length;
-      } else {
-        const isBelowOverItem =
-          over &&
-          active.rect.current.translated &&
-          active.rect.current.translated.top > over.rect.top + over.rect.height;
-        const modifier = isBelowOverItem ? 1 : 0;
-        newIndex = overIndex >= 0 ? overIndex + modifier : overItems.length;
-      }
-
-      const moving = activeItems[activeIndex];
-      if (moving === undefined) return prev;
-
-      return {
-        ...prev,
-        [activeContainer]: activeItems.filter((id) => id !== String(active.id)),
-        [overContainer]: [
-          ...overItems.slice(0, newIndex),
-          moving,
-          ...overItems.slice(newIndex, overItems.length),
-        ],
-      };
-    });
   };
 
   const onDragEnd = (event: DragEndEvent) => {
@@ -818,15 +1060,26 @@ const Board = () => {
     setActiveId(null);
     setDragHighlightColumnId(null);
 
+    if (!over) {
+      setItems(buildItemsMap(state.cards, columnIds));
+      return;
+    }
+
     setItems((current) => {
       let next = { ...current };
+      const activeIdStr = String(active.id);
+      const overIdStr = String(over.id);
+      const activeContainer = findContainer(activeIdStr, next);
+      const overContainer = findContainer(overIdStr, next);
+      if (!activeContainer || !overContainer) {
+        applyBoardLayout(next);
+        return next;
+      }
 
-      if (over && String(active.id) !== String(over.id)) {
-        const activeContainer = findContainer(String(active.id), next);
-        const overContainer = findContainer(String(over.id), next);
-        if (activeContainer && overContainer && activeContainer === overContainer) {
-          const ai = next[activeContainer].indexOf(String(active.id));
-          const oi = next[overContainer].indexOf(String(over.id));
+      if (activeContainer === overContainer) {
+        if (activeIdStr !== overIdStr) {
+          const ai = next[activeContainer].indexOf(activeIdStr);
+          const oi = next[overContainer].indexOf(overIdStr);
           if (ai >= 0 && oi >= 0 && ai !== oi) {
             next = {
               ...next,
@@ -834,6 +1087,25 @@ const Board = () => {
             };
           }
         }
+      } else {
+        const moving = activeIdStr;
+        next[activeContainer] = next[activeContainer].filter((id) => id !== moving);
+        const overItems = [...next[overContainer]];
+        let newIndex = overItems.length;
+        if (!(overIdStr in next)) {
+          const oi = overItems.indexOf(overIdStr);
+          const isBelowOverItem =
+            active.rect.current.translated &&
+            over.rect &&
+            active.rect.current.translated.top > over.rect.top + over.rect.height;
+          const modifier = isBelowOverItem ? 1 : 0;
+          newIndex = oi >= 0 ? oi + modifier : overItems.length;
+        }
+        next[overContainer] = [
+          ...overItems.slice(0, newIndex),
+          moving,
+          ...overItems.slice(newIndex),
+        ];
       }
 
       const violation = findWipViolation(sortedColumns, next);
@@ -978,6 +1250,238 @@ const Board = () => {
     [detailCardId, detailCard, updateCardAttachments],
   );
 
+  const publishDiscussion = useCallback(() => {
+    if (!detailCardId || !user?.username) return;
+    const t = newDiscussionText.trim();
+    if (!t) {
+      toast.error("Escreva algo antes de publicar.");
+      return;
+    }
+    addDiscussionEntry(detailCardId, t, user.username);
+    setNewDiscussionText("");
+    toast.success("Comentário publicado.");
+  }, [detailCardId, newDiscussionText, user, addDiscussionEntry]);
+
+  const syncPlainMention = useCallback((el: HTMLInputElement | HTMLTextAreaElement, target: string) => {
+    const value = el.value;
+    const caret = el.selectionStart ?? value.length;
+    const range = getMentionRange(value, caret);
+    if (!range) {
+      setMentionUi((m) => (m?.target === target ? null : m));
+      return;
+    }
+    const rect = getCaretClientRect(el, range.end);
+    const pos = placeMentionPanel(rect, 288, 260, { placement: "inline-end" });
+    setMentionUi({
+      target,
+      query: range.query,
+      range: { start: range.start, end: range.end },
+      pos,
+    });
+  }, []);
+
+  const clearMentionOnFocus = useCallback((field: string) => {
+    setMentionUi((m) => (m && m.target === field ? m : null));
+  }, []);
+
+  const cardMentionDesc = useMemo(
+    () => ({
+      mentionTargetId: "detail-desc",
+      onFieldFocus: () => clearMentionOnFocus("detail-desc"),
+      onMentionChange: (
+        s: null | {
+          query: string;
+          pos: { top: number; left: number };
+          apply: (workItemNumber: number, title: string) => void;
+        },
+      ) => {
+        if (!s) {
+          setMentionUi((m) => (m?.target === "detail-desc" ? null : m));
+          return;
+        }
+        setMentionUi({
+          target: "detail-desc",
+          query: s.query,
+          range: { start: 0, end: 0 },
+          pos: s.pos,
+          apply: s.apply,
+        });
+      },
+    }),
+    [clearMentionOnFocus],
+  );
+
+  const cardMentionAc = useMemo(
+    () => ({
+      mentionTargetId: "detail-ac",
+      onFieldFocus: () => clearMentionOnFocus("detail-ac"),
+      onMentionChange: (
+        s: null | {
+          query: string;
+          pos: { top: number; left: number };
+          apply: (workItemNumber: number, title: string) => void;
+        },
+      ) => {
+        if (!s) {
+          setMentionUi((m) => (m?.target === "detail-ac" ? null : m));
+          return;
+        }
+        setMentionUi({
+          target: "detail-ac",
+          query: s.query,
+          range: { start: 0, end: 0 },
+          pos: s.pos,
+          apply: s.apply,
+        });
+      },
+    }),
+    [clearMentionOnFocus],
+  );
+
+  const insertMentionPick = useCallback((workItemNumber: number) => {
+    if (!mentionUi) return;
+    const pickedCard = state.cards.find((c) => c.workItemNumber === workItemNumber);
+    const title = pickedCard?.title ?? "—";
+    if (mentionUi.apply) {
+      mentionUi.apply(workItemNumber, title);
+      setMentionUi(null);
+      return;
+    }
+    const { target, range } = mentionUi;
+    const chunk = formatCardMentionChunk(workItemNumber, title);
+    if (target === "new") {
+      setNewDiscussionText((prev) => prev.slice(0, range.start) + chunk + prev.slice(range.end));
+      queueMicrotask(() => {
+        const ta = discussionInputRef.current;
+        if (ta) {
+          const pos = range.start + chunk.length;
+          ta.focus();
+          ta.setSelectionRange(pos, pos);
+        }
+      });
+    } else if (target === "title") {
+      setDraftTitle((prev) => prev.slice(0, range.start) + chunk + prev.slice(range.end));
+      queueMicrotask(() => {
+        const el = detailTitleInputRef.current;
+        if (el) {
+          const pos = range.start + chunk.length;
+          el.focus();
+          el.setSelectionRange(pos, pos);
+        }
+      });
+    } else {
+      setEditingDiscussionEntry((prev) => {
+        if (!prev || prev.id !== target) return prev;
+        return { ...prev, body: prev.body.slice(0, range.start) + chunk + prev.body.slice(range.end) };
+      });
+      queueMicrotask(() => {
+        const ta = discussionEditInputRef.current;
+        if (ta) {
+          const pos = range.start + chunk.length;
+          ta.focus();
+          ta.setSelectionRange(pos, pos);
+        }
+      });
+    }
+    setMentionUi(null);
+  }, [mentionUi, state.cards]);
+
+  const relatedCardsForCurrentDetail = useMemo(() => {
+    if (!detailCard) return [];
+    const byParent = state.cards.filter((c) => c.parentId === detailCard.id);
+    const rel = (detailCard.relatedCardIds ?? [])
+      .map((id) => state.cards.find((c) => c.id === id))
+      .filter((c): c is KanbanCard => Boolean(c));
+    const seen = new Set<string>();
+    const out: KanbanCard[] = [];
+    for (const c of [...byParent, ...rel]) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id);
+        out.push(c);
+      }
+    }
+    return out.sort((a, b) => a.workItemNumber - b.workItemNumber);
+  }, [detailCard, state.cards]);
+
+  const openCreateChildCard = useCallback(() => {
+    if (!detailCard) return;
+    const nt = nextChildWorkItemType(detailCard.type);
+    if (!nt) {
+      toast.error("Este tipo de item não tem subnível no board.");
+      return;
+    }
+    setCardType(nt);
+    setCardParentId(detailCard.id);
+    setCardTitle("");
+    setCardTagsInput("");
+    setCardAssignee(null);
+    setCardOpen(true);
+  }, [detailCard]);
+
+  const mentionCardList = useMemo(() => {
+    const q = (mentionUi?.query ?? "").replace(/\D/g, "");
+    return state.cards
+      .filter((c) => (q === "" ? true : String(c.workItemNumber).startsWith(q)))
+      .slice(0, 80);
+  }, [state.cards, mentionUi?.query]);
+
+  useEffect(() => {
+    setMentionHighlightIdx((i) => Math.min(i, Math.max(0, mentionCardList.length - 1)));
+  }, [mentionCardList.length]);
+
+  useEffect(() => {
+    if (!mentionUi) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMentionUi(null);
+        return;
+      }
+      if (mentionCardList.length === 0) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        e.stopPropagation();
+        setMentionHighlightIdx((i) => Math.min(mentionCardList.length - 1, i + 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        e.stopPropagation();
+        setMentionHighlightIdx((i) => Math.max(0, i - 1));
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        const c = mentionCardList[mentionHighlightIdx];
+        if (c) insertMentionPick(c.workItemNumber);
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [mentionUi, mentionCardList, mentionHighlightIdx, insertMentionPick]);
+
+  useEffect(() => {
+    if (!mentionPopoverRef.current || !mentionUi) return;
+    const el = mentionPopoverRef.current.querySelector(
+      `[data-mention-item="${mentionHighlightIdx}"]`,
+    );
+    el?.scrollIntoView({ block: "nearest" });
+  }, [mentionHighlightIdx, mentionUi, mentionCardList]);
+
+  const relatedExistingCandidates = useMemo(() => {
+    if (!detailCard) return [];
+    return state.cards.filter(
+      (c) => c.id !== detailCard.id && canLinkRelated(detailCard, c, state.cards),
+    );
+  }, [detailCard, state.cards]);
+
+  const relatedLinkFiltered = useMemo(() => {
+    const q = relatedLinkQuery.replace(/\D/g, "");
+    return relatedExistingCandidates.filter((c) =>
+      q === "" ? true : String(c.workItemNumber).includes(q),
+    );
+  }, [relatedExistingCandidates, relatedLinkQuery]);
+
   const saveDetailTitle = useCallback(() => {
     if (!detailCardId) return;
     const t = draftTitle.trim();
@@ -1007,13 +1511,6 @@ const Board = () => {
     setDetailEditField(null);
     toast.success("Critérios de aceite guardados.");
   }, [detailCardId, draftAc, updateCardAcceptanceCriteria]);
-
-  const saveDetailDiscussion = useCallback(() => {
-    if (!detailCardId) return;
-    updateCardDiscussion(detailCardId, draftDisc);
-    setDetailEditField(null);
-    toast.success("Discussion guardada.");
-  }, [detailCardId, draftDisc, updateCardDiscussion]);
 
   const saveDetailColumn = useCallback(() => {
     if (!detailCardId || !detailCard) return;
@@ -1330,155 +1827,229 @@ const Board = () => {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={deleteModalCard !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteModalCard(null);
+            setDeleteConfirmDigits("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Excluir card permanentemente?</DialogTitle>
+            <DialogDescription className="text-left text-sm leading-relaxed">
+              A exclusão é definitiva. Os dados e anexos deste card serão apagados e não poderão ser recuperados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <p className="text-sm font-medium leading-snug text-foreground">
+              Desejo excluir permanentemente o card #{deleteModalCard?.workItemNumber ?? "—"} e estou ciente das
+              consequências.
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="delete-card-confirm" className="text-xs text-muted-foreground">
+                Confirme só com o <strong className="text-foreground">número</strong> do card (a cerquilha já está
+                indicada).
+              </Label>
+              <div className="flex rounded-md border border-input shadow-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring">
+                <span className="flex items-center rounded-l-md border-r border-input bg-muted px-3 font-mono text-sm font-semibold text-muted-foreground">
+                  #
+                </span>
+                <Input
+                  id="delete-card-confirm"
+                  value={deleteConfirmDigits}
+                  onChange={(e) => setDeleteConfirmDigits(e.target.value.replace(/\D/g, ""))}
+                  placeholder="20001"
+                  className="border-0 font-mono tabular-nums focus-visible:ring-0 focus-visible:ring-offset-0"
+                  autoComplete="off"
+                  inputMode="numeric"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setDeleteModalCard(null);
+                setDeleteConfirmDigits("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!deleteModalCard || deleteConfirmDigits !== String(deleteModalCard.workItemNumber)}
+              onClick={() => {
+                if (!deleteModalCard) return;
+                const n = deleteModalCard.workItemNumber;
+                const id = deleteModalCard.id;
+                deleteCard(id);
+                if (detailCardId === id) setDetailCardId(null);
+                setDeleteModalCard(null);
+                setDeleteConfirmDigits("");
+                toast.success(`Card #${n} excluído.`);
+              }}
+            >
+              Excluir permanentemente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto pb-2 w-full">
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={boardCollisionDetection}
+          modifiers={[snapCenterToCursor]}
           onDragStart={onDragStart}
           onDragOver={filterActive ? undefined : onDragOver}
           onDragEnd={filterActive ? undefined : onDragEnd}
           onDragCancel={onDragCancel}
         >
-          {/* Estrutura tipo Azure: faixa única de títulos; divisórias só na área dos cards */}
-          <div className="min-w-max min-h-[calc(100vh-10rem)] rounded-md border border-border/60 bg-background shadow-sm flex flex-col">
-            <div className="sticky top-0 z-20 flex bg-background border-b border-border">
-              {sortedColumns.map((col, colIndex) => {
-                const ids = items[col.id] ?? [];
-                const visibleIds = ids.filter((id) => {
-                  const c = cardById(id);
-                  return c && matchesFilters(c);
-                });
-                return (
-                  <div key={`hdr-${col.id}`} className={cn(COL_WIDTH_CLASS, "px-3 pt-3 pb-2 sm:px-4")}>
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      {colIndex === 0 && (
-                        <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground opacity-80" aria-hidden />
-                      )}
-                      <h2 className="font-semibold text-sm truncate text-foreground flex-1 min-w-0">{col.title}</h2>
-                      <span className="text-[11px] font-semibold tabular-nums text-emerald-600 dark:text-emerald-400 shrink-0">
-                        {col.wipLimit != null && col.wipLimit > 0
-                          ? `${ids.length} / ${col.wipLimit}`
-                          : ids.length}
-                      </span>
+          {/* Uma coluna = cabeçalho + lista no mesmo droppable (highlight e hit-test corretos ao arrastar). */}
+          <div className="flex min-h-[calc(100vh-10rem)] min-w-max flex-1 flex-row rounded-md border border-border/60 bg-background shadow-sm">
+            {sortedColumns.map((col, colIndex) => {
+              const ids = items[col.id] ?? [];
+              const visibleIds = ids.filter((id) => {
+                const c = cardById(id);
+                return c && matchesFilters(c);
+              });
+
+              const header = (
+                <div className="flex min-w-0 items-center gap-1.5">
+                  {colIndex === 0 && (
+                    <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground opacity-80" aria-hidden />
+                  )}
+                  <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{col.title}</h2>
+                  <span className="shrink-0 text-[11px] font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {col.wipLimit != null && col.wipLimit > 0 ? `${ids.length} / ${col.wipLimit}` : ids.length}
+                  </span>
+                </div>
+              );
+
+              const toolbar =
+                colIndex === 0 ? (
+                  <div className="shrink-0 space-y-2 border-b border-border/50 bg-background/60 px-2 py-2">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 shrink-0 gap-1 border-border bg-background px-2.5 text-xs font-normal text-foreground shadow-sm hover:bg-muted/70"
+                        onClick={openNewCard}
+                      >
+                        <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+                        Novo item
+                      </Button>
+                      <div className="relative min-w-0 flex-1">
+                        <span
+                          className="pointer-events-none absolute left-0 top-0 bottom-0 z-10 flex w-9 items-center justify-center text-muted-foreground"
+                          aria-hidden
+                        >
+                          <Search className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                        </span>
+                        <Input
+                          id="board-column-search"
+                          value={boardSearch}
+                          onChange={(e) => setBoardSearch(e.target.value)}
+                          placeholder="Buscar cards…"
+                          className="h-8 border-border bg-background pl-9 pr-8 text-xs leading-none"
+                          aria-label="Buscar cards no board"
+                        />
+                        {boardSearch ? (
+                          <button
+                            type="button"
+                            className="absolute right-0 top-0 bottom-0 z-10 flex w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                            onClick={() => setBoardSearch("")}
+                            aria-label="Limpar busca"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                ) : null;
 
-            <div className="flex flex-1 min-h-0">
-              {sortedColumns.map((col, colIndex) => {
-                const ids = items[col.id] ?? [];
-                const visibleIds = ids.filter((id) => {
-                  const c = cardById(id);
-                  return c && matchesFilters(c);
-                });
-
-                return (
-                  <div
-                    key={col.id}
-                    className={cn(
-                      COL_WIDTH_CLASS,
-                      "flex flex-col min-h-0 self-stretch border-t-2 border-t-border/70 bg-muted/20 transition-[box-shadow,background-color] duration-150 dark:bg-muted/10",
-                      colIndex > 0 && "border-l border-border/50",
-                      dragHighlightColumnId === col.id &&
-                        "bg-primary/[0.09] ring-2 ring-inset ring-primary/45 shadow-[inset_0_0_20px_-8px_hsl(var(--primary)/0.25)] dark:bg-primary/[0.12]",
-                    )}
-                  >
-                    {colIndex === 0 && (
-                      <div className="shrink-0 space-y-2 border-b border-border/50 bg-background/60 px-2 py-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8 shrink-0 px-2.5 text-xs gap-1 border-border bg-background text-foreground hover:bg-muted/70 font-normal shadow-sm"
-                            onClick={openNewCard}
-                          >
-                            <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
-                            Novo item
-                          </Button>
-                          <div className="relative min-w-0 flex-1">
-                            <span
-                              className="pointer-events-none absolute left-0 top-0 bottom-0 z-10 flex w-9 items-center justify-center text-muted-foreground"
-                              aria-hidden
-                            >
-                              <Search className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
-                            </span>
-                            <Input
-                              id="board-column-search"
-                              value={boardSearch}
-                              onChange={(e) => setBoardSearch(e.target.value)}
-                              placeholder="Buscar cards…"
-                              className="h-8 pl-9 pr-8 text-xs leading-none border-border bg-background"
-                              aria-label="Buscar cards no board"
-                            />
-                            {boardSearch ? (
-                              <button
-                                type="button"
-                                className="absolute right-0 top-0 bottom-0 z-10 flex w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                                onClick={() => setBoardSearch("")}
-                                aria-label="Limpar busca"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>
-                      <ColumnBody columnId={col.id}>
-                        {visibleIds.map((id) => {
-                          const c = cardById(id);
-                          if (!c) return null;
-                          const parent = c.parentId ? cardById(c.parentId) : null;
-                          return (
-                            <SortableKanbanCard
-                              key={id}
-                              card={c}
-                              parent={parent ?? null}
-                              onOpenParent={parent ? () => setDetailCardId(parent.id) : undefined}
-                              columns={columnOptions}
-                              onColumnChange={(columnId) => changeCardColumn(c.id, columnId)}
-                              filterActive={filterActive}
-                              platformUsers={platformUsers}
-                              onAssignee={(username) => updateCardAssignee(c.id, username)}
-                              onOpenDetail={() => setDetailCardId(c.id)}
-                            />
-                          );
-                        })}
-                        {visibleIds.length === 0 && (
-                          <p className="text-xs text-muted-foreground text-center py-8 px-2">
-                            {ids.length === 0 ? "Nenhum card." : "Nenhum card corresponde ao filtro."}
-                          </p>
-                        )}
-                      </ColumnBody>
-                    </SortableContext>
-                  </div>
-                );
-              })}
-            </div>
+              return (
+                <KanbanColumnShell
+                  key={col.id}
+                  columnId={col.id}
+                  colIndex={colIndex}
+                  highlighted={dragHighlightColumnId === col.id}
+                  header={header}
+                  toolbar={toolbar}
+                >
+                  <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>
+                    <div className="min-h-[10rem] flex-1 space-y-2 overflow-y-auto p-2">
+                      {visibleIds.map((id) => {
+                        const c = cardById(id);
+                        if (!c) return null;
+                        const parent = c.parentId ? cardById(c.parentId) : null;
+                        return (
+                          <SortableKanbanCard
+                            key={id}
+                            card={c}
+                            parent={parent ?? null}
+                            onOpenParent={parent ? () => setDetailCardId(parent.id) : undefined}
+                            columns={columnOptions}
+                            onColumnChange={(columnId) => changeCardColumn(c.id, columnId)}
+                            filterActive={filterActive}
+                            platformUsers={platformUsers}
+                            onAssignee={(username) => updateCardAssignee(c.id, username)}
+                            onOpenDetail={() => setDetailCardId(c.id)}
+                            onRequestDelete={
+                              canDeleteCards
+                                ? () => {
+                                    setDeleteModalCard(c);
+                                    setDeleteConfirmDigits("");
+                                  }
+                                : undefined
+                            }
+                          />
+                        );
+                      })}
+                      {visibleIds.length === 0 && (
+                        <p className="px-2 py-8 text-center text-xs text-muted-foreground">
+                          {ids.length === 0 ? "Nenhum card." : "Nenhum card corresponde ao filtro."}
+                        </p>
+                      )}
+                    </div>
+                  </SortableContext>
+                </KanbanColumnShell>
+              );
+            })}
           </div>
 
-          <DragOverlay dropAnimation={null}>
+          <DragOverlay dropAnimation={null} zIndex={100}>
             {activeCard ? (
               <Card
                 className={cn(
-                  "w-[min(302px,calc(100vw-2rem))] min-w-[260px] max-w-[302px] shrink-0 scale-100 rounded-lg border-y border-r border-border/60 bg-card/95 p-3 pl-2.5 text-sm shadow-2xl backdrop-blur-xl",
+                  "pointer-events-none w-[302px] min-w-[302px] max-w-[302px] shrink-0 rounded-lg border-y border-r border-border/60 bg-card p-0 text-sm shadow-2xl ring-2 ring-primary/20",
                   cardTypeBorderClass(activeCard.type),
                 )}
               >
-                <p className="text-sm leading-snug text-foreground">
-                  <span
-                    className="inline-flex h-[1.15em] w-[18px] shrink-0 align-middle mr-0.5 items-center justify-center"
-                    aria-hidden
-                  >
-                    <BoardTypeFilterIcon type={activeCard.type} />
-                  </span>
-                  <span className="text-[11px] font-semibold tabular-nums text-primary">#{activeCard.workItemNumber}</span>
-                  <span className="text-sm font-medium"> {activeCard.title}</span>
-                </p>
+                <div className="flex gap-2 items-start p-3 pl-2.5">
+                  <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/45" aria-hidden />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <p className="text-sm leading-snug text-foreground [text-wrap:pretty]">
+                      <span className="inline-flex h-[1.15em] w-[18px] shrink-0 align-middle mr-0.5 items-center justify-center" aria-hidden>
+                        <BoardTypeFilterIcon type={activeCard.type} />
+                      </span>
+                      <span className="text-[11px] font-semibold tabular-nums text-primary">#{activeCard.workItemNumber}</span>
+                      <span className="text-sm font-medium"> {activeCard.title}</span>
+                    </p>
+                    <div className="flex items-center gap-1.5 rounded-full border border-border/50 bg-muted/20 px-2 py-1 text-xs text-muted-foreground">
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" />
+                      Arrastar para outra coluna
+                    </div>
+                  </div>
+                </div>
               </Card>
             ) : null}
           </DragOverlay>
@@ -1496,12 +2067,26 @@ const Board = () => {
             "flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0",
             detailModalExpanded
               ? "fixed inset-3 h-[calc(100vh-1.5rem)] max-h-none w-auto max-w-none translate-x-0 translate-y-0 sm:rounded-lg"
-              : "max-w-2xl",
+              : detailCard?.type === "feature"
+                ? "max-w-5xl"
+                : "max-w-2xl",
           )}
         >
           {detailCard && (
             <>
               <div className="absolute right-12 top-3 z-[60] flex items-center gap-1">
+                {nextChildWorkItemType(detailCard.type) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mr-1 h-8 gap-1 px-2 text-xs"
+                    onClick={openCreateChildCard}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Novo filho
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="ghost"
@@ -1529,7 +2114,13 @@ const Board = () => {
                 </DialogTitle>
               </DialogHeader>
 
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-6">
+              <div
+                className={cn(
+                  "flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row",
+                  detailCard.type === "feature" && "lg:divide-x lg:divide-border/50",
+                )}
+              >
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-6">
                 {/* Metadados superiores: coluna, atribuído, tags */}
                 <div className="flex flex-wrap items-start gap-x-4 gap-y-3 border-b border-border/40 pb-4">
                   <div className="min-w-[min(100%,12rem)] space-y-1">
@@ -1665,9 +2256,16 @@ const Board = () => {
                   {detailEditField === "title" ? (
                     <>
                       <Input
+                        ref={detailTitleInputRef}
                         id="detail-title"
                         value={draftTitle}
-                        onChange={(e) => setDraftTitle(e.target.value)}
+                        onFocus={() => clearMentionOnFocus("title")}
+                        onChange={(e) => {
+                          setDraftTitle(e.target.value);
+                          queueMicrotask(() => syncPlainMention(e.target, "title"));
+                        }}
+                        onSelect={(e) => syncPlainMention(e.target as HTMLInputElement, "title")}
+                        onKeyUp={(e) => syncPlainMention(e.target as HTMLInputElement, "title")}
                         className="text-base font-semibold"
                       />
                       <InlineSaveCancel onSave={saveDetailTitle} onCancel={cancelDetailEdit} />
@@ -1703,6 +2301,7 @@ const Board = () => {
                         onChange={setDraftDesc}
                         placeholder="Descreva o trabalho…"
                         minHeightClass={detailModalExpanded ? "min-h-[160px]" : "min-h-[120px]"}
+                        cardMention={cardMentionDesc}
                       />
                       <InlineSaveCancel onSave={saveDetailDescription} onCancel={cancelDetailEdit} />
                     </>
@@ -1711,6 +2310,8 @@ const Board = () => {
                       markdown={detailCard.description ?? ""}
                       emptyLabel="Clique para adicionar descrição…"
                       onRequestEdit={() => beginDetailEdit("description")}
+                      cards={state.cards}
+                      onOpenCard={(id) => setDetailCardId(id)}
                     />
                   )}
                 </div>
@@ -1726,6 +2327,7 @@ const Board = () => {
                         onChange={setDraftAc}
                         placeholder="Liste critérios testáveis…"
                         minHeightClass={detailModalExpanded ? "min-h-[140px]" : "min-h-[100px]"}
+                        cardMention={cardMentionAc}
                       />
                       <InlineSaveCancel onSave={saveDetailAcceptance} onCancel={cancelDetailEdit} />
                     </>
@@ -1734,6 +2336,8 @@ const Board = () => {
                       markdown={detailCard.acceptanceCriteria ?? ""}
                       emptyLabel="Clique para adicionar critérios de aceite…"
                       onRequestEdit={() => beginDetailEdit("acceptance")}
+                      cards={state.cards}
+                      onOpenCard={(id) => setDetailCardId(id)}
                     />
                   )}
                 </div>
@@ -1753,28 +2357,232 @@ const Board = () => {
                       Discussion
                     </button>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-2 pt-1">
-                    {detailEditField === "discussion" ? (
-                      <>
-                        <RichTextEditor
-                          key={`${detailCard.id}-disc-edit`}
-                          instanceKey={`${detailCard.id}-disc-edit`}
-                          value={draftDisc}
-                          onChange={setDraftDisc}
-                          placeholder="Comentário… Use # @ ! conforme necessário."
-                          minHeightClass={detailModalExpanded ? "min-h-[180px]" : "min-h-[140px]"}
+                  <CollapsibleContent className="space-y-4 pt-1">
+                    <div className="space-y-2 rounded-lg border border-dashed border-border/60 bg-muted/10 p-3">
+                      <Label htmlFor="discussion-new" className="text-xs text-muted-foreground">
+                        Novo comentário — digite <kbd className="rounded border border-border px-1 font-mono">#</kbd> e
+                        escolha o card na lista ao lado do cursor; pode filtrar com números (ex.: #200).
+                      </Label>
+                      <div className="relative">
+                        <Textarea
+                          id="discussion-new"
+                          ref={discussionInputRef}
+                          value={newDiscussionText}
+                          onFocus={() => clearMentionOnFocus("new")}
+                          onChange={(e) => {
+                            setNewDiscussionText(e.target.value);
+                            queueMicrotask(() => syncPlainMention(e.target, "new"));
+                          }}
+                          onSelect={(e) => syncPlainMention(e.target as HTMLTextAreaElement, "new")}
+                          onKeyUp={(e) => syncPlainMention(e.target as HTMLTextAreaElement, "new")}
+                          placeholder="Escreva e clique em Publicar…"
+                          className={cn("min-h-[100px] text-sm", detailModalExpanded && "min-h-[140px]")}
                         />
-                        <InlineSaveCancel onSave={saveDetailDiscussion} onCancel={cancelDetailEdit} />
-                      </>
-                    ) : (
-                      <MarkdownPreviewBlock
-                        markdown={detailCard.discussion ?? ""}
-                        emptyLabel="Clique para adicionar à discussion…"
-                        onRequestEdit={() => beginDetailEdit("discussion")}
-                      />
-                    )}
+                      </div>
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={publishDiscussion}
+                          disabled={!user?.username}
+                        >
+                          Publicar
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {[...(detailCard.discussionEntries ?? [])]
+                        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                        .map((entry) => {
+                          const isMine = Boolean(currentUsername && entry.authorUsername === currentUsername);
+                          const authorLabel =
+                            userByUsername(platformUsers, entry.authorUsername)?.name ??
+                            entry.authorUsername;
+                          const editing = editingDiscussionEntry?.id === entry.id;
+                          if (editing && isMine) {
+                            return (
+                              <div
+                                key={entry.id}
+                                className="rounded-lg border border-border/50 bg-muted/15 p-3 space-y-2"
+                              >
+                                <Textarea
+                                  ref={discussionEditInputRef}
+                                  value={editingDiscussionEntry.body}
+                                  onFocus={() => clearMentionOnFocus(entry.id)}
+                                  onChange={(e) => {
+                                    setEditingDiscussionEntry((prev) =>
+                                      prev ? { ...prev, body: e.target.value } : prev,
+                                    );
+                                    queueMicrotask(() =>
+                                      syncPlainMention(e.target as HTMLTextAreaElement, entry.id),
+                                    );
+                                  }}
+                                  onSelect={(e) =>
+                                    syncPlainMention(e.target as HTMLTextAreaElement, entry.id)
+                                  }
+                                  onKeyUp={(e) =>
+                                    syncPlainMention(e.target as HTMLTextAreaElement, entry.id)
+                                  }
+                                  className="min-h-[100px] text-sm"
+                                />
+                                <InlineSaveCancel
+                                  onSave={() => {
+                                    if (!detailCardId || !user?.username || !editingDiscussionEntry) return;
+                                    const t = editingDiscussionEntry.body.trim();
+                                    if (!t) {
+                                      toast.error("O comentário não pode ficar vazio.");
+                                      return;
+                                    }
+                                    updateDiscussionEntry(
+                                      detailCardId,
+                                      editingDiscussionEntry.id,
+                                      t,
+                                      user.username,
+                                    );
+                                    setEditingDiscussionEntry(null);
+                                    toast.success("Comentário atualizado.");
+                                  }}
+                                  onCancel={() => setEditingDiscussionEntry(null)}
+                                />
+                              </div>
+                            );
+                          }
+                          return (
+                            <div
+                              key={entry.id}
+                              className="rounded-lg border border-border/50 bg-muted/15 p-3 space-y-2"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                                <span className="font-medium text-foreground">{authorLabel}</span>
+                                <time dateTime={entry.createdAt} className="tabular-nums">
+                                  {new Date(entry.createdAt).toLocaleString()}
+                                </time>
+                              </div>
+                              <DiscussionBodyWithCardLinks
+                                body={entry.body}
+                                cards={state.cards}
+                                onOpenCard={(id) => setDetailCardId(id)}
+                              />
+                              {isMine ? (
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      setEditingDiscussionEntry({ id: entry.id, body: entry.body })
+                                    }
+                                  >
+                                    Editar
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => {
+                                      if (!detailCardId || !user?.username) return;
+                                      if (!confirm("Remover este comentário?")) return;
+                                      deleteDiscussionEntry(detailCardId, entry.id, user.username);
+                                      toast.success("Comentário removido.");
+                                    }}
+                                  >
+                                    Excluir
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                    </div>
                   </CollapsibleContent>
                 </Collapsible>
+
+                {detailCard.type !== "feature" && (
+                  <div className="space-y-2 rounded-lg border border-border/50 bg-muted/10 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold">Relacionados</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 gap-1">
+                            <Plus className="h-3.5 w-3.5" />
+                            Adicionar
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={openCreateChildCard}>Novo item</DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setRelatedLinkQuery("");
+                              setRelatedLinkOpen(true);
+                            }}
+                          >
+                            Item existente
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    <ul className="space-y-2">
+                      {relatedCardsForCurrentDetail.length === 0 ? (
+                        <li className="text-xs text-muted-foreground">Nenhum item relacionado.</li>
+                      ) : (
+                        relatedCardsForCurrentDetail.map((c) => (
+                          <li
+                            key={c.id}
+                            className="flex items-center justify-between gap-2 rounded-md border border-border/40 bg-background/80 px-2 py-1.5 text-sm"
+                          >
+                            <button
+                              type="button"
+                              className="min-w-0 flex-1 truncate text-left hover:text-primary"
+                              onClick={() => setDetailCardId(c.id)}
+                            >
+                              <span className="font-mono font-semibold text-primary">#{c.workItemNumber}</span>{" "}
+                              {c.title}
+                            </button>
+                            {(detailCard.relatedCardIds ?? []).includes(c.id) ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
+                                aria-label="Remover vínculo"
+                                onClick={() => removeRelatedCard(detailCard.id, c.id)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <span className="shrink-0 text-[10px] text-muted-foreground">Filho</span>
+                            )}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  </div>
+                )}
+
+                {canDeleteCards && (
+                  <div className="space-y-3 rounded-lg border border-destructive/25 bg-destructive/[0.06] p-4">
+                    <p className="text-sm font-semibold text-destructive">Excluir card</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      A exclusão é permanente: descrição, anexos e histórico associados a este item serão removidos sem
+                      possibilidade de recuperação.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        if (!detailCard) return;
+                        setDeleteModalCard(detailCard);
+                        setDeleteConfirmDigits("");
+                      }}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Excluir card…
+                    </Button>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label>Anexos</Label>
@@ -1832,8 +2640,186 @@ const Board = () => {
                   )}
                 </div>
               </div>
+                {detailCard.type === "feature" && (
+                  <aside className="flex w-full shrink-0 flex-col gap-3 border-t border-border/50 bg-muted/5 px-4 py-4 lg:w-80 lg:max-w-[min(100%,20rem)] lg:border-t-0 lg:border-l lg:px-5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold tracking-wide text-foreground">Related</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 gap-1">
+                            <Plus className="h-3.5 w-3.5" />
+                            Adicionar
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={openCreateChildCard}>Novo item</DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setRelatedLinkQuery("");
+                              setRelatedLinkOpen(true);
+                            }}
+                          >
+                            Item existente
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    <ul className="min-h-0 max-h-[min(50vh,24rem)] space-y-2 overflow-y-auto text-sm">
+                      {relatedCardsForCurrentDetail.length === 0 ? (
+                        <li className="text-xs text-muted-foreground">Nenhum item relacionado.</li>
+                      ) : (
+                        relatedCardsForCurrentDetail.map((c) => (
+                          <li
+                            key={c.id}
+                            className="flex items-start justify-between gap-2 rounded-md border border-border/40 bg-background/80 px-2 py-1.5"
+                          >
+                            <button
+                              type="button"
+                              className="min-w-0 flex-1 text-left text-sm hover:text-primary"
+                              onClick={() => setDetailCardId(c.id)}
+                            >
+                              <span className="font-mono font-semibold text-primary">#{c.workItemNumber}</span>{" "}
+                              <span className="text-foreground">{c.title}</span>
+                            </button>
+                            {(detailCard.relatedCardIds ?? []).includes(c.id) ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 shrink-0"
+                                aria-label="Remover vínculo"
+                                onClick={() => removeRelatedCard(detailCard.id, c.id)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              <span className="shrink-0 text-[10px] text-muted-foreground">Filho</span>
+                            )}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  </aside>
+                )}
+              </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {mentionUi && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={mentionPopoverRef}
+              role="listbox"
+              aria-label="Cards para referenciar"
+              onPointerDownCapture={(e) => e.stopPropagation()}
+              className="fixed z-[10000] isolate w-72 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none pointer-events-auto touch-auto"
+              style={{ top: mentionUi.pos.top, left: mentionUi.pos.left }}
+            >
+              <ul className="max-h-56 space-y-0.5 overflow-y-auto text-sm pointer-events-auto">
+                {mentionCardList.length === 0 ? (
+                  <li className="px-2 py-3 text-center text-xs text-muted-foreground">Nenhum card encontrado.</li>
+                ) : (
+                  mentionCardList.map((c, idx) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        data-mention-item={idx}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left pointer-events-auto",
+                          idx === mentionHighlightIdx ? "bg-muted" : "hover:bg-muted/60",
+                        )}
+                        onMouseEnter={() => setMentionHighlightIdx(idx)}
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          insertMentionPick(c.workItemNumber);
+                        }}
+                      >
+                        <span className="font-mono font-semibold text-primary">#{c.workItemNumber}</span>
+                        <span className="min-w-0 truncate">{c.title}</span>
+                        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                          {TYPE_SINGULAR[c.type]}
+                        </span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+              {mentionCardList.length > 0 ? (
+                <p className="border-t border-border/40 px-2 py-1 text-[10px] text-muted-foreground tabular-nums">
+                  A mostrar {mentionCardList.length}{" "}
+                  {mentionCardList.length === 1 ? "sugestão" : "sugestões"}
+                </p>
+              ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
+
+      <Dialog
+        open={relatedLinkOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRelatedLinkOpen(false);
+            setRelatedLinkQuery("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Vincular item existente</DialogTitle>
+            <DialogDescription className="text-left text-sm">
+              Apenas itens compatíveis com a hierarquia do card atual são listados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Filtrar por número…"
+              value={relatedLinkQuery}
+              onChange={(e) => setRelatedLinkQuery(e.target.value)}
+              className="font-mono tabular-nums"
+            />
+            <ul className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-border/50 p-1 text-sm">
+              {relatedLinkFiltered.length === 0 ? (
+                <li className="px-2 py-3 text-center text-xs text-muted-foreground">
+                  Nenhum card disponível para vincular.
+                </li>
+              ) : (
+                relatedLinkFiltered.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-muted/60"
+                      onClick={() => {
+                        if (!detailCard) return;
+                        const r = addRelatedCard(detailCard.id, c.id);
+                        if (!r.ok) {
+                          toast.error(r.error ?? "Não foi possível vincular.");
+                          return;
+                        }
+                        toast.success(`Vinculado #${c.workItemNumber}.`);
+                        setRelatedLinkOpen(false);
+                        setRelatedLinkQuery("");
+                      }}
+                    >
+                      <span className="font-mono font-semibold text-primary">#{c.workItemNumber}</span>
+                      <span className="min-w-0 truncate">{c.title}</span>
+                      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                        {TYPE_SINGULAR[c.type]}
+                      </span>
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRelatedLinkOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -10,6 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { htmlToMarkdown, looksLikeMarkdown, markdownToHtml } from "@/lib/markdown";
 import {
+  formatCardMentionChunk,
+  getCaretClientRect,
+  getMentionRange,
+  getProseMirrorMentionAnchorRect,
+  placeMentionPanel,
+} from "@/lib/cardMention";
+import {
   Bold,
   Code2,
   ImagePlus,
@@ -22,6 +29,20 @@ import {
   Underline as UnderlineIcon,
 } from "lucide-react";
 
+export type RichTextCardMentionProps = {
+  /** Identificador para o pai limpar só o estado deste editor (ex.: detail-desc). */
+  mentionTargetId: string;
+  onMentionChange: (
+    state: null | {
+      query: string;
+      pos: { top: number; left: number };
+      apply: (workItemNumber: number, title: string) => void;
+    },
+  ) => void;
+  /** Chamado ao focar o editor (limpar menção aberta noutro campo). */
+  onFieldFocus?: () => void;
+};
+
 type RichTextEditorProps = {
   /** Markdown persistido. */
   value: string;
@@ -31,6 +52,8 @@ type RichTextEditorProps = {
   minHeightClass?: string;
   /** Remontar quando o card muda. */
   instanceKey: string;
+  /** Referência a cards com `#` (TipTap ou textarea Markdown). */
+  cardMention?: RichTextCardMentionProps;
 };
 
 function setLink(editor: Editor) {
@@ -52,10 +75,14 @@ export function RichTextEditor({
   className,
   minHeightClass = "min-h-[120px]",
   instanceKey,
+  cardMention,
 }: RichTextEditorProps) {
   const [markdownMode, setMarkdownMode] = useState(false);
   const [draftMd, setDraftMd] = useState(value);
   const editorRef = useRef<Editor | null>(null);
+  const mdTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const cardMentionRef = useRef(cardMention);
+  cardMentionRef.current = cardMention;
 
   useEffect(() => {
     if (markdownMode) setDraftMd(value);
@@ -112,6 +139,129 @@ export function RichTextEditor({
     editor.commands.setContent(markdownToHtml(value));
   }, [editor, value, markdownMode, instanceKey]);
 
+  const checkMentionTipTap = useCallback(() => {
+    const cm = cardMentionRef.current;
+    if (!cm?.onMentionChange) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const ed = editorRef.current;
+        if (!ed) return;
+        const cm2 = cardMentionRef.current;
+        if (!cm2?.onMentionChange) return;
+        if (ed.isActive("codeBlock")) {
+          cm2.onMentionChange(null);
+          return;
+        }
+        const { from } = ed.state.selection;
+        const textBefore = ed.state.doc.textBetween(0, from, "\n");
+        const range = getMentionRange(textBefore, textBefore.length);
+        if (!range) {
+          cm2.onMentionChange(null);
+          return;
+        }
+        const caretRect = getProseMirrorMentionAnchorRect(ed.view, from);
+        const pos = placeMentionPanel(caretRect, 288, 260, { placement: "inline-end" });
+        cm2.onMentionChange({
+          query: range.query,
+          pos,
+          apply: (workItemNumber: number, title: string) => {
+            const ed3 = editorRef.current;
+            if (!ed3) return;
+            const chunk = formatCardMentionChunk(workItemNumber, title);
+            const f = ed3.state.selection.from;
+            const tb = ed3.state.doc.textBetween(0, f, "\n");
+            const r = getMentionRange(tb, tb.length);
+            if (!r) return;
+            const replaceStart = f - (tb.length - r.start);
+            ed3.chain().focus().deleteRange({ from: replaceStart, to: f }).insertContent(chunk).run();
+          },
+        });
+      });
+    });
+  }, []);
+
+  const syncMentionMarkdown = useCallback((ta: HTMLTextAreaElement) => {
+    const cm = cardMentionRef.current;
+    if (!cm?.onMentionChange) return;
+    const val = ta.value;
+    const caret = ta.selectionStart ?? val.length;
+    const range = getMentionRange(val, caret);
+    if (!range) {
+      cm.onMentionChange(null);
+      return;
+    }
+    const rect = getCaretClientRect(ta, range.end);
+    const pos = placeMentionPanel(rect, 288, 260, { placement: "inline-end" });
+    cm.onMentionChange({
+      query: range.query,
+      pos,
+      apply: (workItemNumber: number, title: string) => {
+        const ta = mdTextareaRef.current;
+        if (!ta) return;
+        const v = ta.value;
+        const r = getMentionRange(v, ta.selectionStart ?? v.length);
+        if (!r) return;
+        const chunk = formatCardMentionChunk(workItemNumber, title);
+        const next = v.slice(0, r.start) + chunk + v.slice(r.end);
+        setDraftMd(next);
+        onChange(next);
+        queueMicrotask(() => {
+          ta.focus();
+          const p = r.start + chunk.length;
+          ta.setSelectionRange(p, p);
+        });
+      },
+    });
+  }, [onChange]);
+
+  useEffect(() => {
+    if (!editor || markdownMode || !cardMention) return;
+    const run = () => checkMentionTipTap();
+    editor.on("transaction", run);
+    editor.on("selectionUpdate", run);
+    return () => {
+      editor.off("transaction", run);
+      editor.off("selectionUpdate", run);
+      cardMentionRef.current?.onMentionChange?.(null);
+    };
+  }, [editor, markdownMode, cardMention?.mentionTargetId, checkMentionTipTap]);
+
+  /** Scroll em contentores com overflow não propaga para `window`; re-medir o painel de menção. */
+  useEffect(() => {
+    if (!editor || markdownMode || !cardMention) return;
+    const root = editor.view.dom as HTMLElement;
+    const scrollables: HTMLElement[] = [];
+    for (let p: HTMLElement | null = root; p; p = p.parentElement) {
+      const st = window.getComputedStyle(p);
+      const oy = st.overflowY;
+      const ox = st.overflowX;
+      if (
+        oy === "auto" ||
+        oy === "scroll" ||
+        oy === "overlay" ||
+        ox === "auto" ||
+        ox === "scroll" ||
+        ox === "overlay"
+      ) {
+        scrollables.push(p);
+      }
+    }
+    let raf = 0;
+    const onScrollOrResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => checkMentionTipTap());
+    };
+    scrollables.forEach((el) => el.addEventListener("scroll", onScrollOrResize, { passive: true }));
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      cancelAnimationFrame(raf);
+      scrollables.forEach((el) => el.removeEventListener("scroll", onScrollOrResize));
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [editor, markdownMode, cardMention?.mentionTargetId, checkMentionTipTap]);
+
   const addImage = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
@@ -140,6 +290,7 @@ export function RichTextEditor({
   }
 
   const toggleMarkdown = () => {
+    cardMentionRef.current?.onMentionChange?.(null);
     if (markdownMode) {
       const md = draftMd;
       onChange(md);
@@ -153,6 +304,8 @@ export function RichTextEditor({
 
   return (
     <div
+      data-card-mention-root
+      onFocusCapture={() => cardMention?.onFieldFocus?.()}
       className={cn(
         "rounded-md border border-border/60 bg-background overflow-hidden transition-shadow",
         "focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/40",
@@ -222,12 +375,16 @@ export function RichTextEditor({
 
       {markdownMode ? (
         <Textarea
+          ref={mdTextareaRef}
           value={draftMd}
           onChange={(e) => {
             const v = e.target.value;
             setDraftMd(v);
             onChange(v);
+            queueMicrotask(() => syncMentionMarkdown(e.target));
           }}
+          onSelect={(e) => syncMentionMarkdown(e.target as HTMLTextAreaElement)}
+          onKeyUp={(e) => syncMentionMarkdown(e.target as HTMLTextAreaElement)}
           className={cn("min-h-[140px] resize-y rounded-none border-0 font-mono text-sm", minHeightClass)}
           placeholder="Markdown…"
         />

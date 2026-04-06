@@ -25,8 +25,17 @@ import {
 } from "@/lib/passwordPolicy";
 
 const Usuarios = () => {
-  const { user, listUsers, createUser, deleteUser, isOwner, clientAssignments, assignClientToUser, setBoardSettingsPermission } =
-    useAuth();
+  const {
+    user,
+    listUsers,
+    createUser,
+    deleteUser,
+    isOwner,
+    clientAssignments,
+    assignClientToUser,
+    setBoardSettingsPermission,
+    setBoardDeleteCardsPermission,
+  } = useAuth();
   const rows = listUsers();
   const usersOnly = rows.filter((u) => u.role === "user");
 
@@ -36,6 +45,7 @@ const Usuarios = () => {
   const [email, setEmail] = useState("");
   const [isAdminRole, setIsAdminRole] = useState(false);
   const [grantBoardSettings, setGrantBoardSettings] = useState(false);
+  const [grantDeleteBoardCards, setGrantDeleteBoardCards] = useState(false);
   const [showInitialPassword, setShowInitialPassword] = useState(false);
   const [initialPasswordError, setInitialPasswordError] = useState(false);
 
@@ -77,6 +87,7 @@ const Usuarios = () => {
       email,
       role: isAdminRole ? "admin" : "user",
       canManageBoard: isAdminRole ? undefined : grantBoardSettings,
+      canDeleteBoardCards: isAdminRole ? undefined : grantDeleteBoardCards,
     });
     if (!res.ok) {
       toast.error(res.error || "Não foi possível criar o usuário.");
@@ -92,6 +103,7 @@ const Usuarios = () => {
     setEmail("");
     setIsAdminRole(false);
     setGrantBoardSettings(false);
+    setGrantDeleteBoardCards(false);
   };
 
   const handleDelete = (uname: string) => {
@@ -184,22 +196,36 @@ const Usuarios = () => {
             checked={isAdminRole}
             onChange={(e) => {
               setIsAdminRole(e.target.checked);
-              if (e.target.checked) setGrantBoardSettings(false);
+              if (e.target.checked) {
+                setGrantBoardSettings(false);
+                setGrantDeleteBoardCards(false);
+              }
             }}
             className="rounded border-border"
           />
           <span className="text-sm text-muted-foreground">Conceder perfil de administrador</span>
         </label>
         {!isAdminRole && (
-          <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={grantBoardSettings}
-              onChange={(e) => setGrantBoardSettings(e.target.checked)}
-              className="rounded border-border"
-            />
-            <span className="text-sm text-muted-foreground">Permitir configurar Board Kanban (colunas e settings)</span>
-          </label>
+          <>
+            <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={grantBoardSettings}
+                onChange={(e) => setGrantBoardSettings(e.target.checked)}
+                className="rounded border-border"
+              />
+              <span className="text-sm text-muted-foreground">Permitir configurar Board Kanban (colunas e settings)</span>
+            </label>
+            <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={grantDeleteBoardCards}
+                onChange={(e) => setGrantDeleteBoardCards(e.target.checked)}
+                className="rounded border-border"
+              />
+              <span className="text-sm text-muted-foreground">Permitir excluir cards no Board</span>
+            </label>
+          </>
         )}
         <Button type="button" className="mt-4 gradient-brand text-primary-foreground" onClick={handleCreate}>
           Criar usuário
@@ -325,19 +351,38 @@ const Usuarios = () => {
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                   {u.role === "user" && (
-                    <div className="flex items-center gap-2 mt-2">
-                      <Switch
-                        id={`board-${u.username}`}
-                        checked={u.canManageBoard === true}
-                        onCheckedChange={(checked) => {
-                          const res = setBoardSettingsPermission(u.username, checked);
-                          if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
-                          else toast.success(checked ? "Permissão de Board concedida." : "Permissão de Board revogada.");
-                        }}
-                      />
-                      <label htmlFor={`board-${u.username}`} className="text-xs text-muted-foreground cursor-pointer">
-                        Configurar Board (colunas)
-                      </label>
+                    <div className="flex flex-col gap-2 mt-2">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id={`board-${u.username}`}
+                          checked={u.canManageBoard === true}
+                          onCheckedChange={(checked) => {
+                            const res = setBoardSettingsPermission(u.username, checked);
+                            if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
+                            else toast.success(checked ? "Permissão de Board concedida." : "Permissão de Board revogada.");
+                          }}
+                        />
+                        <label htmlFor={`board-${u.username}`} className="text-xs text-muted-foreground cursor-pointer">
+                          Configurar Board (colunas)
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id={`board-del-${u.username}`}
+                          checked={u.canDeleteBoardCards === true}
+                          onCheckedChange={(checked) => {
+                            const res = setBoardDeleteCardsPermission(u.username, checked);
+                            if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
+                            else
+                              toast.success(
+                                checked ? "Permissão para excluir cards concedida." : "Permissão para excluir cards revogada.",
+                              );
+                          }}
+                        />
+                        <label htmlFor={`board-del-${u.username}`} className="text-xs text-muted-foreground cursor-pointer">
+                          Excluir cards no Board
+                        </label>
+                      </div>
                     </div>
                   )}
                 </div>

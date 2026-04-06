@@ -12,6 +12,8 @@ export interface User {
   avatarDataUrl?: string | null;
   /** Pode abrir Settings do Board (colunas). Admins sempre podem. */
   canManageBoard?: boolean;
+  /** Pode excluir cards no Board. Admins sempre podem. */
+  canDeleteBoardCards?: boolean;
   /** Conta criada por admin: obriga troca de senha no primeiro acesso. */
   mustChangePassword?: boolean;
 }
@@ -21,6 +23,13 @@ export function canManageKanbanBoard(u: User | null | undefined): boolean {
   if (!u) return false;
   if (u.role === "admin") return true;
   return u.canManageBoard === true;
+}
+
+/** Quem pode excluir cards do Kanban (admin ou permissão explícita). */
+export function canDeleteKanbanCards(u: User | null | undefined): boolean {
+  if (!u) return false;
+  if (u.role === "admin") return true;
+  return u.canDeleteBoardCards === true;
 }
 
 /** Conta proprietária — não pode ser excluída */
@@ -124,10 +133,13 @@ interface AuthContextType {
     email: string;
     role: "admin" | "user";
     canManageBoard?: boolean;
+    canDeleteBoardCards?: boolean;
   }) => { ok: boolean; error?: string };
   deleteUser: (username: string) => { ok: boolean; error?: string };
   /** Somente admin: concede/revoga permissão de Settings do Board (usuários não-admin). */
   setBoardSettingsPermission: (username: string, allowed: boolean) => { ok: boolean; error?: string };
+  /** Somente admin: concede/revoga permissão de excluir cards no Board (usuários não-admin). */
+  setBoardDeleteCardsPermission: (username: string, allowed: boolean) => { ok: boolean; error?: string };
   isOwner: (username: string) => boolean;
   /** Mapa clientId → username (só perfil user). Admins ignoram para visualização. */
   clientAssignments: ClientAssignmentMap;
@@ -289,7 +301,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         role: input.role,
         avatarDataUrl: null,
         ...(input.role === "user"
-          ? { mustChangePassword: true as const, canManageBoard: input.canManageBoard === true }
+          ? {
+              mustChangePassword: true as const,
+              canManageBoard: input.canManageBoard === true,
+              canDeleteBoardCards: input.canDeleteBoardCards === true,
+            }
           : { mustChangePassword: false as const }),
       };
       const nextReg = {
@@ -316,6 +332,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       syncRegistry(nextReg);
       if (user.username === key) {
         setUser((prev) => (prev && prev.username === key ? { ...prev, canManageBoard: allowed } : prev));
+      }
+      return { ok: true };
+    },
+    [user, registry, syncRegistry],
+  );
+
+  const setBoardDeleteCardsPermission = useCallback(
+    (username: string, allowed: boolean): { ok: boolean; error?: string } => {
+      if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
+      const key = username.trim();
+      const entry = registry[key];
+      if (!entry) return { ok: false, error: "Usuário não encontrado." };
+      if (entry.user.role === "admin") return { ok: true };
+      const nextReg = {
+        ...registry,
+        [key]: { ...entry, user: { ...entry.user, canDeleteBoardCards: allowed } },
+      };
+      syncRegistry(nextReg);
+      if (user.username === key) {
+        setUser((prev) => (prev && prev.username === key ? { ...prev, canDeleteBoardCards: allowed } : prev));
       }
       return { ok: true };
     },
@@ -395,6 +431,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         createUser,
         deleteUser,
         setBoardSettingsPermission,
+        setBoardDeleteCardsPermission,
         isOwner,
         clientAssignments,
         assignClientToUser,
