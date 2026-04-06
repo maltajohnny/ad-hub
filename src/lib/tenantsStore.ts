@@ -94,6 +94,11 @@ export function getTenantBySlug(slug: string): TenantRecord | undefined {
   return loadRaw().find((t) => t.slug === s);
 }
 
+export function getTenantById(id: string): TenantRecord | undefined {
+  if (!id?.trim()) return undefined;
+  return loadRaw().find((t) => t.id === id);
+}
+
 export function validateTenantSlug(slug: string): { ok: true } | { ok: false; error: string } {
   const s = slug.trim().toLowerCase();
   if (s.length < 2) return { ok: false, error: "Use pelo menos 2 caracteres no slug." };

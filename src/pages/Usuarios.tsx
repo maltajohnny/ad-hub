@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -11,13 +11,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth, OWNER_USERNAME, type User } from "@/contexts/AuthContext";
+import { useTenant } from "@/contexts/TenantContext";
+import { listTenants, getTenantById } from "@/lib/tenantsStore";
 import { Switch } from "@/components/ui/switch";
 import { clientsData } from "@/pages/Clientes";
 import { UsersRound, Trash2, Shield, User, Building2, Eye, EyeOff, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ModuleCheckboxLabel } from "@/components/ModuleCheckboxLabel";
-import { APP_MODULES, type AppModule } from "@/lib/saasTypes";
+import { APP_MODULES, type AppModule, isPlatformOperator } from "@/lib/saasTypes";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
 import {
@@ -26,7 +28,7 @@ import {
   PASSWORD_INPUT_ERROR_GLOW_CLASS,
   STRONG_PASSWORD_HINT,
 } from "@/lib/passwordPolicy";
-import { sanitizeLoginInput } from "@/lib/loginUsername";
+import { isValidLoginUsername, normalizeLoginKey, sanitizeLoginInput } from "@/lib/loginUsername";
 import {
   Dialog,
   DialogContent,
@@ -50,8 +52,25 @@ const Usuarios = () => {
     setUserAllowedModules,
     updateUserByAdmin,
   } = useAuth();
-  const rows = listUsers();
-  const usersOnly = rows.filter((u) => u.role === "user");
+  const { tenant } = useTenant();
+  const scopeTenantId = tenant?.id ?? null;
+  const platformOp = isPlatformOperator(user?.username);
+
+  const rows = useMemo(() => {
+    const all = listUsers();
+    if (!user || user.role !== "admin") return [];
+    if (platformOp) {
+      return all.filter((u) => !u.hideFromPlatformList);
+    }
+    if (!scopeTenantId) return [];
+    return all.filter(
+      (u) =>
+        u.organizationId === scopeTenantId ||
+        normalizeLoginKey(u.username) === normalizeLoginKey(user.username),
+    );
+  }, [listUsers, user, platformOp, scopeTenantId]);
+
+  const usersOnly = useMemo(() => rows.filter((u) => u.role === "user"), [rows]);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -73,21 +92,28 @@ const Usuarios = () => {
   const [permUser, setPermUser] = useState("");
 
   const [editTarget, setEditTarget] = useState<User | null>(null);
+  const [editUsername, setEditUsername] = useState("");
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editDocument, setEditDocument] = useState("");
   const [editRole, setEditRole] = useState<"admin" | "user">("user");
+  const [editDisabled, setEditDisabled] = useState(false);
   const [editNewPassword, setEditNewPassword] = useState("");
   const [showEditPw, setShowEditPw] = useState(false);
+  /** `__none__` = sem organização (conta plataforma) */
+  const [editOrganizationId, setEditOrganizationId] = useState<string>("__none__");
 
   const openEdit = (u: User) => {
     setEditTarget(u);
+    setEditUsername(u.username);
+    setEditOrganizationId(u.organizationId ?? "__none__");
     setEditName(u.name);
     setEditEmail(u.email);
     setEditPhone(u.phone ?? "");
     setEditDocument(u.document ?? "");
     setEditRole(u.role);
+    setEditDisabled(!!u.disabled);
     setEditNewPassword("");
     setShowEditPw(false);
   };
@@ -98,14 +124,38 @@ const Usuarios = () => {
       toast.error("A nova senha deve cumprir a política de senha forte.");
       return;
     }
-    const res = updateUserByAdmin(editTarget.username, {
-      name: editName,
-      email: editEmail,
-      phone: editPhone,
-      document: editDocument,
-      role: isOwner(editTarget.username) ? undefined : editRole,
-      newPassword: editNewPassword.trim() ? editNewPassword.trim() : undefined,
-    });
+    const nextLogin = sanitizeLoginInput(editUsername);
+    const owner = isOwner(editTarget.username);
+    if (!owner) {
+      if (!isValidLoginUsername(nextLogin)) {
+        toast.error("Login inválido: sem espaços nem vírgulas, até 80 caracteres.");
+        return;
+      }
+      if (normalizeLoginKey(nextLogin) !== normalizeLoginKey(editTarget.username) && !nextLogin) {
+        toast.error("Indique um login válido.");
+        return;
+      }
+    }
+    const loginChanged = !owner && normalizeLoginKey(nextLogin) !== normalizeLoginKey(editTarget.username);
+    const res = updateUserByAdmin(
+      editTarget.username,
+      {
+        ...(loginChanged ? { newUsername: nextLogin } : {}),
+        name: editName,
+        email: editEmail,
+        phone: editPhone,
+        document: editDocument,
+        role: owner ? undefined : editRole,
+        newPassword: editNewPassword.trim() ? editNewPassword.trim() : undefined,
+        ...(!owner ? { disabled: editDisabled } : {}),
+        ...(platformOp && !owner
+          ? {
+              organizationId: editOrganizationId === "__none__" ? null : editOrganizationId,
+            }
+          : {}),
+      },
+      platformOp ? null : scopeTenantId,
+    );
     if (!res.ok) {
       toast.error(res.error ?? "Não foi possível guardar.");
       return;
@@ -154,6 +204,10 @@ const Usuarios = () => {
       setInitialPasswordError(true);
       return;
     }
+    if (!platformOp && !scopeTenantId) {
+      toast.error("Selecione uma organização no contexto da plataforma para criar utilizadores.");
+      return;
+    }
     const mods = APP_MODULES.filter((m) => modCreate[m]);
     const res = createUser({
       username,
@@ -165,6 +219,7 @@ const Usuarios = () => {
       canDeleteBoardCards: isAdminRole ? undefined : grantDeleteBoardCards,
       allowedModules:
         !isAdminRole && mods.length < APP_MODULES.length ? mods : undefined,
+      scopeTenantId: platformOp ? null : scopeTenantId,
     });
     if (!res.ok) {
       toast.error(res.error || "Não foi possível criar o usuário.");
@@ -185,7 +240,7 @@ const Usuarios = () => {
   };
 
   const handleDelete = (uname: string) => {
-    const res = deleteUser(uname);
+    const res = deleteUser(uname, platformOp ? null : scopeTenantId);
     if (!res.ok) {
       toast.error(res.error || "Não foi possível excluir.");
       return;
@@ -200,6 +255,12 @@ const Usuarios = () => {
         <p className="text-muted-foreground text-sm mt-1">
           Crie logins com perfil de administrador ou usuário. Para perfil padrão, defina quais módulos do menu ficam visíveis.
         </p>
+        {!platformOp && user?.role === "admin" && !scopeTenantId && (
+          <p className="text-sm text-amber-700 dark:text-amber-400/90 mt-2">
+            Escolha uma organização no contexto da aplicação (menu lateral / organização ativa) para gerir ou criar
+            utilizadores desta organização.
+          </p>
+        )}
       </div>
 
       <Card className="glass-card p-5 border-border/60">
@@ -365,6 +426,7 @@ const Usuarios = () => {
               const res = setUserAllowedModules(
                 permUser,
                 mods.length === APP_MODULES.length ? null : mods,
+                platformOp ? null : scopeTenantId,
               );
               if (!res.ok) toast.error(res.error ?? "Erro");
               else toast.success("Módulos atualizados.");
@@ -429,12 +491,20 @@ const Usuarios = () => {
                             value={mode}
                             onValueChange={(v) => {
                               if (v === "permitir") {
-                                const res = assignClientToUser(c.id, permUser);
+                                const res = assignClientToUser(
+                                  c.id,
+                                  permUser,
+                                  platformOp ? null : scopeTenantId,
+                                );
                                 if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
                                 else toast.success("Permissão atualizada.");
                               } else {
                                 if (assigned === permUser) {
-                                  const res = assignClientToUser(c.id, null);
+                                  const res = assignClientToUser(
+                                    c.id,
+                                    null,
+                                    platformOp ? null : scopeTenantId,
+                                  );
                                   if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
                                   else toast.success("Permissão atualizada.");
                                 }
@@ -491,8 +561,21 @@ const Usuarios = () => {
                         Owner
                       </Badge>
                     )}
+                    {u.disabled && (
+                      <Badge variant="outline" className="text-[10px] border-muted-foreground/50 text-muted-foreground">
+                        Desativado
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                  {u.organizationId ? (
+                    <p className="text-[10px] text-muted-foreground/90 mt-0.5">
+                      Organização:{" "}
+                      <span className="text-foreground/90">
+                        {getTenantById(u.organizationId)?.displayName ?? u.organizationId}
+                      </span>
+                    </p>
+                  ) : null}
                   {u.role === "user" && (
                     <div className="flex flex-col gap-2 mt-2">
                       <div className="flex items-center gap-2">
@@ -500,7 +583,11 @@ const Usuarios = () => {
                           id={`board-${u.username}`}
                           checked={u.canManageBoard === true}
                           onCheckedChange={(checked) => {
-                            const res = setBoardSettingsPermission(u.username, checked);
+                            const res = setBoardSettingsPermission(
+                              u.username,
+                              checked,
+                              platformOp ? null : scopeTenantId,
+                            );
                             if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
                             else toast.success(checked ? "Permissão de Board concedida." : "Permissão de Board revogada.");
                           }}
@@ -514,7 +601,11 @@ const Usuarios = () => {
                           id={`board-del-${u.username}`}
                           checked={u.canDeleteBoardCards === true}
                           onCheckedChange={(checked) => {
-                            const res = setBoardDeleteCardsPermission(u.username, checked);
+                            const res = setBoardDeleteCardsPermission(
+                              u.username,
+                              checked,
+                              platformOp ? null : scopeTenantId,
+                            );
                             if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
                             else
                               toast.success(
@@ -529,7 +620,25 @@ const Usuarios = () => {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
+                  {!owner && (
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <Switch
+                        id={`account-active-${u.username.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
+                        checked={!u.disabled}
+                        onCheckedChange={(active) => {
+                          const res = updateUserByAdmin(
+                            u.username,
+                            { disabled: !active },
+                            platformOp ? null : scopeTenantId,
+                          );
+                          if (!res.ok) toast.error(res.error ?? "Erro");
+                          else toast.success(active ? "Conta reativada." : "Conta desativada.");
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">Ativa</span>
+                    </label>
+                  )}
                   <Button
                     type="button"
                     variant="ghost"
@@ -572,6 +681,61 @@ const Usuarios = () => {
             <DialogTitle>Editar conta {editTarget ? `@${editTarget.username}` : ""}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-2">
+            {editTarget && !isOwner(editTarget.username) ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-login">Login</Label>
+                <Input
+                  id="edit-login"
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(sanitizeLoginInput(e.target.value))}
+                  className="h-10 font-mono text-sm"
+                  autoComplete="off"
+                />
+              </div>
+            ) : editTarget ? (
+              <p className="text-xs text-muted-foreground rounded-md border border-border/50 bg-secondary/30 px-3 py-2">
+                Login <span className="font-mono text-foreground">@{editTarget.username}</span> é fixo na conta
+                proprietária.
+              </p>
+            ) : null}
+            {editTarget && platformOp && !isOwner(editTarget.username) && (
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-org">Organização</Label>
+                <Select value={editOrganizationId} onValueChange={setEditOrganizationId}>
+                  <SelectTrigger id="edit-org" className="h-10 bg-secondary/50 border-border/50">
+                    <SelectValue placeholder="Selecionar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nenhuma (conta plataforma)</SelectItem>
+                    {listTenants().map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.displayName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Ao vincular a uma organização, o dashboard, módulos e branding seguem essa org ao iniciar sessão.
+                </p>
+              </div>
+            )}
+            {editTarget && !isOwner(editTarget.username) && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-secondary/20 px-3 py-2.5">
+                <div className="min-w-0">
+                  <Label htmlFor="edit-conta-ativa" className="text-sm cursor-pointer">
+                    Conta ativa
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                    Se desativada, não pode iniciar sessão até um administrador reativar.
+                  </p>
+                </div>
+                <Switch
+                  id="edit-conta-ativa"
+                  checked={!editDisabled}
+                  onCheckedChange={(c) => setEditDisabled(!c)}
+                />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="edit-name">Nome</Label>
               <Input id="edit-name" value={editName} onChange={(e) => setEditName(e.target.value)} className="h-10" />

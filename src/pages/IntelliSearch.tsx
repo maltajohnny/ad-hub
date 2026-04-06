@@ -24,8 +24,6 @@ import {
   Store,
   Loader2,
   Search,
-  Wand2,
-  Sparkles,
 } from "lucide-react";
 import { IntelliSearchNewBadge } from "@/components/IntelliSearchNewBadge";
 
@@ -118,13 +116,9 @@ export default function IntelliSearch() {
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl flex flex-wrap items-center gap-x-2 gap-y-2">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/25">
-                <Wand2 className="h-5 w-5" aria-hidden />
-              </span>
-              <Sparkles className="h-6 w-6 shrink-0 text-cyan-400/90" aria-hidden />
+            <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl flex flex-wrap items-center justify-between gap-3 gap-y-2">
               <span>IntelliSearch</span>
-              <IntelliSearchNewBadge className="scale-95 sm:scale-100" />
+              <IntelliSearchNewBadge className="scale-95 sm:scale-100 shrink-0" />
             </h1>
             <p className="mt-1 text-sm text-muted-foreground max-w-2xl leading-relaxed">
               Pesquise qualquer negócio local (não precisa estar cadastrado na plataforma). Análise de saúde do perfil no

@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useRef } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate, Outlet } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
@@ -23,7 +23,8 @@ import Landing from "@/pages/Landing";
 import Organizacoes from "@/pages/Organizacoes";
 import IntelliSearch from "@/pages/IntelliSearch";
 import { TenantProvider, useTenant } from "@/contexts/TenantContext";
-import { defaultPathAfterLogin } from "@/lib/saasTypes";
+import { defaultPathAfterLogin, isPlatformOperator } from "@/lib/saasTypes";
+import { getTenantById } from "@/lib/tenantsStore";
 
 const queryClient = new QueryClient();
 
@@ -36,12 +37,37 @@ const AdminRoute = ({ children }: { children: ReactNode }) => {
   return <>{children}</>;
 };
 
+/** Alinha o contexto de organização (sidebar, módulos, branding) ao vínculo `user.organizationId`. */
+const TenantOrganizationSync = () => {
+  const { user } = useAuth();
+  const { setActiveSlug } = useTenant();
+  const prevOrgId = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!user) {
+      prevOrgId.current = undefined;
+      return;
+    }
+    const cur = user.organizationId;
+    if (cur) {
+      const t = getTenantById(cur);
+      if (t) setActiveSlug(t.slug);
+    } else if (prevOrgId.current && !cur && !isPlatformOperator(user.username)) {
+      setActiveSlug(null);
+    }
+    prevOrgId.current = cur;
+  }, [user, setActiveSlug]);
+
+  return null;
+};
+
 /** Layout único para área autenticada — evita `<Routes>` aninhados sob `/*` (ecrã em branco no RR v6). */
 const ProtectedLayout = () => {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   return (
     <AppLayout>
+      <TenantOrganizationSync />
       <Outlet />
     </AppLayout>
   );

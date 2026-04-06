@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react";
 import { isStrongPassword } from "@/lib/passwordPolicy";
-import type { AppModule } from "@/lib/saasTypes";
+import { isPlatformOperator, type AppModule } from "@/lib/saasTypes";
 import { isValidLoginUsername, normalizeLoginKey, sanitizeLoginInput } from "@/lib/loginUsername";
 import { migrateStoredUsernameInLocalStorage } from "@/lib/migrateStoredUsername";
 
@@ -21,6 +21,18 @@ export interface User {
   mustChangePassword?: boolean;
   /** Módulos do menu visíveis (só perfil user). `undefined` = todos. */
   allowedModules?: AppModule[] | null;
+  /** Conta desativada por admin — não pode iniciar sessão até ser reativada. */
+  disabled?: boolean;
+  /**
+   * Id da organização (tenant) a que esta conta pertence quando criada por um admin de organização.
+   * Ausente = conta ao nível da plataforma (visível só a operadores como owner/qtrafficadmin).
+   */
+  organizationId?: string;
+  /**
+   * Criado por admin de organização — não aparece na lista de utilizadores dos operadores da plataforma.
+   * Contas geridas pelo owner (vínculo manual) mantêm este campo ausente/falso.
+   */
+  hideFromPlatformList?: boolean;
 }
 
 /** Quem pode gerir colunas e settings do Kanban (admin ou permissão explícita). */
@@ -39,6 +51,23 @@ export function canDeleteKanbanCards(u: User | null | undefined): boolean {
 
 /** Conta proprietária — não pode ser excluída */
 export const OWNER_USERNAME = "admin";
+
+/** Operadores da plataforma gerem qualquer conta; admins de org só contas da sua org (e a própria conta). */
+function actorCanManageTargetUser(
+  actor: User | null,
+  target: User,
+  scopeTenantId: string | null,
+): boolean {
+  if (!actor || actor.role !== "admin") return false;
+  if (isPlatformOperator(actor.username)) {
+    return true;
+  }
+  if (!scopeTenantId) return false;
+  if (normalizeLoginKey(target.username) === normalizeLoginKey(actor.username)) {
+    return true;
+  }
+  return target.organizationId === scopeTenantId;
+}
 
 const STORAGE_KEY = "norter_user_registry";
 const CLIENT_ASSIGNMENTS_KEY = "norter_client_assignments";
@@ -155,7 +184,7 @@ function persistRegistry(next: Record<string, RegistryEntry>) {
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string, password: string) => User | null;
+  login: (username: string, password: string) => { user: User | null; accountDisabled?: boolean };
   logout: () => void;
   updateProfile: (data: Partial<Omit<User, "username">>) => void;
   /** Nome exibido, contactos e login (exceto o owner `admin`, cujo login não pode mudar). */
@@ -179,29 +208,50 @@ interface AuthContextType {
     canManageBoard?: boolean;
     canDeleteBoardCards?: boolean;
     allowedModules?: AppModule[] | null;
+    /** Para admin de organização: id do tenant. Operadores da plataforma passam `null`. */
+    scopeTenantId: string | null;
   }) => { ok: boolean; error?: string };
-  setUserAllowedModules: (username: string, modules: AppModule[] | null) => { ok: boolean; error?: string };
-  deleteUser: (username: string) => { ok: boolean; error?: string };
+  setUserAllowedModules: (
+    username: string,
+    modules: AppModule[] | null,
+    scopeTenantId: string | null,
+  ) => { ok: boolean; error?: string };
+  deleteUser: (username: string, scopeTenantId: string | null) => { ok: boolean; error?: string };
   /** Admin: editar dados de qualquer conta (exceto rebaixar o owner). */
   updateUserByAdmin: (
     username: string,
     patch: {
+      newUsername?: string;
       name?: string;
       email?: string;
       phone?: string;
       document?: string;
       role?: "admin" | "user";
       newPassword?: string;
+      disabled?: boolean;
+      /** Só operadores da plataforma; `null` remove o vínculo. */
+      organizationId?: string | null;
     },
+    scopeTenantId: string | null,
   ) => { ok: boolean; error?: string };
   /** Somente admin: concede/revoga permissão de Settings do Board (usuários não-admin). */
-  setBoardSettingsPermission: (username: string, allowed: boolean) => { ok: boolean; error?: string };
+  setBoardSettingsPermission: (username: string, allowed: boolean, scopeTenantId: string | null) => {
+    ok: boolean;
+    error?: string;
+  };
   /** Somente admin: concede/revoga permissão de excluir cards no Board (usuários não-admin). */
-  setBoardDeleteCardsPermission: (username: string, allowed: boolean) => { ok: boolean; error?: string };
+  setBoardDeleteCardsPermission: (username: string, allowed: boolean, scopeTenantId: string | null) => {
+    ok: boolean;
+    error?: string;
+  };
   isOwner: (username: string) => boolean;
   /** Mapa clientId → username (só perfil user). Admins ignoram para visualização. */
   clientAssignments: ClientAssignmentMap;
-  assignClientToUser: (clientId: number, username: string | null) => { ok: boolean; error?: string };
+  assignClientToUser: (
+    clientId: number,
+    username: string | null,
+    scopeTenantId: string | null,
+  ) => { ok: boolean; error?: string };
   canUserSeeClient: (clientId: number) => boolean;
 }
 
@@ -231,26 +281,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     else sessionStorage.removeItem("norter_user");
   }, [user]);
 
-  /** Mantém a sessão alinhada ao registo (ex.: `mustChangePassword` após refresh). */
+  /** Mantém a sessão alinhada ao registo (ex.: `mustChangePassword` após refresh). Desliga se a conta for desativada. */
   useEffect(() => {
     setUser((prev) => {
       if (!prev) return prev;
-      const entry = registry[prev.username];
+      const key = normalizeLoginKey(prev.username);
+      const entry = registry[key];
       if (!entry) return prev;
+      if (entry.user.disabled === true) {
+        return null;
+      }
       return { ...entry.user };
     });
   }, [registry]);
 
   const login = useCallback(
-    (username: string, password: string): User | null => {
+    (username: string, password: string): { user: User | null; accountDisabled?: boolean } => {
       const key = username.trim().toLowerCase();
       const entry = registry[key];
-      if (entry && entry.password === password) {
-        const u = { ...entry.user };
-        setUser(u);
-        return u;
+      if (!entry || entry.password !== password) {
+        return { user: null };
       }
-      return null;
+      if (entry.user.disabled === true) {
+        return { user: null, accountDisabled: true };
+      }
+      const u = { ...entry.user };
+      setUser(u);
+      return { user: u };
     },
     [registry],
   );
@@ -406,11 +463,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [registry]);
 
   const setUserAllowedModules = useCallback(
-    (username: string, modules: AppModule[] | null): { ok: boolean; error?: string } => {
+    (
+      username: string,
+      modules: AppModule[] | null,
+      scopeTenantId: string | null,
+    ): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
       const key = normalizeLoginKey(username);
       const entry = registry[key];
       if (!entry) return { ok: false, error: "Usuário não encontrado." };
+      if (!actorCanManageTargetUser(user, entry.user, scopeTenantId)) {
+        return { ok: false, error: "Sem permissão para alterar este utilizador." };
+      }
       if (entry.user.role !== "user") return { ok: false, error: "Apenas para perfil padrão." };
       const nextUser: User = {
         ...entry.user,
@@ -434,8 +498,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       canManageBoard?: boolean;
       canDeleteBoardCards?: boolean;
       allowedModules?: AppModule[] | null;
+      scopeTenantId: string | null;
     }): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
+      let orgId: string | undefined;
+      if (isPlatformOperator(user.username)) {
+        orgId = undefined;
+      } else {
+        if (!input.scopeTenantId) {
+          return {
+            ok: false,
+            error: "Selecione uma organização (contexto) para criar utilizadores nesta conta.",
+          };
+        }
+        orgId = input.scopeTenantId;
+      }
       const u = normalizeLoginKey(sanitizeLoginInput(input.username));
       if (!isValidLoginUsername(sanitizeLoginInput(input.username))) {
         return { ok: false, error: "Login inválido: sem espaços nem vírgulas, até 80 caracteres." };
@@ -461,6 +538,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         document: "",
         role: input.role,
         avatarDataUrl: null,
+        ...(orgId ? { organizationId: orgId, hideFromPlatformList: true as const } : {}),
         ...(input.role === "user"
           ? {
               mustChangePassword: true as const,
@@ -481,11 +559,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const setBoardSettingsPermission = useCallback(
-    (username: string, allowed: boolean): { ok: boolean; error?: string } => {
+    (
+      username: string,
+      allowed: boolean,
+      scopeTenantId: string | null,
+    ): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
       const key = normalizeLoginKey(username);
       const entry = registry[key];
       if (!entry) return { ok: false, error: "Usuário não encontrado." };
+      if (!actorCanManageTargetUser(user, entry.user, scopeTenantId)) {
+        return { ok: false, error: "Sem permissão para alterar este utilizador." };
+      }
       if (entry.user.role === "admin") return { ok: true };
       const nextReg = {
         ...registry,
@@ -501,11 +586,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const setBoardDeleteCardsPermission = useCallback(
-    (username: string, allowed: boolean): { ok: boolean; error?: string } => {
+    (
+      username: string,
+      allowed: boolean,
+      scopeTenantId: string | null,
+    ): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
-      const key = username.trim();
+      const key = normalizeLoginKey(username);
       const entry = registry[key];
       if (!entry) return { ok: false, error: "Usuário não encontrado." };
+      if (!actorCanManageTargetUser(user, entry.user, scopeTenantId)) {
+        return { ok: false, error: "Sem permissão para alterar este utilizador." };
+      }
       if (entry.user.role === "admin") return { ok: true };
       const nextReg = {
         ...registry,
@@ -524,27 +616,74 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     (
       username: string,
       patch: {
+        newUsername?: string;
         name?: string;
         email?: string;
         phone?: string;
         document?: string;
         role?: "admin" | "user";
         newPassword?: string;
+        disabled?: boolean;
+        organizationId?: string | null;
       },
+      scopeTenantId: string | null,
     ): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
       const key = normalizeLoginKey(username);
       const entry = registry[key];
       if (!entry) return { ok: false, error: "Usuário não encontrado." };
+      if (!actorCanManageTargetUser(user, entry.user, scopeTenantId)) {
+        return { ok: false, error: "Sem permissão para alterar este utilizador." };
+      }
       if (key === OWNER_USERNAME && patch.role === "user") {
         return { ok: false, error: "A conta proprietária deve permanecer como administrador." };
       }
+      if (key === OWNER_USERNAME && patch.disabled === true) {
+        return { ok: false, error: "A conta proprietária não pode ser desativada." };
+      }
 
       let nextUser: User = { ...entry.user };
+      let nextKey = key;
+
+      if (patch.newUsername !== undefined) {
+        const raw = sanitizeLoginInput(patch.newUsername);
+        if (!isValidLoginUsername(raw)) {
+          return { ok: false, error: "Login inválido: sem espaços nem vírgulas, até 80 caracteres." };
+        }
+        const normalized = normalizeLoginKey(raw);
+        if (key === OWNER_USERNAME && normalized !== OWNER_USERNAME) {
+          return { ok: false, error: "O login do administrador principal não pode ser alterado." };
+        }
+        if (normalized !== key && registry[normalized]) {
+          return { ok: false, error: "Este login já está em uso." };
+        }
+        nextKey = normalized;
+        nextUser = { ...nextUser, username: normalized };
+      }
+
       if (patch.name !== undefined) nextUser.name = patch.name.trim() || nextUser.username;
       if (patch.email !== undefined) nextUser.email = patch.email.trim();
       if (patch.phone !== undefined) nextUser.phone = patch.phone.trim();
       if (patch.document !== undefined) nextUser.document = patch.document.trim();
+
+      if (patch.disabled !== undefined) {
+        nextUser.disabled = patch.disabled ? true : undefined;
+      }
+
+      if (patch.organizationId !== undefined) {
+        if (!isPlatformOperator(user.username)) {
+          return { ok: false, error: "Apenas operadores da plataforma podem alterar o vínculo de organização." };
+        }
+        if (key === OWNER_USERNAME) {
+          return { ok: false, error: "A conta proprietária não pode ser vinculada a uma organização." };
+        }
+        if (patch.organizationId === null || patch.organizationId === "") {
+          delete nextUser.organizationId;
+        } else {
+          nextUser.organizationId = patch.organizationId;
+        }
+        nextUser.hideFromPlatformList = false;
+      }
 
       if (patch.role !== undefined) {
         nextUser.role = patch.role;
@@ -570,23 +709,46 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         nextPassword = patch.newPassword.trim();
       }
 
-      const nextReg = {
-        ...registry,
-        [key]: { ...entry, password: nextPassword, user: nextUser },
-      };
+      let nextReg: Record<string, RegistryEntry> = { ...registry };
+      if (nextKey !== key) {
+        delete nextReg[key];
+        migrateStoredUsernameInLocalStorage(key, nextKey);
+        setClientAssignments((prev) => {
+          const next = { ...prev };
+          for (const cidStr of Object.keys(next)) {
+            const cid = parseInt(cidStr, 10);
+            const v = next[cid];
+            if (v != null && normalizeLoginKey(v) === key) {
+              next[cid] = nextKey;
+            }
+          }
+          persistAssignments(next);
+          return next;
+        });
+      }
+      nextReg[nextKey] = { ...entry, password: nextPassword, user: nextUser };
       syncRegistry(nextReg);
-      if (user.username === key) setUser(nextUser);
+      setUser((prev) => {
+        if (prev && normalizeLoginKey(prev.username) === key) {
+          return nextUser;
+        }
+        return prev;
+      });
       return { ok: true };
     },
     [user, registry, syncRegistry],
   );
 
   const deleteUser = useCallback(
-    (username: string): { ok: boolean; error?: string } => {
+    (username: string, scopeTenantId: string | null): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
       const key = normalizeLoginKey(username);
       if (key === OWNER_USERNAME) return { ok: false, error: "A conta Administrador (owner) não pode ser excluída." };
-      if (!registry[key]) return { ok: false, error: "Usuário não encontrado." };
+      const entry = registry[key];
+      if (!entry) return { ok: false, error: "Usuário não encontrado." };
+      if (!actorCanManageTargetUser(user, entry.user, scopeTenantId)) {
+        return { ok: false, error: "Sem permissão para excluir este utilizador." };
+      }
       const rest = { ...registry };
       delete rest[key];
       syncRegistry(rest);
@@ -608,11 +770,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const assignClientToUser = useCallback(
-    (clientId: number, username: string | null): { ok: boolean; error?: string } => {
+    (clientId: number, username: string | null, scopeTenantId: string | null): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
       if (username !== null) {
-        const target = registry[username];
+        const nk = normalizeLoginKey(username);
+        const target = registry[nk];
         if (!target) return { ok: false, error: "Usuário não encontrado." };
+        if (!actorCanManageTargetUser(user, target.user, scopeTenantId)) {
+          return { ok: false, error: "Sem permissão para atribuir este utilizador." };
+        }
         if (target.user.role !== "user") return { ok: false, error: "Atribua apenas a usuários com perfil padrão (não admin)." };
       }
       setClientAssignments((prev) => {
@@ -620,7 +786,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (username === null) {
           delete next[clientId];
         } else {
-          next[clientId] = username;
+          next[clientId] = normalizeLoginKey(username);
         }
         persistAssignments(next);
         return next;

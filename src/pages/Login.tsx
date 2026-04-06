@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTenant } from "@/contexts/TenantContext";
-import { getTenantBySlug } from "@/lib/tenantsStore";
+import { getTenantById, getTenantBySlug } from "@/lib/tenantsStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff, LogIn } from "lucide-react";
@@ -58,15 +58,28 @@ const Login = () => {
       return;
     }
     const userKey = normalizeUsernameForLoginAttempt(username);
-    const logged = login(userKey, password);
+    const { user: logged, accountDisabled } = login(userKey, password);
+    if (accountDisabled) {
+      setError("Esta conta foi desativada. Peça a um administrador para reativá-la.");
+      return;
+    }
     if (!logged) {
       setError("Credenciais inválidas");
       return;
     }
     const orgSlug = extractOrgSlugFromUsername(username);
-    if (orgSlug) setActiveSlug(orgSlug);
-    const modulesForRedirect = orgSlug ? getTenantBySlug(orgSlug)?.enabledModules : tenant?.enabledModules;
-    navigate(defaultPathAfterLogin(logged, modulesForRedirect), { replace: true });
+    if (orgSlug) {
+      setActiveSlug(orgSlug);
+    } else if (logged.organizationId) {
+      const t = getTenantById(logged.organizationId);
+      if (t) setActiveSlug(t.slug);
+    }
+    const tenantForModules = orgSlug
+      ? getTenantBySlug(orgSlug)
+      : logged.organizationId
+        ? getTenantById(logged.organizationId)
+        : tenant;
+    navigate(defaultPathAfterLogin(logged, tenantForModules?.enabledModules), { replace: true });
   };
 
   const showLogoSrc = brand.logo ?? qtrafficFallback;

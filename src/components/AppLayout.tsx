@@ -18,8 +18,7 @@ import {
   Columns3,
   Layers2,
   Building2,
-  Wand2,
-  Sparkles,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import norterSymbol from "@/assets/norter-symbol.png";
@@ -91,7 +90,7 @@ function AppLayoutMain({ children, className }: { children: ReactNode; className
 const menuAfterClientes: MenuItem[] = [
   { icon: BarChart3, label: "Campanhas", path: "/campanhas", module: "campanhas" },
   {
-    icon: Wand2,
+    icon: Search,
     label: "IntelliSearch",
     path: "/intelli-search",
     module: "intelli-search",
@@ -417,10 +416,9 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                 />
                 {!collapsed &&
                   (item.module === "intelli-search" ? (
-                    <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-                      <Sparkles className="h-3.5 w-3.5 shrink-0 text-cyan-400/90" aria-hidden />
+                    <span className="flex min-w-0 flex-1 items-center justify-between gap-2 overflow-hidden">
                       <span className="min-w-0 truncate font-medium">IntelliSearch</span>
-                      <IntelliSearchNewBadge className="shrink-0 scale-[0.92] origin-left" />
+                      <IntelliSearchNewBadge className="shrink-0 scale-[0.92]" />
                     </span>
                   ) : (
                     <span className="truncate">{item.label}</span>
