@@ -8,51 +8,52 @@ type NavGroup = { title: string; items: NavLeaf[] };
 
 const GROUPS: NavGroup[] = [
   {
-    title: "Health Analysis",
+    title: "Análise de saúde",
     items: [
-      { to: "/intelli-search/health/complete", label: "Complete Analysis" },
-      { to: "/intelli-search/health/manual", label: "Manual Analysis" },
+      { to: "/intelli-search/health/complete", label: "Análise completa" },
+      { to: "/intelli-search/health/manual", label: "Análise manual" },
     ],
   },
   {
-    title: "Extensão & análises",
+    title: "Extensão e análises",
     items: [
-      { to: "/intelli-search/pre-analysis", label: "Pre Analysis" },
-      { to: "/intelli-search/reviews-analysis", label: "Reviews Analysis" },
-      { to: "/intelli-search/posts-analysis", label: "Posts Analysis" },
-      { to: "/intelli-search/categories-analysis", label: "Categories Analysis" },
+      { to: "/intelli-search/extension", label: "Extensão GBP Check" },
+      { to: "/intelli-search/pre-analysis", label: "Pré-análise" },
+      { to: "/intelli-search/reviews-analysis", label: "Análise de avaliações" },
+      { to: "/intelli-search/posts-analysis", label: "Análise de postagens" },
+      { to: "/intelli-search/categories-analysis", label: "Análise de categorias" },
     ],
   },
   {
     title: "Ranking",
     items: [
-      { to: "/intelli-search/ranking/analysis", label: "Ranking Analysis" },
-      { to: "/intelli-search/ranking/history", label: "Analysis History" },
+      { to: "/intelli-search/ranking/analysis", label: "Análise de ranking" },
+      { to: "/intelli-search/ranking/history", label: "Histórico de análises" },
     ],
   },
   {
     title: "Prospecção",
-    items: [{ to: "/intelli-search/prospecting/lead-finder", label: "Lead Finder" }],
+    items: [{ to: "/intelli-search/prospecting/lead-finder", label: "Buscar leads" }],
   },
   {
     title: "Métricas",
     items: [
-      { to: "/intelli-search/metrics/profile-insights", label: "Profile Insights" },
-      { to: "/intelli-search/metrics/keywords", label: "Keywords" },
-      { to: "/intelli-search/metrics/evolution", label: "Analysis Evolution" },
+      { to: "/intelli-search/metrics/profile-insights", label: "Insights do perfil" },
+      { to: "/intelli-search/metrics/keywords", label: "Palavras-chave" },
+      { to: "/intelli-search/metrics/evolution", label: "Evolução da análise" },
     ],
   },
   {
-    title: "Gestor",
+    title: "Gerenciador",
     items: [
-      { to: "/intelli-search/manager/reviews", label: "Reviews Manager" },
-      { to: "/intelli-search/manager/qa", label: "Q&A Manager" },
-      { to: "/intelli-search/manager/posts", label: "Posts Manager" },
+      { to: "/intelli-search/manager/reviews", label: "Avaliações" },
+      { to: "/intelli-search/manager/qa", label: "Perguntas e respostas" },
+      { to: "/intelli-search/manager/posts", label: "Atualizações (postagens)" },
     ],
   },
   {
     title: "Ferramentas",
-    items: [{ to: "/intelli-search/tools/performance-report", label: "Performance Report" }],
+    items: [{ to: "/intelli-search/tools/performance-report", label: "Relatório de performance" }],
   },
 ];
 

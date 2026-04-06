@@ -133,67 +133,145 @@ const App = () => (
                           path="health/manual"
                           element={
                             <IntelliSearchPlaceholder
-                              title="Manual Analysis"
-                              description="Auditoria manual de campos do perfil."
+                              title="Análise manual"
+                              description="Auditoria manual dos campos do perfil Google Business."
                             />
                           }
                         />
-                        <Route path="extension" element={<Navigate to="/intelli-search/pre-analysis" replace />} />
+                        <Route
+                          path="extension"
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Extensão GBP Check"
+                              description="Verificação rápida do perfil via extensão (fluxo em desenvolvimento)."
+                            />
+                          }
+                        />
                         <Route
                           path="pre-analysis"
-                          element={<IntelliSearchPlaceholder title="Pre Analysis" description="Pré-análise antes da auditoria completa." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Pré-análise"
+                              description="Resumo antes da auditoria completa (Google Business Profile)."
+                            />
+                          }
                         />
                         <Route
                           path="reviews-analysis"
-                          element={<IntelliSearchPlaceholder title="Reviews Analysis" description="Avaliações e respostas." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Análise de avaliações"
+                              description="Avaliações, nota média e padrões nas críticas."
+                            />
+                          }
                         />
                         <Route
                           path="posts-analysis"
-                          element={<IntelliSearchPlaceholder title="Posts Analysis" description="Posts no perfil do Google." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Análise de postagens"
+                              description="Publicações e atualizações no perfil do Google."
+                            />
+                          }
                         />
                         <Route
                           path="categories-analysis"
-                          element={<IntelliSearchPlaceholder title="Categories Analysis" description="Categorias do negócio." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Análise de categorias"
+                              description="Categorias primárias e secundárias do negócio."
+                            />
+                          }
                         />
                         <Route
                           path="ranking/analysis"
-                          element={<IntelliSearchPlaceholder title="Ranking Analysis" description="Ranking local e mapa." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Análise de ranking"
+                              description="Posição aproximada em pesquisas locais e no mapa."
+                            />
+                          }
                         />
                         <Route
                           path="ranking/history"
-                          element={<IntelliSearchPlaceholder title="Analysis History" description="Histórico de análises." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Histórico de análises"
+                              description="Registo das auditorias anteriores."
+                            />
+                          }
                         />
                         <Route
                           path="prospecting/lead-finder"
-                          element={<IntelliSearchPlaceholder title="Lead Finder" description="Prospecção por local e palavra-chave." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Buscar leads"
+                              description="Prospecção por local e palavra-chave (use também a Análise completa com SerpAPI)."
+                            />
+                          }
                         />
                         <Route
                           path="metrics/profile-insights"
-                          element={<IntelliSearchPlaceholder title="Profile Insights" description="Métricas do perfil." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Insights do perfil"
+                              description="Métricas de visualizações, cliques e chamadas."
+                            />
+                          }
                         />
                         <Route
                           path="metrics/keywords"
-                          element={<IntelliSearchPlaceholder title="Keywords" description="Palavras-chave locais." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Palavras-chave"
+                              description="Termos locais e pesquisas associadas ao negócio."
+                            />
+                          }
                         />
                         <Route
                           path="metrics/evolution"
-                          element={<IntelliSearchPlaceholder title="Analysis Evolution" description="Evolução das auditorias." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Evolução da análise"
+                              description="Tendência das auditorias ao longo do tempo."
+                            />
+                          }
                         />
                         <Route
                           path="manager/reviews"
-                          element={<IntelliSearchPlaceholder title="Reviews Manager" description="Gestão de avaliações." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Avaliações"
+                              description="Responder e organizar avaliações do perfil."
+                            />
+                          }
                         />
                         <Route
                           path="manager/qa"
-                          element={<IntelliSearchPlaceholder title="Q&A Manager" description="Perguntas e respostas." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Perguntas e respostas"
+                              description="Perguntas frequentes públicas no perfil."
+                            />
+                          }
                         />
                         <Route
                           path="manager/posts"
-                          element={<IntelliSearchPlaceholder title="Posts Manager" description="Gestão de posts." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Atualizações (postagens)"
+                              description="Criar e agendar atualizações no Google Business Profile."
+                            />
+                          }
                         />
                         <Route
                           path="tools/performance-report"
-                          element={<IntelliSearchPlaceholder title="Performance Report" description="Relatório de desempenho." />}
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Relatório de performance"
+                              description="Exportar ou partilhar relatório de desempenho."
+                            />
+                          }
                         />
                       </Route>
                       <Route path="/saude-google" element={<Navigate to="/intelli-search/health/complete" replace />} />

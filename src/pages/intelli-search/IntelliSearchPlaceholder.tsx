@@ -15,8 +15,9 @@ export default function IntelliSearchPlaceholder({
       </CardHeader>
       <CardContent>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Secção preparada para integração com a API (Places / SerpAPI / backend). Os dados reais substituirão qualquer
-          demonstração aqui.
+          Secção em desenvolvimento. A integração SerpAPI (Google Maps) já está ativa na <strong>Análise completa</strong> e
+          em <strong>Buscar leads</strong>; as restantes áreas serão ligadas ao backend à medida que os fluxos forem
+          finalizados.
         </p>
       </CardContent>
     </Card>

@@ -86,7 +86,7 @@ export default function IntelliSearchCompleteAnalysis() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl flex flex-wrap items-center justify-between gap-3 gap-y-2">
-              <span>Health Analysis — Análise completa</span>
+              <span>Análise de saúde — Análise completa</span>
               <IntelliSearchNewBadge className="scale-95 sm:scale-100 shrink-0" />
             </h1>
             <p className="mt-1 text-sm text-muted-foreground max-w-2xl leading-relaxed">
