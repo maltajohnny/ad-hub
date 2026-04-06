@@ -1,10 +1,11 @@
+import { env } from "node:process";
+
 /**
- * Leitura em runtime de variáveis de ambiente nas funções `/api`.
- * Na Vercel, `process.env.NOME` estático por vezes é inlined no bundle no deploy com valor
- * vazio se a variável não estiver disponível nessa fase; chaves dinâmicas evitam isso.
- * @see https://vercel.com/docs/projects/environment-variables
+ * SerpAPI: o nome `SERPAPI_KEY` não pode surgir como acesso estático a `process.env.*` no bundle
+ * (esbuild na Vercel pode substituir por `undefined` no deploy). O identificador é reconstruído em runtime.
  */
-export function getServerEnv(name: string): string | undefined {
-  const v = process.env[name];
+export function getSerpApiKey(): string | undefined {
+  const name = Buffer.from("U0VSUEFQSV9LRVk=", "base64").toString("utf8");
+  const v = (env as Record<string, string | undefined>)[name];
   return typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
 }

@@ -4,7 +4,7 @@
  * Requer `SERPAPI_KEY` nas variáveis de ambiente do projeto (Dashboard Vercel).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getServerEnv } from "../lib/env";
+import { getSerpApiKey } from "../lib/env";
 
 const serpBase = "https://serpapi.com/search.json";
 
@@ -258,7 +258,7 @@ function buildChecklist(b: BusinessCard, photoCount: number): { checklist: Check
 }
 
 async function fetchSerpAPI(params: URLSearchParams): Promise<Record<string, unknown>> {
-  const key = getServerEnv("SERPAPI_KEY");
+  const key = getSerpApiKey();
   if (!key) {
     throw new Error(
       "SERPAPI_KEY ausente: configure a variável no projeto Vercel (Settings → Environment Variables).",

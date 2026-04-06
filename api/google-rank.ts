@@ -3,7 +3,7 @@
  * Requer `SERPAPI_KEY` na Vercel. Sem chave, devolve modo demonstração.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getServerEnv } from "./lib/env";
+import { getSerpApiKey } from "./lib/env";
 
 function normalizeDomain(d: string): string {
   return d
@@ -29,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const key = getServerEnv("SERPAPI_KEY");
+    const key = getSerpApiKey();
     const norm = normalizeDomain(domain);
 
     if (!key) {
