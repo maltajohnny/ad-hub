@@ -16,6 +16,8 @@ import { clientsData } from "@/pages/Clientes";
 import { UsersRound, Trash2, Shield, User, Building2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { APP_MODULES, APP_MODULE_LABELS, type AppModule } from "@/lib/saasTypes";
+import { Checkbox } from "@/components/ui/checkbox";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
 import {
   isStrongPassword,
@@ -35,6 +37,7 @@ const Usuarios = () => {
     assignClientToUser,
     setBoardSettingsPermission,
     setBoardDeleteCardsPermission,
+    setUserAllowedModules,
   } = useAuth();
   const rows = listUsers();
   const usersOnly = rows.filter((u) => u.role === "user");
@@ -48,6 +51,12 @@ const Usuarios = () => {
   const [grantDeleteBoardCards, setGrantDeleteBoardCards] = useState(false);
   const [showInitialPassword, setShowInitialPassword] = useState(false);
   const [initialPasswordError, setInitialPasswordError] = useState(false);
+  const [modCreate, setModCreate] = useState<Record<AppModule, boolean>>(
+    () => Object.fromEntries(APP_MODULES.map((m) => [m, true])) as Record<AppModule, boolean>,
+  );
+  const [modEdit, setModEdit] = useState<Record<AppModule, boolean>>(
+    () => Object.fromEntries(APP_MODULES.map((m) => [m, true])) as Record<AppModule, boolean>,
+  );
 
   /** Utilizador (perfil padrão) para o qual se editam Negar/Permitir por cliente */
   const [permUser, setPermUser] = useState("");
@@ -61,6 +70,18 @@ const Usuarios = () => {
       setPermUser(usersOnly[0].username);
     }
   }, [usersOnly, permUser]);
+
+  useEffect(() => {
+    const u = usersOnly.find((x) => x.username === permUser);
+    if (!u) return;
+    if (!u.allowedModules?.length) {
+      setModEdit(Object.fromEntries(APP_MODULES.map((m) => [m, true])) as Record<AppModule, boolean>);
+    } else {
+      setModEdit(
+        Object.fromEntries(APP_MODULES.map((m) => [m, u.allowedModules!.includes(m)])) as Record<AppModule, boolean>,
+      );
+    }
+  }, [permUser, usersOnly]);
 
   const handleInitialPasswordBlur = () => {
     const p = password.trim();
@@ -80,6 +101,7 @@ const Usuarios = () => {
       setInitialPasswordError(true);
       return;
     }
+    const mods = APP_MODULES.filter((m) => modCreate[m]);
     const res = createUser({
       username,
       password,
@@ -88,6 +110,8 @@ const Usuarios = () => {
       role: isAdminRole ? "admin" : "user",
       canManageBoard: isAdminRole ? undefined : grantBoardSettings,
       canDeleteBoardCards: isAdminRole ? undefined : grantDeleteBoardCards,
+      allowedModules:
+        !isAdminRole && mods.length < APP_MODULES.length ? mods : undefined,
     });
     if (!res.ok) {
       toast.error(res.error || "Não foi possível criar o usuário.");
@@ -104,6 +128,7 @@ const Usuarios = () => {
     setIsAdminRole(false);
     setGrantBoardSettings(false);
     setGrantDeleteBoardCards(false);
+    setModCreate(Object.fromEntries(APP_MODULES.map((m) => [m, true])) as Record<AppModule, boolean>);
   };
 
   const handleDelete = (uname: string) => {
@@ -120,8 +145,7 @@ const Usuarios = () => {
       <div>
         <h1 className="text-2xl font-display font-bold">Usuários</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Crie logins com perfil de administrador ou usuário. Usuários sem privilégio de admin terão acesso limitado (definido
-          em breve).
+          Crie logins com perfil de administrador ou usuário. Para perfil padrão, defina quais módulos do menu ficam visíveis.
         </p>
       </div>
 
@@ -225,12 +249,76 @@ const Usuarios = () => {
               />
               <span className="text-sm text-muted-foreground">Permitir excluir cards no Board</span>
             </label>
+            <div className="mt-4 rounded-lg border border-border/50 p-3 space-y-2">
+              <p className="text-xs font-medium text-foreground">Módulos visíveis no menu</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {APP_MODULES.map((m) => (
+                  <label key={m} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={modCreate[m]}
+                      onCheckedChange={(c) => setModCreate((prev) => ({ ...prev, [m]: c === true }))}
+                    />
+                    {APP_MODULE_LABELS[m]}
+                  </label>
+                ))}
+              </div>
+            </div>
           </>
         )}
         <Button type="button" className="mt-4 gradient-brand text-primary-foreground" onClick={handleCreate}>
           Criar usuário
         </Button>
       </Card>
+
+      {usersOnly.length > 0 && (
+        <Card className="glass-card p-5 border-border/60">
+          <h3 className="font-display font-semibold mb-2">Módulos do menu (utilizador existente)</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            Selecione o utilizador e ajuste os módulos. Todos ativos = mesmo comportamento que antes (acesso completo).
+          </p>
+          <div className="mb-4 max-w-md space-y-1.5">
+            <label className="text-xs text-muted-foreground">Utilizador</label>
+            <Select value={permUser} onValueChange={setPermUser}>
+              <SelectTrigger className="h-10 bg-secondary/50 border-border/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {usersOnly.map((u) => (
+                  <SelectItem key={u.username} value={u.username}>
+                    {u.name} (@{u.username})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-2 rounded-lg border border-border/50 p-3 mb-3">
+            {APP_MODULES.map((m) => (
+              <label key={m} className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  checked={modEdit[m]}
+                  onCheckedChange={(c) => setModEdit((prev) => ({ ...prev, [m]: c === true }))}
+                />
+                {APP_MODULE_LABELS[m]}
+              </label>
+            ))}
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              const mods = APP_MODULES.filter((m) => modEdit[m]);
+              const res = setUserAllowedModules(
+                permUser,
+                mods.length === APP_MODULES.length ? null : mods,
+              );
+              if (!res.ok) toast.error(res.error ?? "Erro");
+              else toast.success("Módulos atualizados.");
+            }}
+          >
+            Guardar módulos
+          </Button>
+        </Card>
+      )}
 
       <Card className="glass-card p-5 border-border/60">
         <h3 className="font-display font-semibold mb-2 flex items-center gap-2">

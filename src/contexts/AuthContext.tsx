@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react";
 import { isStrongPassword } from "@/lib/passwordPolicy";
+import type { AppModule } from "@/lib/saasTypes";
 
 export interface User {
   role: "admin" | "user";
@@ -16,6 +17,8 @@ export interface User {
   canDeleteBoardCards?: boolean;
   /** Conta criada por admin: obriga troca de senha no primeiro acesso. */
   mustChangePassword?: boolean;
+  /** Módulos do menu visíveis (só perfil user). `undefined` = todos. */
+  allowedModules?: AppModule[] | null;
 }
 
 /** Quem pode gerir colunas e settings do Kanban (admin ou permissão explícita). */
@@ -134,7 +137,9 @@ interface AuthContextType {
     role: "admin" | "user";
     canManageBoard?: boolean;
     canDeleteBoardCards?: boolean;
+    allowedModules?: AppModule[] | null;
   }) => { ok: boolean; error?: string };
+  setUserAllowedModules: (username: string, modules: AppModule[] | null) => { ok: boolean; error?: string };
   deleteUser: (username: string) => { ok: boolean; error?: string };
   /** Somente admin: concede/revoga permissão de Settings do Board (usuários não-admin). */
   setBoardSettingsPermission: (username: string, allowed: boolean) => { ok: boolean; error?: string };
@@ -273,6 +278,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   }, [registry]);
 
+  const setUserAllowedModules = useCallback(
+    (username: string, modules: AppModule[] | null): { ok: boolean; error?: string } => {
+      if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
+      const key = username.trim();
+      const entry = registry[key];
+      if (!entry) return { ok: false, error: "Usuário não encontrado." };
+      if (entry.user.role !== "user") return { ok: false, error: "Apenas para perfil padrão." };
+      const nextUser: User = {
+        ...entry.user,
+        allowedModules: modules === null || modules.length === 0 ? undefined : modules,
+      };
+      const nextReg = { ...registry, [key]: { ...entry, user: nextUser } };
+      syncRegistry(nextReg);
+      if (user.username === key) setUser(nextUser);
+      return { ok: true };
+    },
+    [user, registry, syncRegistry],
+  );
+
   const createUser = useCallback(
     (input: {
       username: string;
@@ -281,6 +305,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email: string;
       role: "admin" | "user";
       canManageBoard?: boolean;
+      canDeleteBoardCards?: boolean;
+      allowedModules?: AppModule[] | null;
     }): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
       const u = input.username.trim().toLowerCase();
@@ -291,6 +317,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           ok: false,
           error: "Senha inicial inválida: mínimo 6 caracteres, com maiúscula, minúscula e caractere especial.",
         };
+      }
+      let allowedMod: AppModule[] | undefined;
+      if (input.role === "user") {
+        if (input.allowedModules !== undefined && input.allowedModules !== null && input.allowedModules.length > 0) {
+          allowedMod = input.allowedModules;
+        }
       }
       const newUser: User = {
         username: u,
@@ -305,6 +337,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               mustChangePassword: true as const,
               canManageBoard: input.canManageBoard === true,
               canDeleteBoardCards: input.canDeleteBoardCards === true,
+              ...(allowedMod ? { allowedModules: allowedMod } : {}),
             }
           : { mustChangePassword: false as const }),
       };
@@ -429,6 +462,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         completeFirstPasswordChange,
         listUsers,
         createUser,
+        setUserAllowedModules,
         deleteUser,
         setBoardSettingsPermission,
         setBoardDeleteCardsPermission,

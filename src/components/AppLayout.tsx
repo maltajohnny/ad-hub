@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTenant } from "@/contexts/TenantContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -15,6 +16,7 @@ import {
   Star,
   Columns3,
   Layers2,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import norterSymbol from "@/assets/norter-symbol.png";
@@ -25,7 +27,20 @@ import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
 import { UserMenuDropdown } from "@/components/UserMenuDropdown";
 import { FirstAccessPasswordModal } from "@/components/FirstAccessPasswordModal";
 import { SlackReportScheduler } from "@/components/SlackReportScheduler";
-type MenuItem = { icon: typeof LayoutDashboard; label: string; path: string; adminOnly?: boolean };
+import {
+  effectiveModulesForUser,
+  firstAllowedPath,
+  pathToModule,
+  type AppModule,
+} from "@/lib/saasTypes";
+
+type MenuItem = {
+  icon: typeof LayoutDashboard;
+  label: string;
+  path: string;
+  adminOnly?: boolean;
+  module: AppModule;
+};
 
 function AppLayoutMain({ children, className }: { children: ReactNode; className?: string }) {
   const location = useLocation();
@@ -70,14 +85,15 @@ function AppLayoutMain({ children, className }: { children: ReactNode; className
 }
 
 const menuAfterClientes: MenuItem[] = [
-  { icon: BarChart3, label: "Campanhas", path: "/campanhas" },
-  { icon: TrendingUp, label: "IA & ROI", path: "/ia-roi" },
-  { icon: UsersRound, label: "Usuários", path: "/usuarios", adminOnly: true },
-  { icon: Settings, label: "Configurações", path: "/configuracoes" },
+  { icon: BarChart3, label: "Campanhas", path: "/campanhas", module: "campanhas" },
+  { icon: TrendingUp, label: "IA & ROI", path: "/ia-roi", module: "ia-roi" },
+  { icon: UsersRound, label: "Usuários", path: "/usuarios", adminOnly: true, module: "usuarios" },
+  { icon: Settings, label: "Configurações", path: "/configuracoes", module: "configuracoes" },
 ];
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
   const { user, logout } = useAuth();
+  const { tenant, brandingLogoSrc, brandingName, setActiveSlug } = useTenant();
   const navigate = useNavigate();
   const location = useLocation();
   const { resolvedTheme } = useTheme();
@@ -90,9 +106,33 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   const isLight = mounted && resolvedTheme === "light";
 
   const isAdmin = user?.role === "admin";
-  const visibleRest = menuAfterClientes.filter((item) => !item.adminOnly || isAdmin);
+  const eff = effectiveModulesForUser(user, tenant?.enabledModules);
+  const canSee = (m: AppModule) => eff === "all" || eff.includes(m);
+
+  const visibleRest = menuAfterClientes.filter((item) => {
+    if (item.adminOnly && !isAdmin) return false;
+    if (eff !== "all" && !eff.includes(item.module)) return false;
+    return true;
+  });
 
   const path = location.pathname;
+
+  const showDashSection = canSee("dashboard") || canSee("board");
+  const showClientesSection = canSee("clientes") || canSee("clientes-favoritos");
+
+  useEffect(() => {
+    if (!user || eff === "all") return;
+    const mod = pathToModule(path);
+    if (!mod) return;
+    if (!eff.includes(mod)) {
+      navigate(firstAllowedPath(eff), { replace: true });
+    }
+  }, [user, path, eff, navigate]);
+
+  const handleLogout = () => {
+    setActiveSlug(null);
+    logout();
+  };
   const clientesListActive = path === "/clientes";
   const favoritosActive = path === "/clientes/favoritos";
   const dashboardActive = path === "/";
@@ -128,35 +168,67 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           {mounted && !collapsed ? (
             <button
               type="button"
-              onClick={() => navigate("/")}
+              onClick={() => navigate(canSee("dashboard") ? "/" : "/board")}
               className="flex w-full min-w-0 flex-1 cursor-pointer items-center justify-start rounded-md text-left transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
-              aria-label="Ir para o Dashboard"
+              aria-label="Ir para o início"
             >
-              <img
-                src={isLight ? norterLogoDashboardLight : norterLogoDashboardDark}
-                alt="Norter — Aceleradora"
-                width={220}
-                height={65}
-                className="h-[65px] w-[220px] max-w-full shrink-0 object-contain object-left"
-                decoding="async"
-              />
+              {tenant && brandingLogoSrc ? (
+                <img
+                  src={brandingLogoSrc}
+                  alt={brandingName}
+                  width={220}
+                  height={65}
+                  className="h-[65px] w-[220px] max-w-full shrink-0 object-contain object-left"
+                  decoding="async"
+                />
+              ) : tenant && !brandingLogoSrc ? (
+                <div className="flex min-w-0 flex-col items-start gap-0.5 py-1">
+                  <img
+                    src={norterSymbol}
+                    alt=""
+                    width={44}
+                    height={44}
+                    className="h-11 w-11 shrink-0 object-contain"
+                  />
+                  <span className="truncate text-left text-xs font-semibold leading-tight text-sidebar-foreground">
+                    {brandingName}
+                  </span>
+                </div>
+              ) : (
+                <img
+                  src={isLight ? norterLogoDashboardLight : norterLogoDashboardDark}
+                  alt="Norter — Aceleradora"
+                  width={220}
+                  height={65}
+                  className="h-[65px] w-[220px] max-w-full shrink-0 object-contain object-left"
+                  decoding="async"
+                />
+              )}
             </button>
           ) : mounted && collapsed ? (
             <button
               type="button"
-              onClick={() => navigate("/")}
+              onClick={() => navigate(canSee("dashboard") ? "/" : "/board")}
               className="flex h-12 w-12 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
-              aria-label="Ir para o Dashboard"
+              aria-label="Ir para o início"
             >
-              <img
-                src={norterSymbol}
-                alt="Norter"
-                className={cn(
-                  "h-11 w-11 object-contain object-center",
-                  isLight &&
-                    "rounded-md ring-1 ring-border/70 ring-inset bg-background/80 p-0.5 shadow-[0_0_0_1px_rgba(0,0,0,0.04)]",
-                )}
-              />
+              {tenant && brandingLogoSrc ? (
+                <img
+                  src={brandingLogoSrc}
+                  alt=""
+                  className="h-11 w-11 rounded-md object-contain"
+                />
+              ) : (
+                <img
+                  src={norterSymbol}
+                  alt="Norter"
+                  className={cn(
+                    "h-11 w-11 object-contain object-center",
+                    isLight &&
+                      "rounded-md ring-1 ring-border/70 ring-inset bg-background/80 p-0.5 shadow-[0_0_0_1px_rgba(0,0,0,0.04)]",
+                  )}
+                />
+              )}
             </button>
           ) : (
             <div className="h-12 w-full animate-pulse rounded-lg bg-sidebar-accent/40" aria-hidden />
@@ -164,6 +236,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {showDashSection ? (
           <div className="space-y-0.5">
             <div className="w-full rounded-lg">
               <button
@@ -175,7 +248,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                   if (t.closest("[data-submenu-toggle]")) {
                     setDashSubOpen((o) => !o);
                   } else {
-                    navigate("/");
+                    navigate(canSee("dashboard") ? "/" : "/board");
                     setDashSubOpen(true);
                   }
                 }}
@@ -210,7 +283,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                 )}
               </button>
             </div>
-            {dashSubOpen && !collapsed && (
+            {dashSubOpen && !collapsed && canSee("board") && (
               <button
                 id="sidebar-dash-sub"
                 type="button"
@@ -227,7 +300,9 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
               </button>
             )}
           </div>
+          ) : null}
 
+          {showClientesSection ? (
           <div className="space-y-0.5">
             <div className="w-full rounded-lg">
               <button
@@ -239,7 +314,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                   if (t.closest("[data-submenu-toggle]")) {
                     setClientesSubOpen((o) => !o);
                   } else {
-                    navigate("/clientes");
+                    navigate(canSee("clientes") ? "/clientes" : "/clientes/favoritos");
                     setClientesSubOpen(true);
                   }
                 }}
@@ -274,7 +349,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                 )}
               </button>
             </div>
-            {clientesSubOpen && !collapsed && (
+            {clientesSubOpen && !collapsed && canSee("clientes-favoritos") && (
               <button
                 id="sidebar-clientes-sub"
                 type="button"
@@ -291,6 +366,23 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
               </button>
             )}
           </div>
+          ) : null}
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => navigate("/organizacoes")}
+              className={cn(
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all text-left",
+                path === "/organizacoes"
+                  ? "gradient-brand text-primary-foreground font-medium"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent",
+              )}
+            >
+              <Building2 size={18} className="flex-shrink-0" />
+              {!collapsed && <span>Organizações</span>}
+            </button>
+          )}
 
           {visibleRest.map((item) => {
             const active =
@@ -336,7 +428,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             </div>
           )}
           <button
-            onClick={logout}
+            onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-destructive hover:bg-destructive/10 transition-colors"
           >
             <LogOut size={18} className="flex-shrink-0" />

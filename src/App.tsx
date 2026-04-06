@@ -19,6 +19,9 @@ import IaRoi from "@/pages/IaRoi";
 import Configuracoes from "@/pages/Configuracoes";
 import Usuarios from "@/pages/Usuarios";
 import NotFound from "./pages/NotFound";
+import Landing from "@/pages/Landing";
+import Organizacoes from "@/pages/Organizacoes";
+import { TenantProvider } from "@/contexts/TenantContext";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +53,14 @@ const ProtectedRoutes = () => {
             </AdminRoute>
           }
         />
+        <Route
+          path="/organizacoes"
+          element={
+            <AdminRoute>
+              <Organizacoes />
+            </AdminRoute>
+          }
+        />
         <Route path="/perfil" element={<Navigate to="/configuracoes?tab=conta" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
@@ -73,10 +84,14 @@ const App = () => (
           <FavoritesProvider>
             <KanbanProvider>
               <BrowserRouter>
-                <Routes>
-                  <Route path="/login" element={<LoginRoute />} />
-                  <Route path="/*" element={<ProtectedRoutes />} />
-                </Routes>
+                <TenantProvider>
+                  <Routes>
+                    <Route path="/landing" element={<Landing />} />
+                    <Route path="/login" element={<LoginRoute />} />
+                    <Route path="/t/:tenantSlug/login" element={<LoginRoute />} />
+                    <Route path="/*" element={<ProtectedRoutes />} />
+                  </Routes>
+                </TenantProvider>
               </BrowserRouter>
             </KanbanProvider>
           </FavoritesProvider>
