@@ -39,15 +39,21 @@ export type BusinessAnalysis = {
   source: string;
 };
 
-const apiPrefix = import.meta.env.VITE_INTELLISEARCH_API_URL ?? "";
+/** Base opcional (ex.: outro domínio). Vazio = mesmo host (`/api/...`). Sem barra final. */
+const apiPrefix = (import.meta.env.VITE_INTELLISEARCH_API_URL ?? "").trim().replace(/\/$/, "");
+
+function buildApiUrl(pathWithQuery: string): string {
+  if (!apiPrefix) return pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`;
+  return `${apiPrefix}${pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`}`;
+}
 
 export async function fetchBusinessAnalysis(query: string): Promise<BusinessAnalysis> {
   const q = query.trim();
   if (!q) {
     throw new Error("Indique um termo de pesquisa.");
   }
-  const url = `${apiPrefix}/api/intellisearch/business?${new URLSearchParams({ query: q })}`;
-  const res = await fetch(url);
+  const url = buildApiUrl(`/api/intellisearch/business?${new URLSearchParams({ query: q })}`);
+  const res = await fetch(url, { cache: "no-store" });
   const text = await res.text();
   const trimmed = text.trim();
   if (!trimmed) {
@@ -60,10 +66,11 @@ export async function fetchBusinessAnalysis(query: string): Promise<BusinessAnal
     parsed = JSON.parse(trimmed);
   } catch {
     const html = trimmed.startsWith("<!") || trimmed.toLowerCase().includes("<html");
+    const preview = trimmed.replace(/\s+/g, " ").slice(0, 140);
     throw new Error(
       html
-        ? `Resposta inválida (HTTP ${res.status}): o servidor devolveu HTML em vez de JSON (erro interno ou rota incorreta).`
-        : `Resposta inválida (HTTP ${res.status}). Verifique se a API IntelliSearch está ativa e devolve JSON.`,
+        ? `Resposta inválida (HTTP ${res.status}): o servidor devolveu HTML em vez de JSON. Teste no browser: /api/intellisearch/ping (deve devolver JSON com ok:true).`
+        : `Resposta inválida (HTTP ${res.status}): ${preview}${trimmed.length > 140 ? "…" : ""}`,
     );
   }
   const json = parsed as BusinessAnalysis & { error?: string };
@@ -92,8 +99,8 @@ export async function fetchOrganicRank(keyword: string, domain: string): Promise
   if (!k || !d) {
     throw new Error("Indique palavra-chave e domínio.");
   }
-  const url = `${apiPrefix}/api/intellisearch/ranking?${new URLSearchParams({ keyword: k, domain: d })}`;
-  const res = await fetch(url);
+  const url = buildApiUrl(`/api/intellisearch/ranking?${new URLSearchParams({ keyword: k, domain: d })}`);
+  const res = await fetch(url, { cache: "no-store" });
   const text = await res.text();
   const trimmed = text.trim();
   if (!trimmed) {

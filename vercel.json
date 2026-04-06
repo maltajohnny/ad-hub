@@ -5,11 +5,14 @@
     },
     "api/intellisearch/ranking.ts": {
       "maxDuration": 60
+    },
+    "api/intellisearch/ping.ts": {
+      "maxDuration": 10
     }
   },
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
