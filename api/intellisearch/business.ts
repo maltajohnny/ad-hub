@@ -5,6 +5,7 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getSerpApiKey } from "../lib/env";
+import { sendJson, sendNoContent } from "../lib/sendJson";
 
 const serpBase = "https://serpapi.com/search.json";
 
@@ -399,11 +400,11 @@ async function analyzeBusinessOrError(query: string): Promise<BusinessAnalysis> 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === "OPTIONS") {
-      res.status(204).end();
+      sendNoContent(res);
       return;
     }
     if (req.method !== "GET") {
-      res.status(405).json({ error: "Method not allowed" });
+      sendJson(res, 405, { error: "Method not allowed" });
       return;
     }
 
@@ -413,16 +414,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       const analysis = await analyzeBusinessOrError(query);
-      res.status(200).json(analysis);
+      sendJson(res, 200, analysis);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro interno.";
-      res.status(400).json({ error: msg });
+      sendJson(res, 400, { error: msg });
     }
   } catch (fatal) {
     const msg = fatal instanceof Error ? fatal.message : String(fatal);
     console.error("[api/intellisearch/business]", fatal);
     if (!res.headersSent) {
-      res.status(500).json({ error: msg });
+      sendJson(res, 500, { error: msg });
     }
   }
 }

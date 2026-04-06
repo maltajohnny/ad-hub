@@ -4,6 +4,7 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getSerpApiKey } from "./lib/env";
+import { sendJson } from "./lib/sendJson";
 
 function normalizeDomain(d: string): string {
   return d
@@ -16,7 +17,7 @@ function normalizeDomain(d: string): string {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
+    sendJson(res, 405, { error: "Method not allowed" });
     return;
   }
 
@@ -25,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const keyword = String(body?.keyword ?? "").trim();
     const domain = String(body?.domain ?? "").trim();
     if (!keyword || !domain) {
-      res.status(400).json({ ok: false, error: "Indique palavra-chave e domínio." });
+      sendJson(res, 400, { ok: false, error: "Indique palavra-chave e domínio." });
       return;
     }
 
@@ -34,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!key) {
       const samplePosition = 6 + Math.floor(Math.random() * 18);
-      res.status(200).json({
+      sendJson(res, 200, {
         ok: true,
         demo: true,
         message:
@@ -56,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     if (!r.ok || data.error) {
-      res.status(502).json({
+      sendJson(res, 502, {
         ok: false,
         error: data.error || "Falha ao consultar SerpAPI.",
       });
@@ -73,7 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    res.status(200).json({
+    sendJson(res, 200, {
       ok: true,
       demo: false,
       keyword,
@@ -82,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       checked: organic.length,
     });
   } catch (e) {
-    res.status(500).json({
+    sendJson(res, 500, {
       ok: false,
       error: e instanceof Error ? e.message : "Erro interno.",
     });

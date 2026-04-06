@@ -4,6 +4,7 @@
  * QuickChart em dois blocos `image` (fallback seguro para Slack em HTTPS).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { sendJson } from "./lib/sendJson";
 
 const SLACK_HOOK_PREFIX = "https://hooks.slack.com/services/";
 
@@ -33,7 +34,7 @@ function expandSingleBudgetImageToTwo(
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
+    sendJson(res, 405, { error: "Method not allowed" });
     return;
   }
 
@@ -55,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const wh = body.webhookUrl?.trim() ?? "";
     if (!wh.startsWith(SLACK_HOOK_PREFIX)) {
-      res.status(400).json({ error: "URL de webhook inválida (só hooks.slack.com/services/…)." });
+      sendJson(res, 400, { error: "URL de webhook inválida (só hooks.slack.com/services/…)." });
       return;
     }
 
@@ -77,9 +78,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({ text: body.text, blocks }),
     });
     const slackBody = await r.text();
-    res.status(r.status).json({ ok: r.ok, slack: slackBody });
+    sendJson(res, r.status, { ok: r.ok, slack: slackBody });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    res.status(500).json({ error: msg });
+    sendJson(res, 500, { error: msg });
   }
 }

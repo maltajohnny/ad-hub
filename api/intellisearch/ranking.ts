@@ -3,6 +3,7 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getSerpApiKey } from "../lib/env";
+import { sendJson, sendNoContent } from "../lib/sendJson";
 
 function normalizeDomain(d: string): string {
   return d
@@ -16,11 +17,11 @@ function normalizeDomain(d: string): string {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === "OPTIONS") {
-      res.status(204).end();
+      sendNoContent(res);
       return;
     }
     if (req.method !== "GET") {
-      res.status(405).json({ error: "Method not allowed" });
+      sendJson(res, 405, { error: "Method not allowed" });
       return;
     }
 
@@ -30,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const domain = (Array.isArray(rawD) ? rawD[0] : rawD)?.toString().trim() ?? "";
 
     if (!keyword || !domain) {
-      res.status(400).json({ error: "indique palavra-chave e domínio" });
+      sendJson(res, 400, { error: "indique palavra-chave e domínio" });
       return;
     }
 
@@ -38,7 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const norm = normalizeDomain(domain);
 
     if (!key) {
-      res.status(200).json({
+      sendJson(res, 200, {
         ok: true,
         demo: true,
         message: "Configure SERPAPI_KEY para posição real nos resultados orgânicos.",
@@ -64,12 +65,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       data = (await r.json()) as typeof data;
     } catch {
-      res.status(502).json({ error: "Resposta SerpAPI não é JSON." });
+      sendJson(res, 502, { error: "Resposta SerpAPI não é JSON." });
       return;
     }
 
     if (!r.ok || data.error) {
-      res.status(502).json({ error: data.error || "Falha ao consultar SerpAPI." });
+      sendJson(res, 502, { error: data.error || "Falha ao consultar SerpAPI." });
       return;
     }
 
@@ -83,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    res.status(200).json({
+    sendJson(res, 200, {
       ok: true,
       demo: false,
       keyword,
@@ -95,7 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const msg = fatal instanceof Error ? fatal.message : String(fatal);
     console.error("[api/intellisearch/ranking]", fatal);
     if (!res.headersSent) {
-      res.status(500).json({ error: msg });
+      sendJson(res, 500, { error: msg });
     }
   }
 }
