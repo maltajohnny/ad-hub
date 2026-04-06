@@ -1035,12 +1035,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (user.role !== "admin") {
         return clientAssignments[clientId] === user.username;
       }
-      /** Só `admin` / `qtrafficadmin` veem toda a carteira. Admin só da org Qtraffic gere organizações, não esta lista de clientes. */
+      /** Operadores da plataforma veem toda a carteira; admins de org veem clientes conforme `clientOrgScope`. */
       if (isPlatformOperator(user.username)) return true;
       if (user.organizationId) {
         const t = getTenantById(user.organizationId);
-        if (t?.slug === "qtraffic") return false;
         const scope = getClientOrganizationScope(clientId);
+        if (t?.slug === "qtraffic") {
+          /** Carteira global: clientes sem vínculo em `clientOrgScope`; ver também `clientOrgScope.ts`. */
+          return scope === undefined || scope === BUILTIN_QTRAFFIC_ID;
+        }
         return scope === user.organizationId;
       }
       return false;
