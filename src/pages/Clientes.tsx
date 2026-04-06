@@ -584,23 +584,27 @@ function ClientExpandedPanel({
       toast.error("O serviço de IA não está disponível no momento.");
       return;
     }
+    if (aiMode === "supervised" && !instruction.trim()) {
+      toast.error("Escreva uma instrução para a IA (modo supervisionado).");
+      return;
+    }
     setPanelAiLoading(true);
     setPanelAiError(null);
     try {
       const report = buildTrafficPerformanceReport(client);
       const input = campaignAnalysisInputFromReport(report);
       const result = await analyzeCampaignWithInstruction(input, {
-        instruction,
+        instruction: aiMode === "autonomous" ? "" : instruction,
         mode: aiMode,
       });
       if (aiMode === "autonomous") {
         setPanelAiResult(result);
         onSupervisedPendingChange([]);
         setInstructionDecisions((prev) => [
-          aiDecisionFromInstructionResponse(instruction, result, "autonomous"),
+          aiDecisionFromInstructionResponse("", result, "autonomous"),
           ...prev,
         ]);
-        toast.success("Instrução aplicada — decisão registada no histórico.");
+        toast.success("Decisão autônoma registada no histórico.");
       } else {
         setPanelAiResult(null);
         const newItem: SupervisedPendingItem = {
@@ -809,7 +813,11 @@ function ClientExpandedPanel({
             </div>
             <div>
               <h3 className="font-display font-semibold">Painel de Controle da IA</h3>
-              <p className="text-xs text-muted-foreground">Modo de execução e instruções para o agente</p>
+              <p className="text-xs text-muted-foreground">
+                {aiMode === "autonomous"
+                  ? "Modo autônomo: decisões com base nos dados e no contexto configurado"
+                  : "Modo supervisionado: instruções sujeitas à sua aprovação"}
+              </p>
             </div>
           </div>
           <div className="flex rounded-lg border border-border/60 bg-secondary/30 p-1 gap-1">
@@ -819,6 +827,7 @@ function ClientExpandedPanel({
                 onSupervisedPendingChange([]);
                 setPanelAiResult(null);
                 setExpandedPendingId(null);
+                setInstruction("");
                 setAiMode("autonomous");
               }}
               className={cn(
@@ -849,8 +858,8 @@ function ClientExpandedPanel({
         >
           {aiMode === "autonomous" ? (
             <>
-              <strong className="text-foreground">Modo autônomo:</strong> ao enviar uma instrução, a análise da IA é aplicada e
-              registada de imediato no histórico (com base na instrução e nos dados do cliente).
+              <strong className="text-foreground">Modo autônomo:</strong> a IA analisa os dados e o que foi configurado para o
+              cliente; não é necessário escrever instruções. A decisão é aplicada e registada de imediato no histórico.
             </>
           ) : (
             <>
@@ -860,34 +869,57 @@ function ClientExpandedPanel({
           )}
         </div>
 
-        <label className="text-xs text-muted-foreground block mb-1.5">Instrução para a IA</label>
-        <div className="flex gap-2">
-          <Input
-            value={instruction}
-            onChange={(e) => setInstruction(e.target.value)}
-            placeholder="Ex.: priorizar Google Search nesta semana e limitar Instagram a R$ 3k..."
-            className="flex-1 bg-secondary/50 border-border/50 h-10"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
+        {aiMode === "supervised" ? (
+          <>
+            <label className="text-xs text-muted-foreground block mb-1.5">Instrução para a IA</label>
+            <div className="flex gap-2">
+              <Input
+                value={instruction}
+                onChange={(e) => setInstruction(e.target.value)}
+                placeholder="Ex.: priorizar Google Search nesta semana e limitar Instagram a R$ 3k..."
+                className="flex-1 bg-secondary/50 border-border/50 h-10"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleInstructionSubmit();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                size="icon"
+                className="h-10 w-10 shrink-0 bg-[#3B82F6] hover:bg-[#2563EB] text-white"
+                aria-label="Enviar instrução à IA"
+                disabled={panelAiLoading}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleInstructionSubmit();
+                }}
+              >
+                {panelAiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <p className="text-xs text-muted-foreground flex-1 leading-relaxed">
+              Sem campo de instrução: execute a análise para a IA decidir com base no contexto e nos dados atuais.
+            </p>
+            <Button
+              type="button"
+              className="shrink-0 gap-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white"
+              disabled={panelAiLoading}
+              aria-label="Executar análise autônoma"
+              onClick={(e) => {
+                e.stopPropagation();
                 void handleInstructionSubmit();
-              }
-            }}
-          />
-          <Button
-            type="button"
-            size="icon"
-            className="h-10 w-10 shrink-0 bg-[#3B82F6] hover:bg-[#2563EB] text-white"
-            aria-label="Enviar instrução à IA"
-            disabled={panelAiLoading}
-            onClick={(e) => {
-              e.stopPropagation();
-              void handleInstructionSubmit();
-            }}
-          >
-            {panelAiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
-        </div>
+              }}
+            >
+              {panelAiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Executar análise autônoma
+            </Button>
+          </div>
+        )}
 
         {panelAiError && (
           <Alert variant="destructive" className="mt-3">
@@ -1004,7 +1036,7 @@ function ClientExpandedPanel({
 
         {aiMode === "autonomous" && panelAiResult && (
           <div className="mt-4 rounded-lg border border-primary/20 bg-background/50 p-4 space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resposta da IA à instrução</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Última análise autônoma</p>
             <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{panelAiResult.analysis}</p>
             <div>
               <p className="text-xs font-semibold text-muted-foreground mb-2">Recomendações</p>
@@ -1047,7 +1079,7 @@ function ClientExpandedPanel({
         <div className="flex flex-wrap items-center gap-2 mb-2">
           {latest.fromInstruction ? (
             <Badge variant="outline" className="text-[10px] border-primary/50 text-primary">
-              {latest.instructionMode === "supervised" ? "Instrução · aprovada" : "Instrução do gestor"}
+              {latest.instructionMode === "supervised" ? "Instrução · aprovada" : "Autônoma · contexto"}
             </Badge>
           ) : (
             <Badge variant="outline" className="text-[10px] border-[#3B82F6]/50 text-[#3B82F6]">
@@ -1088,7 +1120,7 @@ function ClientExpandedPanel({
                 <div className="flex flex-wrap gap-2">
                   {d.fromInstruction ? (
                     <Badge variant="outline" className="text-[10px] border-primary/50 text-primary">
-                      {d.instructionMode === "supervised" ? "Instrução · aprovada" : "Instrução do gestor"}
+                      {d.instructionMode === "supervised" ? "Instrução · aprovada" : "Autônoma · contexto"}
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="text-[10px]">
