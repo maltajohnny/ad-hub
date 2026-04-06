@@ -496,7 +496,8 @@ const Usuarios = () => {
         <p className="text-xs text-muted-foreground mb-4">
           Escolha o <strong className="text-foreground">utilizador (perfil padrão)</strong>. Para cada cliente, defina{" "}
           <strong className="text-foreground">Negar</strong> (sem acesso, predefinido) ou <strong className="text-foreground">Permitir</strong>{" "}
-          (esse utilizador vê o cliente). Administradores continuam a ver todos os clientes.
+          (esse utilizador vê o cliente). Contas com <strong className="text-foreground">perfil de administrador</strong> não são
+          filtradas por esta tabela: o que cada admin vê na lista de clientes segue as regras da plataforma ou da organização.
         </p>
 
         {usersOnly.length === 0 ? (
