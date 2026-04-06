@@ -5,6 +5,7 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sendJson } from "./lib/sendJson";
+import { withApiErrorBoundary } from "./lib/withApiErrorBoundary";
 
 const SLACK_HOOK_PREFIX = "https://hooks.slack.com/services/";
 
@@ -32,7 +33,7 @@ function expandSingleBudgetImageToTwo(
   return out;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function slackWebhookHandler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     sendJson(res, 405, { error: "Method not allowed" });
     return;
@@ -84,3 +85,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     sendJson(res, 500, { error: msg });
   }
 }
+
+export default withApiErrorBoundary(slackWebhookHandler);

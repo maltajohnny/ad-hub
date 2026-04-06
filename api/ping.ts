@@ -1,7 +1,8 @@
-/** GET /api/ping — healthcheck mínimo na raiz de /api */
+/** GET /api/ping — healthcheck na raiz de /api */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { withApiErrorBoundary } from "./lib/withApiErrorBoundary";
 
-export default function handler(_req: VercelRequest, res: VercelResponse): void {
+function pingRoot(_req: VercelRequest, res: VercelResponse): void {
   const body = JSON.stringify({ ok: true, route: "ping", t: Date.now() });
   if (!res.headersSent) {
     res.statusCode = 200;
@@ -9,3 +10,5 @@ export default function handler(_req: VercelRequest, res: VercelResponse): void 
   }
   res.end(body);
 }
+
+export default withApiErrorBoundary(pingRoot);

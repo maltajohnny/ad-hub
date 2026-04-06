@@ -6,6 +6,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getSerpApiKey } from "../lib/env";
 import { sendJson, sendNoContent } from "../lib/sendJson";
+import { withApiErrorBoundary } from "../lib/withApiErrorBoundary";
 
 const serpBase = "https://serpapi.com/search.json";
 
@@ -397,7 +398,7 @@ async function analyzeBusinessOrError(query: string): Promise<BusinessAnalysis> 
   };
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function businessHandler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === "OPTIONS") {
       sendNoContent(res);
@@ -427,3 +428,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 }
+
+export default withApiErrorBoundary(businessHandler);

@@ -1,11 +1,11 @@
 /**
  * GET /api/intellisearch/ping
- * Handler mínimo: sem `res.status`/`res.json` (não existem no Node puro) e sem imports de runtime
- * além do default export (tipos só em compile-time).
+ * Resposta só com APIs nativas de `http.ServerResponse` (sem `res.status` / `res.json`).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { withApiErrorBoundary } from "../lib/withApiErrorBoundary";
 
-export default function handler(_req: VercelRequest, res: VercelResponse): void {
+function pingHandler(_req: VercelRequest, res: VercelResponse): void {
   const body = JSON.stringify({
     ok: true,
     route: "intellisearch/ping",
@@ -17,3 +17,5 @@ export default function handler(_req: VercelRequest, res: VercelResponse): void 
   }
   res.end(body);
 }
+
+export default withApiErrorBoundary(pingHandler);

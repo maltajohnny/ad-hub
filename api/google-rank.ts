@@ -5,6 +5,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getSerpApiKey } from "./lib/env";
 import { sendJson } from "./lib/sendJson";
+import { withApiErrorBoundary } from "./lib/withApiErrorBoundary";
 
 function normalizeDomain(d: string): string {
   return d
@@ -15,7 +16,7 @@ function normalizeDomain(d: string): string {
     .split("/")[0];
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function googleRankHandler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     sendJson(res, 405, { error: "Method not allowed" });
     return;
@@ -89,3 +90,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 }
+
+export default withApiErrorBoundary(googleRankHandler);
