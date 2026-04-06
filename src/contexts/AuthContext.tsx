@@ -177,6 +177,7 @@ const defaultRegistry: Record<string, RegistryEntry> = {
       phone: "(11) 99999-0000",
       document: "000.000.000-00",
       mustChangePassword: false,
+      organizationId: BUILTIN_QTRAFFIC_ID,
     },
   },
   norter: {
@@ -189,6 +190,7 @@ const defaultRegistry: Record<string, RegistryEntry> = {
       phone: "(11) 98888-0000",
       document: "111.111.111-11",
       mustChangePassword: false,
+      organizationId: BUILTIN_NORTER_ID,
     },
   },
   qtrafficadmin: {
@@ -201,6 +203,7 @@ const defaultRegistry: Record<string, RegistryEntry> = {
       phone: "(11) 90000-0000",
       document: "000.000.000-01",
       mustChangePassword: false,
+      organizationId: BUILTIN_QTRAFFIC_ID,
     },
   },
   "diego.norter": {
@@ -218,6 +221,55 @@ const defaultRegistry: Record<string, RegistryEntry> = {
   },
 };
 
+/** Garante vínculos esperados: owner e operador Qtraffic → org Qtraffic; utilizador demo `norter` → org Norter. */
+function applyBuiltinOrgMigrations(parsed: Record<string, RegistryEntry>): Record<string, RegistryEntry> {
+  let changed = false;
+  const next: Record<string, RegistryEntry> = { ...parsed };
+
+  const ensureOwnerQtraffic = () => {
+    const entry = next[OWNER_USERNAME];
+    if (!entry?.user) return;
+    if (entry.user.organizationId === BUILTIN_QTRAFFIC_ID) return;
+    next[OWNER_USERNAME] = {
+      ...entry,
+      user: { ...entry.user, organizationId: BUILTIN_QTRAFFIC_ID },
+    };
+    changed = true;
+  };
+
+  const ensureQtrafficAdminOrg = () => {
+    const entry = next.qtrafficadmin;
+    if (!entry?.user) return;
+    if (entry.user.organizationId === BUILTIN_QTRAFFIC_ID) return;
+    next.qtrafficadmin = {
+      ...entry,
+      user: { ...entry.user, organizationId: BUILTIN_QTRAFFIC_ID },
+    };
+    changed = true;
+  };
+
+  const ensureNorterUserOrg = () => {
+    const entry = next.norter;
+    if (!entry?.user) return;
+    if (entry.user.organizationId === BUILTIN_NORTER_ID) return;
+    next.norter = {
+      ...entry,
+      user: { ...entry.user, organizationId: BUILTIN_NORTER_ID },
+    };
+    changed = true;
+  };
+
+  ensureOwnerQtraffic();
+  ensureQtrafficAdminOrg();
+  ensureNorterUserOrg();
+
+  if (changed) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    return next;
+  }
+  return parsed;
+}
+
 function loadRegistry(): Record<string, RegistryEntry> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -232,6 +284,10 @@ function loadRegistry(): Record<string, RegistryEntry> {
     }
     if (!parsed.qtrafficadmin?.user) {
       parsed.qtrafficadmin = defaultRegistry.qtrafficadmin;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    }
+    if (!parsed.norter?.user) {
+      parsed.norter = defaultRegistry.norter;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
     if (parsed.diego?.user && !parsed["diego.norter"]?.user) {
@@ -251,7 +307,7 @@ function loadRegistry(): Record<string, RegistryEntry> {
       parsed["diego.norter"] = defaultRegistry["diego.norter"];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
-    return parsed;
+    return applyBuiltinOrgMigrations(parsed);
   } catch {
     return { ...defaultRegistry };
   }
@@ -1032,18 +1088,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const canUserSeeClient = useCallback(
     (clientId: number) => {
       if (!user) return false;
+      const scope = getClientOrganizationScope(clientId);
+
       if (user.role !== "admin") {
+        if (scope === BUILTIN_NORTER_ID && user.organizationId !== BUILTIN_NORTER_ID) {
+          return false;
+        }
         return clientAssignments[clientId] === user.username;
       }
-      /** Operadores da plataforma veem toda a carteira; admins de org veem clientes conforme `clientOrgScope`. */
-      if (isPlatformOperator(user.username)) return true;
+
+      /** Contas internas Qtraffic (admin, qtrafficadmin) não acedem à carteira Norter; gerem a plataforma. */
+      if (isPlatformOperator(user.username)) {
+        return false;
+      }
+
       if (user.organizationId) {
-        const t = getTenantById(user.organizationId);
-        const scope = getClientOrganizationScope(clientId);
-        if (t?.slug === "qtraffic") {
-          /** Carteira global: clientes sem vínculo em `clientOrgScope`; ver também `clientOrgScope.ts`. */
-          return scope === undefined || scope === BUILTIN_QTRAFFIC_ID;
-        }
         return scope === user.organizationId;
       }
       return false;

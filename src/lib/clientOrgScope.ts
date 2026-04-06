@@ -1,14 +1,12 @@
 import { BUILTIN_NORTER_ID } from "@/lib/tenantsStore";
 
 /**
- * Clientes sem vínculo = carteira global visível apenas ao time Qtraffic (operadores + conta com org qtraffic).
- * Clientes com organizationId = visíveis também aos admins dessa organização.
+ * Carteira de demonstração: todos os clientes listados em Clientes pertencem à organização Norter.
+ * Só membros da Norter (e regras em `canUserSeeClient`) acedem a estes registos; a Qtraffic gere a plataforma, não esta carteira.
  */
-const CLIENT_ORG_BY_ID: Record<number, string | undefined> = {
-  7: BUILTIN_NORTER_ID,
-  8: BUILTIN_NORTER_ID,
-};
+const NORTER_DEMO_CLIENT_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8]);
 
 export function getClientOrganizationScope(clientId: number): string | undefined {
-  return CLIENT_ORG_BY_ID[clientId];
+  if (NORTER_DEMO_CLIENT_IDS.has(clientId)) return BUILTIN_NORTER_ID;
+  return undefined;
 }
