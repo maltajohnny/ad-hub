@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import norterSymbol from "@/assets/norter-symbol.png";
+import qtrafficMark from "@/assets/qtraffic-mark-only.png";
 /** Tema escuro UI: arte “white” (texto claro). Tema claro UI: arte “black”. Ambas 220×65. */
 import norterLogoDashboardDark from "@/assets/norter-logo-dashboard-dark.png";
 import norterLogoDashboardLight from "@/assets/norter-logo-dashboard-light.png";
@@ -122,6 +123,11 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   const isLight = mounted && resolvedTheme === "light";
 
   const isAdmin = user?.role === "admin";
+  /** Equipa Qtraffic / operadores: marca Qtraffic na sidebar; org Norter (ou sem org) usa wordmark Norter. */
+  const sidebarQtraffic =
+    !brandingLogoSrc && (isQtrafficTeamMember(user) || tenant?.slug === "qtraffic");
+  const sidebarNorterWordmark =
+    !brandingLogoSrc && !sidebarQtraffic && (!tenant || tenant.slug === "norter");
   const eff = effectiveModulesForUser(user, tenant?.enabledModules);
   const canSee = (m: AppModule) => eff === "all" || eff.includes(m);
   const homePath = eff === "all" ? "/dashboard" : firstAllowedPath(eff);
@@ -179,7 +185,8 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         <div
           className={cn(
             "box-border flex min-h-[85px] shrink-0 border-b border-border/40 px-3 py-2.5",
-            collapsed ? "justify-center" : "items-center",
+            "items-center",
+            collapsed ? "justify-center" : "justify-start",
           )}
         >
           {mounted && !collapsed ? (
@@ -189,7 +196,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
               className="flex w-full min-w-0 flex-1 cursor-pointer items-center justify-start rounded-md text-left transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
               aria-label="Ir para o início"
             >
-              {tenant && brandingLogoSrc ? (
+              {brandingLogoSrc ? (
                 <img
                   src={brandingLogoSrc}
                   alt={brandingName}
@@ -198,20 +205,16 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                   className="h-[65px] w-[220px] max-w-full shrink-0 object-contain object-left"
                   decoding="async"
                 />
-              ) : tenant && !brandingLogoSrc ? (
-                <div className="flex min-w-0 flex-col items-start gap-0.5 py-1">
-                  <img
-                    src={norterSymbol}
-                    alt=""
-                    width={44}
-                    height={44}
-                    className="h-11 w-11 shrink-0 object-contain"
-                  />
-                  <span className="truncate text-left text-xs font-semibold leading-tight text-sidebar-foreground">
-                    {brandingName}
-                  </span>
-                </div>
-              ) : (
+              ) : sidebarQtraffic ? (
+                <img
+                  src={qtrafficMark}
+                  alt="Qtraffic"
+                  width={220}
+                  height={180}
+                  className="h-[52px] w-auto max-w-[min(220px,100%)] shrink-0 object-contain object-left"
+                  decoding="async"
+                />
+              ) : sidebarNorterWordmark ? (
                 <img
                   src={isLight ? norterLogoDashboardLight : norterLogoDashboardDark}
                   alt="Norter — Aceleradora"
@@ -220,6 +223,19 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                   className="h-[65px] w-[220px] max-w-full shrink-0 object-contain object-left"
                   decoding="async"
                 />
+              ) : (
+                <div className="flex min-w-0 flex-col items-start gap-0.5 py-0.5">
+                  <img
+                    src={norterSymbol}
+                    alt=""
+                    width={44}
+                    height={44}
+                    className="h-10 w-10 shrink-0 object-contain"
+                  />
+                  <span className="truncate text-left text-xs font-semibold leading-tight text-sidebar-foreground">
+                    {brandingName}
+                  </span>
+                </div>
               )}
             </button>
           ) : mounted && collapsed ? (
@@ -229,11 +245,17 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
               className="flex h-12 w-12 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
               aria-label="Ir para o início"
             >
-              {tenant && brandingLogoSrc ? (
+              {brandingLogoSrc ? (
                 <img
                   src={brandingLogoSrc}
                   alt=""
                   className="h-11 w-11 rounded-md object-contain"
+                />
+              ) : sidebarQtraffic ? (
+                <img
+                  src={qtrafficMark}
+                  alt="Qtraffic"
+                  className="h-11 w-11 object-contain object-center"
                 />
               ) : (
                 <img
