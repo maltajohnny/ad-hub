@@ -23,7 +23,23 @@ import Landing from "@/pages/Landing";
 import Organizacoes from "@/pages/Organizacoes";
 import IntelliSearchLayout from "@/pages/IntelliSearch";
 import IntelliSearchCompleteAnalysis from "@/pages/intelli-search/IntelliSearchCompleteAnalysis";
-import IntelliSearchPlaceholder from "@/pages/intelli-search/IntelliSearchPlaceholder";
+import {
+  IntelliSearchManualPage,
+  IntelliSearchPreAnalysisPage,
+  IntelliSearchReviewsPage,
+  IntelliSearchPostsPage,
+  IntelliSearchCategoriesPage,
+  IntelliSearchProfileInsightsPage,
+  IntelliSearchKeywordsPage,
+  IntelliSearchLeadFinderPage,
+  IntelliSearchManagerReviewsPage,
+  IntelliSearchManagerQAPage,
+  IntelliSearchManagerPostsPage,
+} from "@/pages/intelli-search/serpPages";
+import IntelliSearchRankingPage from "@/pages/intelli-search/IntelliSearchRankingPage";
+import IntelliSearchHistoryPage from "@/pages/intelli-search/IntelliSearchHistoryPage";
+import IntelliSearchEvolutionPage from "@/pages/intelli-search/IntelliSearchEvolutionPage";
+import IntelliSearchPerformanceReport from "@/pages/intelli-search/IntelliSearchPerformanceReport";
 import { TenantProvider, useTenant } from "@/contexts/TenantContext";
 import { defaultPathAfterLogin, isPlatformOperator } from "@/lib/saasTypes";
 import { getTenantById } from "@/lib/tenantsStore";
@@ -129,150 +145,22 @@ const App = () => (
                       <Route path="/intelli-search" element={<IntelliSearchLayout />}>
                         <Route index element={<Navigate to="health/complete" replace />} />
                         <Route path="health/complete" element={<IntelliSearchCompleteAnalysis />} />
-                        <Route
-                          path="health/manual"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Análise manual"
-                              description="Auditoria manual dos campos do perfil Google Business."
-                            />
-                          }
-                        />
-                        <Route
-                          path="extension"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Extensão GBP Check"
-                              description="Verificação rápida do perfil via extensão (fluxo em desenvolvimento)."
-                            />
-                          }
-                        />
-                        <Route
-                          path="pre-analysis"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Pré-análise"
-                              description="Resumo antes da auditoria completa (Google Business Profile)."
-                            />
-                          }
-                        />
-                        <Route
-                          path="reviews-analysis"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Análise de avaliações"
-                              description="Avaliações, nota média e padrões nas críticas."
-                            />
-                          }
-                        />
-                        <Route
-                          path="posts-analysis"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Análise de postagens"
-                              description="Publicações e atualizações no perfil do Google."
-                            />
-                          }
-                        />
-                        <Route
-                          path="categories-analysis"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Análise de categorias"
-                              description="Categorias primárias e secundárias do negócio."
-                            />
-                          }
-                        />
-                        <Route
-                          path="ranking/analysis"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Análise de ranking"
-                              description="Posição aproximada em pesquisas locais e no mapa."
-                            />
-                          }
-                        />
-                        <Route
-                          path="ranking/history"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Histórico de análises"
-                              description="Registo das auditorias anteriores."
-                            />
-                          }
-                        />
-                        <Route
-                          path="prospecting/lead-finder"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Buscar leads"
-                              description="Prospecção por local e palavra-chave (use também a Análise completa com SerpAPI)."
-                            />
-                          }
-                        />
-                        <Route
-                          path="metrics/profile-insights"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Insights do perfil"
-                              description="Métricas de visualizações, cliques e chamadas."
-                            />
-                          }
-                        />
-                        <Route
-                          path="metrics/keywords"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Palavras-chave"
-                              description="Termos locais e pesquisas associadas ao negócio."
-                            />
-                          }
-                        />
-                        <Route
-                          path="metrics/evolution"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Evolução da análise"
-                              description="Tendência das auditorias ao longo do tempo."
-                            />
-                          }
-                        />
-                        <Route
-                          path="manager/reviews"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Avaliações"
-                              description="Responder e organizar avaliações do perfil."
-                            />
-                          }
-                        />
-                        <Route
-                          path="manager/qa"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Perguntas e respostas"
-                              description="Perguntas frequentes públicas no perfil."
-                            />
-                          }
-                        />
-                        <Route
-                          path="manager/posts"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Atualizações (postagens)"
-                              description="Criar e agendar atualizações no Google Business Profile."
-                            />
-                          }
-                        />
-                        <Route
-                          path="tools/performance-report"
-                          element={
-                            <IntelliSearchPlaceholder
-                              title="Relatório de performance"
-                              description="Exportar ou partilhar relatório de desempenho."
-                            />
-                          }
-                        />
+                        <Route path="health/manual" element={<IntelliSearchManualPage />} />
+                        <Route path="extension" element={<Navigate to="/intelli-search/pre-analysis" replace />} />
+                        <Route path="pre-analysis" element={<IntelliSearchPreAnalysisPage />} />
+                        <Route path="reviews-analysis" element={<IntelliSearchReviewsPage />} />
+                        <Route path="posts-analysis" element={<IntelliSearchPostsPage />} />
+                        <Route path="categories-analysis" element={<IntelliSearchCategoriesPage />} />
+                        <Route path="ranking/analysis" element={<IntelliSearchRankingPage />} />
+                        <Route path="ranking/history" element={<IntelliSearchHistoryPage />} />
+                        <Route path="prospecting/lead-finder" element={<IntelliSearchLeadFinderPage />} />
+                        <Route path="metrics/profile-insights" element={<IntelliSearchProfileInsightsPage />} />
+                        <Route path="metrics/keywords" element={<IntelliSearchKeywordsPage />} />
+                        <Route path="metrics/evolution" element={<IntelliSearchEvolutionPage />} />
+                        <Route path="manager/reviews" element={<IntelliSearchManagerReviewsPage />} />
+                        <Route path="manager/qa" element={<IntelliSearchManagerQAPage />} />
+                        <Route path="manager/posts" element={<IntelliSearchManagerPostsPage />} />
+                        <Route path="tools/performance-report" element={<IntelliSearchPerformanceReport />} />
                       </Route>
                       <Route path="/saude-google" element={<Navigate to="/intelli-search/health/complete" replace />} />
                       <Route path="/ia-roi" element={<IaRoi />} />

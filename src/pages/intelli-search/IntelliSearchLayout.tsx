@@ -15,9 +15,8 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: "Extensão e análises",
+    title: "Análises",
     items: [
-      { to: "/intelli-search/extension", label: "Extensão GBP Check" },
       { to: "/intelli-search/pre-analysis", label: "Pré-análise" },
       { to: "/intelli-search/reviews-analysis", label: "Análise de avaliações" },
       { to: "/intelli-search/posts-analysis", label: "Análise de postagens" },

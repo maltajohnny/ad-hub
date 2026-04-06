@@ -72,3 +72,42 @@ export async function fetchBusinessAnalysis(query: string): Promise<BusinessAnal
   }
   return json as BusinessAnalysis;
 }
+
+export type OrganicRankResponse = {
+  ok: boolean;
+  demo?: boolean;
+  message?: string;
+  keyword: string;
+  domain: string;
+  position: number | null;
+  checked: number;
+};
+
+export async function fetchOrganicRank(keyword: string, domain: string): Promise<OrganicRankResponse> {
+  const k = keyword.trim();
+  const d = domain.trim();
+  if (!k || !d) {
+    throw new Error("Indique palavra-chave e domínio.");
+  }
+  const url = `${apiPrefix}/api/intellisearch/ranking?${new URLSearchParams({ keyword: k, domain: d })}`;
+  const res = await fetch(url);
+  const text = await res.text();
+  const trimmed = text.trim();
+  if (!trimmed) {
+    throw new Error("Resposta vazia do servidor de ranking.");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(`Resposta inválida (HTTP ${res.status}).`);
+  }
+  const json = parsed as OrganicRankResponse & { error?: string };
+  if (!res.ok) {
+    throw new Error(json.error ?? `Erro ${res.status}`);
+  }
+  if (json.error) {
+    throw new Error(String(json.error));
+  }
+  return json as OrganicRankResponse;
+}

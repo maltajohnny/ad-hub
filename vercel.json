@@ -2,6 +2,9 @@
   "functions": {
     "api/intellisearch/business.ts": {
       "maxDuration": 60
+    },
+    "api/intellisearch/ranking.ts": {
+      "maxDuration": 60
     }
   },
   "rewrites": [

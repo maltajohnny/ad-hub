@@ -31,11 +31,12 @@ func main() {
 
 	api := app.Group("/api/intellisearch")
 	api.Get("/business", handlers.GetBusiness)
+	api.Get("/ranking", handlers.GetOrganicRank)
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"ok": true, "service": "intellisearch"})
 	})
 
-	log.Printf("IntelliSearch API a ouvir em :%s (GET /api/intellisearch/business?query=...)", port)
+	log.Printf("IntelliSearch API a ouvir em :%s (GET /api/intellisearch/business|ranking)", port)
 	log.Fatal(app.Listen(":" + port))
 }
