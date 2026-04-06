@@ -1,15 +1,19 @@
 /**
- * GET /api/intellisearch/ping — diagnóstico (sem SerpAPI).
+ * GET /api/intellisearch/ping
+ * Handler mínimo: sem `res.status`/`res.json` (não existem no Node puro) e sem imports de runtime
+ * além do default export (tipos só em compile-time).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getSerpApiKey } from "../lib/env";
-import { sendJson } from "../lib/sendJson";
 
-export default function handler(_req: VercelRequest, res: VercelResponse) {
-  sendJson(res, 200, {
+export default function handler(_req: VercelRequest, res: VercelResponse): void {
+  const body = JSON.stringify({
     ok: true,
     route: "intellisearch/ping",
-    hasSerpKey: Boolean(getSerpApiKey()),
     t: Date.now(),
   });
+  if (!res.headersSent) {
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+  }
+  res.end(body);
 }
