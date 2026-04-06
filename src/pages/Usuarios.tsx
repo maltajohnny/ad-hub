@@ -29,6 +29,7 @@ import {
   STRONG_PASSWORD_HINT,
 } from "@/lib/passwordPolicy";
 import { isValidLoginUsername, normalizeLoginKey, sanitizeLoginInput } from "@/lib/loginUsername";
+import { buildOrgScopedLogin } from "@/lib/orgScopedLogin";
 import {
   Dialog,
   DialogContent,
@@ -73,6 +74,8 @@ const Usuarios = () => {
   const usersOnly = useMemo(() => rows.filter((u) => u.role === "user"), [rows]);
 
   const [username, setUsername] = useState("");
+  /** Só para operador da plataforma: organização do novo utilizador (`__none__` = login sem sufixo). */
+  const [createOrganizationId, setCreateOrganizationId] = useState<string>("__none__");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -219,7 +222,11 @@ const Usuarios = () => {
       canDeleteBoardCards: isAdminRole ? undefined : grantDeleteBoardCards,
       allowedModules:
         !isAdminRole && mods.length < APP_MODULES.length ? mods : undefined,
-      scopeTenantId: platformOp ? null : scopeTenantId,
+      scopeTenantId: platformOp
+        ? createOrganizationId !== "__none__"
+          ? createOrganizationId
+          : null
+        : scopeTenantId,
     });
     if (!res.ok) {
       toast.error(res.error || "Não foi possível criar o usuário.");
@@ -269,14 +276,58 @@ const Usuarios = () => {
           Novo usuário
         </h3>
         <div className="grid sm:grid-cols-2 gap-3">
+          {platformOp && (
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-xs text-muted-foreground">Organização do novo utilizador</label>
+              <Select value={createOrganizationId} onValueChange={setCreateOrganizationId}>
+                <SelectTrigger className="h-10 bg-secondary/50 border-border/50">
+                  <SelectValue placeholder="Organização" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Nenhuma (login global, sem .organização)</SelectItem>
+                  {listTenants().map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.displayName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Login</label>
+            <label className="text-xs text-muted-foreground">
+              {platformOp && createOrganizationId !== "__none__"
+                ? "Nome de utilizador (sem sufixo)"
+                : platformOp
+                  ? "Login"
+                  : "Nome de utilizador"}
+            </label>
             <Input
               value={username}
               onChange={(e) => setUsername(sanitizeLoginInput(e.target.value))}
-              placeholder="ex.: maria.silva ou time@empresa"
+              placeholder={
+                platformOp && createOrganizationId !== "__none__"
+                  ? "ex.: maria → maria.slugdaorg"
+                  : "ex.: maria ou maria.empresa"
+              }
               className="bg-secondary/50 border-border/50 h-10 font-mono text-sm"
             />
+            {!platformOp && tenant && scopeTenantId && username.trim() ? (
+              <p className="text-[11px] text-muted-foreground">
+                Login de acesso:{" "}
+                <span className="font-mono text-foreground">
+                  {buildOrgScopedLogin(username, tenant.slug) ?? "…"}
+                </span>
+              </p>
+            ) : null}
+            {platformOp && createOrganizationId !== "__none__" && username.trim() ? (
+              <p className="text-[11px] text-muted-foreground">
+                Login de acesso:{" "}
+                <span className="font-mono text-foreground">
+                  {buildOrgScopedLogin(username, getTenantById(createOrganizationId)?.slug ?? "") ?? "…"}
+                </span>
+              </p>
+            ) : null}
           </div>
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Senha inicial</label>

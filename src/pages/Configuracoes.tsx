@@ -5,8 +5,17 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Link2, Webhook, Save, KeyRound, Camera, Trash2 } from "lucide-react";
+import { Link2, Webhook, Save, KeyRound, Camera, Trash2, Building2 } from "lucide-react";
 import { useAuth, OWNER_USERNAME } from "@/contexts/AuthContext";
+import { isPlatformOperator } from "@/lib/saasTypes";
+import { BUILTIN_QTRAFFIC_ID } from "@/lib/tenantsStore";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { sanitizeLoginInput } from "@/lib/loginUsername";
 import { isStrongPassword, STRONG_PASSWORD_HINT } from "@/lib/passwordPolicy";
 import { toast } from "sonner";
@@ -38,6 +47,7 @@ const Configuracoes = () => {
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
+  const [orgVinculo, setOrgVinculo] = useState<"none" | "qtraffic">("none");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -47,6 +57,7 @@ const Configuracoes = () => {
     setPhone(user.phone);
     setDoc(user.document);
     setEmail(user.email);
+    setOrgVinculo(user.organizationId === BUILTIN_QTRAFFIC_ID ? "qtraffic" : "none");
   }, [user]);
 
   const setConnected = (name: string, connected: boolean) => {
@@ -92,6 +103,16 @@ const Configuracoes = () => {
   const handleRemoveAvatar = () => {
     updateProfile({ avatarDataUrl: null });
     toast.success("Foto removida. Avatar padrão exibido.");
+  };
+
+  const handleSaveOrgVinculo = () => {
+    if (!user || !isPlatformOperator(user.username)) return;
+    if (orgVinculo === "qtraffic") {
+      updateProfile({ organizationId: BUILTIN_QTRAFFIC_ID });
+    } else {
+      updateProfile({ organizationId: undefined });
+    }
+    toast.success("Vínculo com a organização atualizado.");
   };
 
   const handleChangePassword = () => {
@@ -256,6 +277,37 @@ const Configuracoes = () => {
               Salvar dados
             </Button>
           </Card>
+
+          {user && isPlatformOperator(user.username) ? (
+            <Card className="glass-card p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Building2 size={18} className="text-primary" />
+                <h3 className="font-display font-semibold">Organização (equipa Qtraffic)</h3>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+                Associe a sua conta à organização principal Qtraffic para fazer parte do mesmo contexto de módulos e permissões
+                da equipa. Pode remover o vínculo a qualquer momento.
+              </p>
+              <div className="space-y-3 max-w-md">
+                <label className="text-sm text-muted-foreground">Vínculo</label>
+                <Select
+                  value={orgVinculo}
+                  onValueChange={(v) => setOrgVinculo(v as "none" | "qtraffic")}
+                >
+                  <SelectTrigger className="bg-secondary/50 border-border/50">
+                    <SelectValue placeholder="Escolher" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem vínculo (só operador da plataforma)</SelectItem>
+                    <SelectItem value="qtraffic">Qtraffic — equipa principal</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="secondary" size="sm" onClick={handleSaveOrgVinculo}>
+                  Guardar vínculo
+                </Button>
+              </div>
+            </Card>
+          ) : null}
 
           <Card className="glass-card p-6">
             <div className="flex items-center gap-2 mb-4">

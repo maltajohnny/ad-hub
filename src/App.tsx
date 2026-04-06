@@ -21,10 +21,13 @@ import Usuarios from "@/pages/Usuarios";
 import NotFound from "./pages/NotFound";
 import Landing from "@/pages/Landing";
 import Organizacoes from "@/pages/Organizacoes";
-import IntelliSearch from "@/pages/IntelliSearch";
+import IntelliSearchLayout from "@/pages/IntelliSearch";
+import IntelliSearchCompleteAnalysis from "@/pages/intelli-search/IntelliSearchCompleteAnalysis";
+import IntelliSearchPlaceholder from "@/pages/intelli-search/IntelliSearchPlaceholder";
 import { TenantProvider, useTenant } from "@/contexts/TenantContext";
 import { defaultPathAfterLogin, isPlatformOperator } from "@/lib/saasTypes";
 import { getTenantById } from "@/lib/tenantsStore";
+import { isQtrafficTeamMember } from "@/lib/qtrafficAccess";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +36,18 @@ const AdminRoute = ({ children }: { children: ReactNode }) => {
   const { tenant } = useTenant();
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "admin")
+    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+  return <>{children}</>;
+};
+
+/** Módulo Organizações: só operadores da plataforma ou conta vinculada à org Qtraffic (equipa principal). */
+const QtrafficTeamAdminRoute = ({ children }: { children: ReactNode }) => {
+  const { user } = useAuth();
+  const { tenant } = useTenant();
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== "admin")
+    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+  if (!isQtrafficTeamMember(user))
     return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
   return <>{children}</>;
 };
@@ -111,8 +126,77 @@ const App = () => (
                       <Route path="/clientes/favoritos" element={<ClientesFavoritos />} />
                       <Route path="/clientes" element={<Clientes />} />
                       <Route path="/campanhas" element={<Campanhas />} />
-                      <Route path="/intelli-search" element={<IntelliSearch />} />
-                      <Route path="/saude-google" element={<Navigate to="/intelli-search" replace />} />
+                      <Route path="/intelli-search" element={<IntelliSearchLayout />}>
+                        <Route index element={<Navigate to="health/complete" replace />} />
+                        <Route path="health/complete" element={<IntelliSearchCompleteAnalysis />} />
+                        <Route
+                          path="health/manual"
+                          element={
+                            <IntelliSearchPlaceholder
+                              title="Manual Analysis"
+                              description="Auditoria manual de campos do perfil."
+                            />
+                          }
+                        />
+                        <Route path="extension" element={<Navigate to="/intelli-search/pre-analysis" replace />} />
+                        <Route
+                          path="pre-analysis"
+                          element={<IntelliSearchPlaceholder title="Pre Analysis" description="Pré-análise antes da auditoria completa." />}
+                        />
+                        <Route
+                          path="reviews-analysis"
+                          element={<IntelliSearchPlaceholder title="Reviews Analysis" description="Avaliações e respostas." />}
+                        />
+                        <Route
+                          path="posts-analysis"
+                          element={<IntelliSearchPlaceholder title="Posts Analysis" description="Posts no perfil do Google." />}
+                        />
+                        <Route
+                          path="categories-analysis"
+                          element={<IntelliSearchPlaceholder title="Categories Analysis" description="Categorias do negócio." />}
+                        />
+                        <Route
+                          path="ranking/analysis"
+                          element={<IntelliSearchPlaceholder title="Ranking Analysis" description="Ranking local e mapa." />}
+                        />
+                        <Route
+                          path="ranking/history"
+                          element={<IntelliSearchPlaceholder title="Analysis History" description="Histórico de análises." />}
+                        />
+                        <Route
+                          path="prospecting/lead-finder"
+                          element={<IntelliSearchPlaceholder title="Lead Finder" description="Prospecção por local e palavra-chave." />}
+                        />
+                        <Route
+                          path="metrics/profile-insights"
+                          element={<IntelliSearchPlaceholder title="Profile Insights" description="Métricas do perfil." />}
+                        />
+                        <Route
+                          path="metrics/keywords"
+                          element={<IntelliSearchPlaceholder title="Keywords" description="Palavras-chave locais." />}
+                        />
+                        <Route
+                          path="metrics/evolution"
+                          element={<IntelliSearchPlaceholder title="Analysis Evolution" description="Evolução das auditorias." />}
+                        />
+                        <Route
+                          path="manager/reviews"
+                          element={<IntelliSearchPlaceholder title="Reviews Manager" description="Gestão de avaliações." />}
+                        />
+                        <Route
+                          path="manager/qa"
+                          element={<IntelliSearchPlaceholder title="Q&A Manager" description="Perguntas e respostas." />}
+                        />
+                        <Route
+                          path="manager/posts"
+                          element={<IntelliSearchPlaceholder title="Posts Manager" description="Gestão de posts." />}
+                        />
+                        <Route
+                          path="tools/performance-report"
+                          element={<IntelliSearchPlaceholder title="Performance Report" description="Relatório de desempenho." />}
+                        />
+                      </Route>
+                      <Route path="/saude-google" element={<Navigate to="/intelli-search/health/complete" replace />} />
                       <Route path="/ia-roi" element={<IaRoi />} />
                       <Route path="/configuracoes" element={<Configuracoes />} />
                       <Route
@@ -126,9 +210,9 @@ const App = () => (
                       <Route
                         path="/organizacoes"
                         element={
-                          <AdminRoute>
+                          <QtrafficTeamAdminRoute>
                             <Organizacoes />
-                          </AdminRoute>
+                          </QtrafficTeamAdminRoute>
                         }
                       />
                       <Route path="/perfil" element={<Navigate to="/configuracoes?tab=conta" replace />} />

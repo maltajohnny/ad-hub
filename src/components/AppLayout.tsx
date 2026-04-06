@@ -35,6 +35,7 @@ import {
   pathToModule,
   type AppModule,
 } from "@/lib/saasTypes";
+import { isQtrafficTeamMember } from "@/lib/qtrafficAccess";
 import { IntelliSearchNewBadge } from "@/components/IntelliSearchNewBadge";
 
 type MenuItem = {
@@ -49,6 +50,7 @@ function AppLayoutMain({ children, className }: { children: ReactNode; className
   const location = useLocation();
   const isBoard = location.pathname === "/board";
   const isDashboardHome = location.pathname === "/dashboard";
+  const isIntelliSearch = location.pathname.startsWith("/intelli-search");
 
   return (
     <main className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden", className)}>
@@ -77,7 +79,12 @@ function AppLayoutMain({ children, className }: { children: ReactNode; className
           className={cn(
             isBoard
               ? "flex-1 flex flex-col min-h-0 w-full max-w-none px-4 lg:px-6 pb-4 pt-3"
-              : "p-6 lg:p-8 max-w-7xl mx-auto flex-1",
+              : cn(
+                  "max-w-7xl mx-auto flex-1",
+                  isIntelliSearch
+                    ? "py-6 pr-6 pl-3 sm:pl-4 lg:py-8 lg:pr-8 lg:pl-5"
+                    : "p-6 lg:p-8",
+                ),
           )}
         >
           {children}
@@ -92,7 +99,7 @@ const menuAfterClientes: MenuItem[] = [
   {
     icon: Search,
     label: "IntelliSearch",
-    path: "/intelli-search",
+    path: "/intelli-search/health/complete",
     module: "intelli-search",
   },
   { icon: TrendingUp, label: "IA & ROI", path: "/ia-roi", module: "ia-roi" },
@@ -378,7 +385,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           </div>
           ) : null}
 
-          {isAdmin && (
+          {isAdmin && isQtrafficTeamMember(user) && (
             <button
               type="button"
               onClick={() => navigate("/organizacoes")}

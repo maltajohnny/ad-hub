@@ -75,23 +75,15 @@ export function getQtrafficDefaultBranding(): LoginBrandResolved {
 }
 
 /**
- * Autenticação: com `utilizador.org` conhecido usa só a parte antes do último ponto; com `.org` usa só o slug; caso contrário o login completo.
+ * Chave de autenticação no registo: o login completo (ex.: `diego.norter`), ou e-mail normalizado.
+ * O sufixo `.slugdaorg` faz parte do utilizador e não é removido.
  */
 export function normalizeUsernameForLoginAttempt(raw: string): string {
   const t = raw.trim();
   if (t.includes("@")) {
     return normalizeLoginKey(sanitizeLoginInput(t));
   }
-  const slug = extractOrgSlugFromUsername(t);
-  if (!slug) {
-    return normalizeLoginKey(sanitizeLoginInput(t));
-  }
-  const dot = t.lastIndexOf(".");
-  const loginPart = t.slice(0, dot);
-  if (!loginPart) {
-    return slug;
-  }
-  return normalizeLoginKey(sanitizeLoginInput(loginPart));
+  return normalizeLoginKey(sanitizeLoginInput(t));
 }
 
 export function resolveLoginScreenBrand(input: {

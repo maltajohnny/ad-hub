@@ -78,7 +78,7 @@ export function pathToModule(pathname: string): AppModule | null {
   if (pathname === "/clientes") return "clientes";
   if (pathname === "/clientes/favoritos") return "clientes-favoritos";
   if (pathname === "/campanhas") return "campanhas";
-  if (pathname === "/intelli-search") return "intelli-search";
+  if (pathname === "/intelli-search" || pathname.startsWith("/intelli-search/")) return "intelli-search";
   if (pathname === "/ia-roi") return "ia-roi";
   if (pathname === "/usuarios") return "usuarios";
   if (pathname.startsWith("/configuracoes")) return "configuracoes";
@@ -98,7 +98,7 @@ export function moduleToDefaultPath(m: AppModule): string {
     case "campanhas":
       return "/campanhas";
     case "intelli-search":
-      return "/intelli-search";
+      return "/intelli-search/health/complete";
     case "ia-roi":
       return "/ia-roi";
     case "usuarios":

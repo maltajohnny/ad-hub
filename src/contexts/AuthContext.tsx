@@ -3,6 +3,13 @@ import { isStrongPassword } from "@/lib/passwordPolicy";
 import { isPlatformOperator, type AppModule } from "@/lib/saasTypes";
 import { isValidLoginUsername, normalizeLoginKey, sanitizeLoginInput } from "@/lib/loginUsername";
 import { migrateStoredUsernameInLocalStorage } from "@/lib/migrateStoredUsername";
+import { BUILTIN_NORTER_ID, BUILTIN_QTRAFFIC_ID, getTenantById } from "@/lib/tenantsStore";
+import { getClientOrganizationScope } from "@/lib/clientOrgScope";
+import {
+  buildOrgScopedLogin,
+  migrateOrgScopedLoginToNewSlug,
+  parseOrgScopedLogin,
+} from "@/lib/orgScopedLogin";
 
 export interface User {
   role: "admin" | "user";
@@ -77,6 +84,64 @@ export type ClientAssignmentMap = Record<number, string | null>;
 
 type RegistryEntry = { password: string; user: User };
 
+/** Migra todos os utilizadores com `organizationId === oldOrgId` para `newOrgId` e ajusta logins `*.slugAntigo` → `*.slugNovo`. */
+function cascadeOrgUsersMigrate(
+  registry: Record<string, RegistryEntry>,
+  oldOrgId: string,
+  newOrgId: string,
+):
+  | { ok: true; nextReg: Record<string, RegistryEntry>; renames: { from: string; to: string }[] }
+  | { ok: false; error: string } {
+  const newT = getTenantById(newOrgId);
+  if (!newT) return { ok: false, error: "Organização de destino inválida." };
+
+  const migrations: { from: string; to: string; entry: RegistryEntry }[] = [];
+  for (const [k, e] of Object.entries(registry)) {
+    if (e.user.organizationId !== oldOrgId) continue;
+    const nl = migrateOrgScopedLoginToNewSlug(e.user.username, newT.slug);
+    if (!nl) return { ok: false, error: `Login inválido ao migrar @${k}.` };
+    const to = normalizeLoginKey(nl);
+    migrations.push({ from: k, to, entry: e });
+  }
+
+  const tos = migrations.map((m) => m.to);
+  if (new Set(tos).size !== tos.length) {
+    return { ok: false, error: "Conflito: logins duplicados na migração de organização." };
+  }
+
+  for (const m of migrations) {
+    const ex = registry[m.to];
+    if (ex) {
+      const slotFreedByRename = migrations.some((x) => x.from === m.to);
+      if (!slotFreedByRename) {
+        return { ok: false, error: `O login ${m.to} já está em uso.` };
+      }
+    }
+  }
+
+  const nextReg: Record<string, RegistryEntry> = { ...registry };
+  for (const m of migrations) {
+    delete nextReg[m.from];
+  }
+  for (const m of migrations) {
+    nextReg[m.to] = {
+      password: m.entry.password,
+      user: {
+        ...m.entry.user,
+        username: m.to,
+        organizationId: newOrgId,
+        hideFromPlatformList: false,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    nextReg,
+    renames: migrations.map(({ from, to }) => ({ from, to })),
+  };
+}
+
 function loadAssignments(): ClientAssignmentMap {
   try {
     const raw = localStorage.getItem(CLIENT_ASSIGNMENTS_KEY);
@@ -138,16 +203,17 @@ const defaultRegistry: Record<string, RegistryEntry> = {
       mustChangePassword: false,
     },
   },
-  diego: {
+  "diego.norter": {
     password: "N0rt3rD!ego",
     user: {
       role: "admin",
-      username: "diego",
+      username: "diego.norter",
       name: "Diego — Norter",
       email: "diego@norter.com",
       phone: "(11) 97777-0000",
       document: "222.222.222-22",
       mustChangePassword: false,
+      organizationId: BUILTIN_NORTER_ID,
     },
   },
 };
@@ -168,8 +234,21 @@ function loadRegistry(): Record<string, RegistryEntry> {
       parsed.qtrafficadmin = defaultRegistry.qtrafficadmin;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
-    if (!parsed.diego?.user) {
-      parsed.diego = defaultRegistry.diego;
+    if (parsed.diego?.user && !parsed["diego.norter"]?.user) {
+      const e = parsed.diego;
+      parsed["diego.norter"] = {
+        ...e,
+        user: {
+          ...e.user,
+          username: "diego.norter",
+          organizationId: e.user.organizationId ?? BUILTIN_NORTER_ID,
+        },
+      };
+      delete parsed.diego;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    }
+    if (!parsed["diego.norter"]?.user) {
+      parsed["diego.norter"] = defaultRegistry["diego.norter"];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
     return parsed;
@@ -297,7 +376,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = useCallback(
     (username: string, password: string): { user: User | null; accountDisabled?: boolean } => {
-      const key = username.trim().toLowerCase();
+      const key = normalizeLoginKey(username);
       const entry = registry[key];
       if (!entry || entry.password !== password) {
         return { user: null };
@@ -317,14 +396,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const updateProfile = useCallback(
     (data: Partial<Omit<User, "username">>) => {
       if (!user) return;
-      const nextUser = { ...user, ...data } as User;
-      setUser(nextUser);
+      let patch: Partial<Omit<User, "username">> = { ...data };
+      if ("organizationId" in data) {
+        if (!isPlatformOperator(user.username)) {
+          const { organizationId: _removed, ...rest } = patch;
+          patch = rest;
+        } else {
+          const oid = data.organizationId;
+          if (!oid) {
+            patch = { ...patch, organizationId: undefined };
+          } else if (oid !== BUILTIN_QTRAFFIC_ID) {
+            const { organizationId: _removed, ...rest } = patch;
+            patch = rest;
+          }
+        }
+      }
+      const merged = { ...user, ...patch } as User;
+      if ("organizationId" in data && isPlatformOperator(user.username) && !merged.organizationId) {
+        delete merged.organizationId;
+      }
+      setUser(merged);
       setRegistry((reg) => {
         const entry = reg[user.username];
         if (!entry) return reg;
+        const nextUser = { ...entry.user, ...patch } as User;
+        if ("organizationId" in data && isPlatformOperator(user.username) && !nextUser.organizationId) {
+          delete nextUser.organizationId;
+        }
         const nextReg = {
           ...reg,
-          [user.username]: { ...entry, user: { ...entry.user, ...data } },
+          [user.username]: { ...entry, user: nextUser },
         };
         persistRegistry(nextReg);
         return nextReg;
@@ -503,7 +604,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
       let orgId: string | undefined;
       if (isPlatformOperator(user.username)) {
-        orgId = undefined;
+        orgId = input.scopeTenantId ?? undefined;
       } else {
         if (!input.scopeTenantId) {
           return {
@@ -513,9 +614,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
         orgId = input.scopeTenantId;
       }
-      const u = normalizeLoginKey(sanitizeLoginInput(input.username));
-      if (!isValidLoginUsername(sanitizeLoginInput(input.username))) {
+
+      let u: string;
+      const rawLogin = sanitizeLoginInput(input.username);
+      if (orgId) {
+        const tr = getTenantById(orgId);
+        if (!tr) return { ok: false, error: "Organização inválida." };
+        const built = buildOrgScopedLogin(rawLogin, tr.slug);
+        if (!built) {
+          return { ok: false, error: "Nome de login inválido (use só a parte antes do ponto, ex.: maria)." };
+        }
+        u = normalizeLoginKey(built);
+      } else {
+        u = normalizeLoginKey(rawLogin);
+      }
+
+      if (!isValidLoginUsername(rawLogin)) {
         return { ok: false, error: "Login inválido: sem espaços nem vírgulas, até 80 caracteres." };
+      }
+      if (orgId && !rawLogin.trim()) {
+        return { ok: false, error: "Indique o nome de utilizador (será nome.organização)." };
       }
       if (registry[u]) return { ok: false, error: "Este login já existe." };
       if (!isStrongPassword(input.password)) {
@@ -538,7 +656,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         document: "",
         role: input.role,
         avatarDataUrl: null,
-        ...(orgId ? { organizationId: orgId, hideFromPlatformList: true as const } : {}),
+        ...(orgId
+          ? {
+              organizationId: orgId,
+              ...(!isPlatformOperator(user.username) ? { hideFromPlatformList: true as const } : {}),
+            }
+          : {}),
         ...(input.role === "user"
           ? {
               mustChangePassword: true as const,
@@ -642,6 +765,83 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return { ok: false, error: "A conta proprietária não pode ser desativada." };
       }
 
+      const patchOrgEarly = patch.organizationId;
+      if (
+        patchOrgEarly !== undefined &&
+        isPlatformOperator(user.username) &&
+        key !== OWNER_USERNAME
+      ) {
+        const oldOid = entry.user.organizationId;
+        const newOid =
+          patchOrgEarly === null || patchOrgEarly === "" ? null : patchOrgEarly;
+        if (newOid && !getTenantById(newOid)) {
+          return { ok: false, error: "Organização inválida." };
+        }
+        if (oldOid && newOid && oldOid !== newOid) {
+          const mig = cascadeOrgUsersMigrate(registry, oldOid, newOid);
+          if (!mig.ok) return mig;
+          const newKey = mig.renames.find((r) => r.from === key)?.to;
+          if (!newKey) return { ok: false, error: "Migração: utilizador não encontrado." };
+          const base = mig.nextReg[newKey];
+          let mergedUser: User = { ...base.user };
+          if (patch.name !== undefined) mergedUser.name = patch.name.trim() || mergedUser.username;
+          if (patch.email !== undefined) mergedUser.email = patch.email.trim();
+          if (patch.phone !== undefined) mergedUser.phone = patch.phone.trim();
+          if (patch.document !== undefined) mergedUser.document = patch.document.trim();
+          if (patch.disabled !== undefined) {
+            mergedUser.disabled = patch.disabled ? true : undefined;
+          }
+          if (patch.role !== undefined) {
+            mergedUser.role = patch.role;
+            if (patch.role === "admin") {
+              mergedUser.mustChangePassword = false;
+              mergedUser.allowedModules = undefined;
+              delete mergedUser.canManageBoard;
+              delete mergedUser.canDeleteBoardCards;
+            } else {
+              mergedUser.canManageBoard = base.user.canManageBoard ?? false;
+              mergedUser.canDeleteBoardCards = base.user.canDeleteBoardCards ?? false;
+            }
+          }
+          let mergedPwd = base.password;
+          if (patch.newPassword !== undefined && patch.newPassword.trim() !== "") {
+            if (!isStrongPassword(patch.newPassword)) {
+              return {
+                ok: false,
+                error: "Senha inválida: mínimo 6 caracteres, maiúscula, minúscula e caractere especial.",
+              };
+            }
+            mergedPwd = patch.newPassword.trim();
+          }
+          mig.nextReg[newKey] = { ...base, password: mergedPwd, user: mergedUser };
+
+          for (const { from, to } of mig.renames) {
+            if (from !== to) migrateStoredUsernameInLocalStorage(from, to);
+          }
+          setClientAssignments((prev) => {
+            const next = { ...prev };
+            for (const cidStr of Object.keys(next)) {
+              const cid = parseInt(cidStr, 10);
+              const v = next[cid];
+              if (v == null) continue;
+              const vk = normalizeLoginKey(v);
+              const hit = mig.renames.find((r) => r.from === vk);
+              if (hit) next[cid] = hit.to;
+            }
+            persistAssignments(next);
+            return next;
+          });
+          syncRegistry(mig.nextReg);
+          setUser((prev) => {
+            if (!prev) return prev;
+            const hit = mig.renames.find((r) => r.from === normalizeLoginKey(prev.username));
+            if (hit) return mig.nextReg[hit.to].user;
+            return prev;
+          });
+          return { ok: true };
+        }
+      }
+
       let nextUser: User = { ...entry.user };
       let nextKey = key;
 
@@ -677,12 +877,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (key === OWNER_USERNAME) {
           return { ok: false, error: "A conta proprietária não pode ser vinculada a uma organização." };
         }
-        if (patch.organizationId === null || patch.organizationId === "") {
-          delete nextUser.organizationId;
-        } else {
-          nextUser.organizationId = patch.organizationId;
+        const oldOid = entry.user.organizationId;
+        const newOid =
+          patch.organizationId === null || patch.organizationId === ""
+            ? null
+            : patch.organizationId;
+        if (newOid && !getTenantById(newOid)) {
+          return { ok: false, error: "Organização inválida." };
         }
-        nextUser.hideFromPlatformList = false;
+        if (oldOid && newOid && oldOid !== newOid) {
+          /* Migração em massa tratada acima (early return). */
+        } else if (!newOid) {
+          delete nextUser.organizationId;
+          nextUser.hideFromPlatformList = false;
+          const p = parseOrgScopedLogin(nextKey);
+          if (p) {
+            nextKey = p.localPart;
+            nextUser.username = p.localPart;
+          }
+        } else if (!oldOid && newOid) {
+          const tr = getTenantById(newOid);
+          if (!tr) return { ok: false, error: "Organização inválida." };
+          nextUser.organizationId = newOid;
+          nextUser.hideFromPlatformList = false;
+          const local = parseOrgScopedLogin(nextKey)?.localPart ?? nextKey;
+          const built = buildOrgScopedLogin(local, tr.slug);
+          if (!built) {
+            return { ok: false, error: "Não foi possível gerar o login no formato nome.organização." };
+          }
+          const nk = normalizeLoginKey(built);
+          if (nk !== nextKey) {
+            if (registry[nk]) {
+              return { ok: false, error: "Este login já está em uso." };
+            }
+            nextKey = nk;
+            nextUser.username = nk;
+          }
+        } else if (oldOid === newOid) {
+          /* sem alteração de organização */
+        }
       }
 
       if (patch.role !== undefined) {
@@ -799,8 +1032,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const canUserSeeClient = useCallback(
     (clientId: number) => {
       if (!user) return false;
-      if (user.role === "admin") return true;
-      return clientAssignments[clientId] === user.username;
+      if (user.role !== "admin") {
+        return clientAssignments[clientId] === user.username;
+      }
+      /** Só `admin` / `qtrafficadmin` veem toda a carteira. Admin só da org Qtraffic gere organizações, não esta lista de clientes. */
+      if (isPlatformOperator(user.username)) return true;
+      if (user.organizationId) {
+        const t = getTenantById(user.organizationId);
+        if (t?.slug === "qtraffic") return false;
+        const scope = getClientOrganizationScope(clientId);
+        return scope === user.organizationId;
+      }
+      return false;
     },
     [user, clientAssignments],
   );

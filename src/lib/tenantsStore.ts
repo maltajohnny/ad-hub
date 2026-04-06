@@ -3,7 +3,8 @@ import { RESERVED_TENANT_SLUGS } from "@/lib/saasTypes";
 
 const STORAGE_KEY = "norter_saas_tenants";
 
-const BUILTIN_NORTER_ID = "00000000-0000-4000-8000-000000000001";
+export const BUILTIN_NORTER_ID = "00000000-0000-4000-8000-000000000001";
+export const BUILTIN_QTRAFFIC_ID = "00000000-0000-4000-8000-000000000002";
 
 export type TenantRecord = {
   id: string;
@@ -47,6 +48,20 @@ function ensureBuiltInTenants(list: TenantRecord[]): { list: TenantRecord[]; cha
         id: BUILTIN_NORTER_ID,
         slug: "norter",
         displayName: "Norter",
+        logoDataUrl: null,
+        enabledModules: [],
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    changed = true;
+  }
+  if (!out.some((t) => t.slug === "qtraffic")) {
+    out = [
+      ...out,
+      {
+        id: BUILTIN_QTRAFFIC_ID,
+        slug: "qtraffic",
+        displayName: "Qtraffic",
         logoDataUrl: null,
         enabledModules: [],
         createdAt: new Date().toISOString(),
@@ -156,7 +171,7 @@ export function updateTenant(
 }
 
 export function deleteTenant(id: string): void {
-  if (id === BUILTIN_NORTER_ID) return;
+  if (id === BUILTIN_NORTER_ID || id === BUILTIN_QTRAFFIC_ID) return;
   persist(loadRaw().filter((t) => t.id !== id));
 }
 

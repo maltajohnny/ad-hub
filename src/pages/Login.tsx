@@ -16,6 +16,24 @@ import { QtrafficMarkLogo } from "@/components/QtrafficMarkLogo";
 import { NorterMarkLogo } from "@/components/NorterMarkLogo";
 import { defaultPathAfterLogin } from "@/lib/saasTypes";
 
+const SAFARI_PW_SNOOZE_KEY = "norter_login_safari_credential_snooze_until";
+const SNOOZE_MS = 30 * 24 * 60 * 60 * 1000;
+
+function readSnoozeActive(): boolean {
+  try {
+    const raw = localStorage.getItem(SAFARI_PW_SNOOZE_KEY);
+    if (!raw) return false;
+    const until = parseInt(raw, 10);
+    if (Number.isNaN(until) || Date.now() >= until) {
+      localStorage.removeItem(SAFARI_PW_SNOOZE_KEY);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const Login = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { login } = useAuth();
@@ -25,6 +43,7 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+  const [safariSnooze, setSafariSnooze] = useState(() => readSnoozeActive());
 
   const tenantRecord = tenantSlug ? getTenantBySlug(tenantSlug) : undefined;
   const invalidTenant = Boolean(tenantSlug && !tenantRecord);
@@ -49,6 +68,19 @@ const Login = () => {
     if (t) setActiveSlug(t.slug);
     else setActiveSlug(null);
   }, [tenantSlug, setActiveSlug]);
+
+  const formAutoComplete = safariSnooze ? "off" : "on";
+  const fieldAutoUser = safariSnooze ? "off" : "username";
+  const fieldAutoPw = safariSnooze ? "off" : "current-password";
+
+  const snoozeSafariCredentialPrompts = () => {
+    try {
+      localStorage.setItem(SAFARI_PW_SNOOZE_KEY, String(Date.now() + SNOOZE_MS));
+    } catch {
+      /* ignore */
+    }
+    setSafariSnooze(true);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,14 +168,25 @@ const Login = () => {
           </div>
         )}
 
-        <form id="login-form" onSubmit={handleSubmit} className="glass-card rounded-xl p-8 space-y-5">
+        <form
+          id="login-form"
+          method="post"
+          action="#"
+          autoComplete={formAutoComplete}
+          onSubmit={handleSubmit}
+          className="glass-card rounded-xl p-8 space-y-5"
+        >
           <div className="space-y-2">
-            <label className="text-sm text-muted-foreground">Usuário</label>
+            <label className="text-sm text-muted-foreground" htmlFor="login-username">
+              Usuário
+            </label>
             <Input
+              id="login-username"
+              name="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Utilizador ou utilizador.organização"
-              autoComplete="username"
+              autoComplete={fieldAutoUser}
               className="bg-secondary/50 border-border/50 focus:border-primary"
               disabled={invalidTenant}
               onKeyDown={(e) => {
@@ -155,14 +198,18 @@ const Login = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm text-muted-foreground">Senha</label>
+            <label className="text-sm text-muted-foreground" htmlFor="login-password">
+              Senha
+            </label>
             <div className="relative">
               <Input
+                id="login-password"
+                name="password"
                 type={showPw ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Digite sua senha"
-                autoComplete="current-password"
+                autoComplete={fieldAutoPw}
                 className="bg-secondary/50 border-border/50 focus:border-primary pr-10"
                 disabled={invalidTenant}
                 onKeyDown={(e) => {
@@ -191,6 +238,20 @@ const Login = () => {
             <LogIn size={16} className="mr-2" />
             Entrar
           </Button>
+
+          {!safariSnooze ? (
+            <button
+              type="button"
+              onClick={snoozeSafariCredentialPrompts}
+              className="w-full text-center text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+            >
+              Safari a pedir para guardar a palavra-passe com frequência? Silenciar lembretes por 30 dias
+            </button>
+          ) : (
+            <p className="text-center text-[11px] text-muted-foreground/80">
+              Pedidos de gravação automática da palavra-passe estão atenuados neste browser durante 30 dias.
+            </p>
+          )}
         </form>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
