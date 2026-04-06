@@ -30,6 +30,7 @@ import {
 import { IntelliSearchNewBadge } from "@/components/IntelliSearchNewBadge";
 import { fetchBusinessAnalysis, type BusinessAnalysis } from "@/lib/intellisearchApi";
 import { appendIntelliSearchHistory } from "@/lib/intellisearchHistory";
+import { BusinessHoursDisplay } from "@/lib/businessHoursDisplay";
 
 const TIER_COLORS = {
   weak: "hsl(0 72% 52%)",
@@ -560,9 +561,9 @@ export function IntelliSearchSerpFlow({ preset }: { preset: SerpFlowPreset }) {
                     <MapPin className="h-4 w-4 shrink-0 mt-0.5" />
                     <span>{b.address || "—"}</span>
                   </li>
-                  <li className="flex gap-2">
-                    <Clock className="h-4 w-4 shrink-0 mt-0.5" />
-                    <span className="break-words">{b.hours_summary || "—"}</span>
+                  <li className="flex gap-2 items-start">
+                    <Clock className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+                    <BusinessHoursDisplay value={b.hours_summary || ""} className="flex-1 min-w-0" />
                   </li>
                   <li className="flex gap-2">
                     <Globe className="h-4 w-4 shrink-0 mt-0.5" />
