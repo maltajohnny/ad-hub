@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/contexts/AuthContext";
-import { APP_MODULES, APP_MODULE_LABELS, type AppModule } from "@/lib/saasTypes";
+import { APP_MODULES, type AppModule } from "@/lib/saasTypes";
 import { createTenant, deleteTenant, listTenants, tenantLoginPath, type TenantRecord } from "@/lib/tenantsStore";
 import { Building2, Copy, Trash2, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { ModuleCheckboxLabel } from "@/components/ModuleCheckboxLabel";
 
 export default function Organizacoes() {
   const { user } = useAuth();
@@ -104,9 +105,13 @@ export default function Organizacoes() {
           <Label className="text-xs">Módulos permitidos na organização (vazio = todos)</Label>
           <div className="grid sm:grid-cols-2 gap-2 rounded-lg border border-border/50 p-3">
             {APP_MODULES.map((m) => (
-              <label key={m} className="flex items-center gap-2 text-sm cursor-pointer">
-                <Checkbox checked={mod[m]} onCheckedChange={(c) => setMod((prev) => ({ ...prev, [m]: c === true }))} />
-                {APP_MODULE_LABELS[m]}
+              <label key={m} className="flex items-start gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={mod[m]}
+                  onCheckedChange={(c) => setMod((prev) => ({ ...prev, [m]: c === true }))}
+                />
+                <ModuleCheckboxLabel appModule={m} />
               </label>
             ))}
           </div>

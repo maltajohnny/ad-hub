@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/contexts/AuthContext";
+import { isPlatformOperator } from "@/lib/saasTypes";
+import PlatformDashboard from "@/pages/PlatformDashboard";
 import { useKanban } from "@/contexts/KanbanContext";
 import { clientsData, getClientDetail, type Client, type RoiTableRow } from "@/pages/Clientes";
 import { Card } from "@/components/ui/card";
@@ -158,7 +160,7 @@ function buildView(c: Client | undefined) {
 const Dashboard = () => {
   const [mounted, setMounted] = useState(false);
   const { resolvedTheme } = useTheme();
-  const { canUserSeeClient } = useAuth();
+  const { user, canUserSeeClient } = useAuth();
   const { boardClientId, setBoardClientId } = useKanban();
 
   const visibleClients = useMemo(
@@ -283,6 +285,10 @@ const Dashboard = () => {
   const cid = currentClient?.id ?? 0;
   const gradPrefix = `dash-${cid}`;
 
+  if (isPlatformOperator(user?.username)) {
+    return <PlatformDashboard />;
+  }
+
   return (
     <>
       {headerSlot ? createPortal(dashboardHeaderChrome, headerSlot) : null}
@@ -304,7 +310,7 @@ const Dashboard = () => {
                     id={`dashboard:${cid}:kpi:${slug}`}
                     kind="dashboard-kpi"
                     title={`KPI: ${kpi.label}`}
-                    path="/"
+                    path="/dashboard"
                     subtitle={kpi.value}
                     size="sm"
                   />
@@ -330,7 +336,7 @@ const Dashboard = () => {
                 id={`dashboard:${cid}:chart:investimento-plataforma`}
                 kind="dashboard-chart"
                 title="Gráfico: Investimento por Plataforma"
-                path="/"
+                path="/dashboard"
                 subtitle={currentClient?.name ?? "Dashboard"}
                 size="sm"
               />
@@ -390,7 +396,7 @@ const Dashboard = () => {
                 id={`dashboard:${cid}:chart:roi-plataforma`}
                 kind="dashboard-chart"
                 title="Gráfico: ROI por Plataforma"
-                path="/"
+                path="/dashboard"
                 subtitle={currentClient?.name ?? "Dashboard"}
                 size="sm"
               />
@@ -454,7 +460,7 @@ const Dashboard = () => {
                     id={`dashboard:${cid}:ai:${i}:${rec.platform}`}
                     kind="dashboard-ai"
                     title={`IA: ${rec.platform} — ${rec.action}`}
-                    path="/"
+                    path="/dashboard"
                     subtitle={rec.priority}
                     size="sm"
                   />

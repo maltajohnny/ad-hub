@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Users,
   LogOut,
+  UserCircle,
   ChevronLeft,
   ChevronRight,
   TrendingUp,
@@ -17,6 +18,8 @@ import {
   Columns3,
   Layers2,
   Building2,
+  Wand2,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import norterSymbol from "@/assets/norter-symbol.png";
@@ -33,6 +36,7 @@ import {
   pathToModule,
   type AppModule,
 } from "@/lib/saasTypes";
+import { IntelliSearchNewBadge } from "@/components/IntelliSearchNewBadge";
 
 type MenuItem = {
   icon: typeof LayoutDashboard;
@@ -45,7 +49,7 @@ type MenuItem = {
 function AppLayoutMain({ children, className }: { children: ReactNode; className?: string }) {
   const location = useLocation();
   const isBoard = location.pathname === "/board";
-  const isDashboardHome = location.pathname === "/";
+  const isDashboardHome = location.pathname === "/dashboard";
 
   return (
     <main className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden", className)}>
@@ -86,6 +90,12 @@ function AppLayoutMain({ children, className }: { children: ReactNode; className
 
 const menuAfterClientes: MenuItem[] = [
   { icon: BarChart3, label: "Campanhas", path: "/campanhas", module: "campanhas" },
+  {
+    icon: Wand2,
+    label: "IntelliSearch",
+    path: "/intelli-search",
+    module: "intelli-search",
+  },
   { icon: TrendingUp, label: "IA & ROI", path: "/ia-roi", module: "ia-roi" },
   { icon: UsersRound, label: "Usuários", path: "/usuarios", adminOnly: true, module: "usuarios" },
   { icon: Settings, label: "Configurações", path: "/configuracoes", module: "configuracoes" },
@@ -108,6 +118,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   const isAdmin = user?.role === "admin";
   const eff = effectiveModulesForUser(user, tenant?.enabledModules);
   const canSee = (m: AppModule) => eff === "all" || eff.includes(m);
+  const homePath = eff === "all" ? "/dashboard" : firstAllowedPath(eff);
 
   const visibleRest = menuAfterClientes.filter((item) => {
     if (item.adminOnly && !isAdmin) return false;
@@ -135,11 +146,11 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   };
   const clientesListActive = path === "/clientes";
   const favoritosActive = path === "/clientes/favoritos";
-  const dashboardActive = path === "/";
+  const dashboardActive = path === "/dashboard";
   const boardActive = path === "/board";
 
   useEffect(() => {
-    if (path === "/" || path === "/board") setDashSubOpen(true);
+    if (path === "/dashboard" || path === "/board") setDashSubOpen(true);
   }, [path]);
 
   useEffect(() => {
@@ -153,8 +164,8 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
       {/* `isolate` + borda única evita “degrau” visual na junção com o main; `z-10` mantém a linha vertical contínua */}
       <aside
         className={cn(
-          "relative z-10 flex shrink-0 flex-col bg-sidebar transition-[width] duration-300",
-          "border-r border-border/40",
+          "relative z-10 flex h-screen max-h-screen shrink-0 flex-col bg-sidebar transition-[width] duration-300",
+          "sticky top-0 border-r border-border/40",
           collapsed ? "w-20" : "w-64",
         )}
       >
@@ -168,7 +179,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           {mounted && !collapsed ? (
             <button
               type="button"
-              onClick={() => navigate(canSee("dashboard") ? "/" : "/board")}
+              onClick={() => navigate(homePath)}
               className="flex w-full min-w-0 flex-1 cursor-pointer items-center justify-start rounded-md text-left transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
               aria-label="Ir para o início"
             >
@@ -208,7 +219,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           ) : mounted && collapsed ? (
             <button
               type="button"
-              onClick={() => navigate(canSee("dashboard") ? "/" : "/board")}
+              onClick={() => navigate(homePath)}
               className="flex h-12 w-12 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
               aria-label="Ir para o início"
             >
@@ -235,7 +246,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           )}
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="min-h-0 flex-1 overflow-y-auto p-3 space-y-1">
           {showDashSection ? (
           <div className="space-y-0.5">
             <div className="w-full rounded-lg">
@@ -248,7 +259,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                   if (t.closest("[data-submenu-toggle]")) {
                     setDashSubOpen((o) => !o);
                   } else {
-                    navigate(canSee("dashboard") ? "/" : "/board");
+                    navigate(homePath);
                     setDashSubOpen(true);
                   }
                 }}
@@ -386,9 +397,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
 
           {visibleRest.map((item) => {
             const active =
-              item.path === "/"
-                ? path === "/"
-                : path === item.path || path.startsWith(`${item.path}/`);
+              path === item.path || path.startsWith(`${item.path}/`);
             return (
               <button
                 key={item.path}
@@ -399,19 +408,35 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                     : "text-sidebar-foreground hover:bg-sidebar-accent"
                 }`}
               >
-                <item.icon size={18} className="flex-shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
+                <item.icon
+                  size={18}
+                  className={cn(
+                    "flex-shrink-0",
+                    item.module === "intelli-search" && "text-primary drop-shadow-[0_0_10px_hsl(var(--primary)/0.35)]",
+                  )}
+                />
+                {!collapsed &&
+                  (item.module === "intelli-search" ? (
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                      <Sparkles className="h-3.5 w-3.5 shrink-0 text-cyan-400/90" aria-hidden />
+                      <span className="min-w-0 truncate font-medium">IntelliSearch</span>
+                      <IntelliSearchNewBadge className="shrink-0 scale-[0.92] origin-left" />
+                    </span>
+                  ) : (
+                    <span className="truncate">{item.label}</span>
+                  ))}
               </button>
             );
           })}
         </nav>
 
-        <div className="space-y-2 border-t border-border/40 p-3">
+        <div className="mt-auto shrink-0 space-y-2 border-t border-border/40 p-3">
           {!collapsed && (
             <div className="px-3 py-2 flex items-start gap-3">
-              <UserAvatarDisplay user={user} className="h-9 w-9" iconSize={20} />
+              <UserAvatarDisplay user={user} className="h-9 w-9 shrink-0" iconSize={20} />
               <div className="text-xs text-muted-foreground min-w-0 flex-1">
-                Logado como <span className="text-foreground font-medium block truncate">{user?.name}</span>
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80">Logado como</span>
+                <span className="text-foreground font-medium block truncate mt-0.5">{user?.name}</span>
                 {user?.role === "admin" ? (
                   <span className="block text-[10px] text-primary/90 mt-0.5">Administrador</span>
                 ) : (
@@ -419,15 +444,33 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                     Perfil padrão — permissões detalhadas em breve.
                   </span>
                 )}
+                <button
+                  type="button"
+                  onClick={() => navigate("/configuracoes?tab=conta")}
+                  className="mt-2 text-left text-[11px] font-medium text-primary hover:underline"
+                >
+                  Perfil e conta
+                </button>
               </div>
             </div>
           )}
           {collapsed && user && (
-            <div className="flex justify-center pb-1">
-              <UserAvatarDisplay user={user} className="h-9 w-9" iconSize={20} />
+            <div className="flex flex-col items-center gap-2 pb-1">
+              <span className="inline-flex" title={user?.name}>
+                <UserAvatarDisplay user={user} className="h-9 w-9" iconSize={20} />
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate("/configuracoes?tab=conta")}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+                title="Perfil e conta"
+              >
+                <UserCircle size={20} />
+              </button>
             </div>
           )}
           <button
+            type="button"
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-destructive hover:bg-destructive/10 transition-colors"
           >

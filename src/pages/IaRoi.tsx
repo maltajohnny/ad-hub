@@ -26,7 +26,7 @@ const IaRoi = () => (
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="secondary" size="sm" className="gap-1.5" asChild>
-          <Link to="/">
+          <Link to="/dashboard">
             <LayoutDashboard className="h-3.5 w-3.5" />
             Dashboard — Gerar com IA
           </Link>

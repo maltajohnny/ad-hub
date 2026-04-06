@@ -3,6 +3,8 @@ import { RESERVED_TENANT_SLUGS } from "@/lib/saasTypes";
 
 const STORAGE_KEY = "norter_saas_tenants";
 
+const BUILTIN_NORTER_ID = "00000000-0000-4000-8000-000000000001";
+
 export type TenantRecord = {
   id: string;
   slug: string;
@@ -16,14 +18,66 @@ export type TenantRecord = {
   createdAt: string;
 };
 
+/** Migra módulos antigos (ex.: saude-google → intelli-search). */
+function migrateTenantModules(mods: AppModule[]): AppModule[] {
+  const mapped = (mods as unknown as string[]).map((m) =>
+    m === "saude-google" ? "intelli-search" : m,
+  ) as AppModule[];
+  return [...new Set(mapped)];
+}
+
+function ensureBuiltInTenants(list: TenantRecord[]): { list: TenantRecord[]; changed: boolean } {
+  let changed = false;
+  const migrated = list.map((t) => {
+    const next = migrateTenantModules(t.enabledModules);
+    const same =
+      next.length === t.enabledModules.length && next.every((m, i) => m === t.enabledModules[i]);
+    if (!same) {
+      changed = true;
+      return { ...t, enabledModules: next };
+    }
+    return t;
+  });
+
+  let out = migrated;
+  if (!out.some((t) => t.slug === "norter")) {
+    out = [
+      ...out,
+      {
+        id: BUILTIN_NORTER_ID,
+        slug: "norter",
+        displayName: "Norter",
+        logoDataUrl: null,
+        enabledModules: [],
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    changed = true;
+  }
+  return { list: out, changed };
+}
+
 function loadRaw(): TenantRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as TenantRecord[];
-    return Array.isArray(parsed) ? parsed : [];
+    let list: TenantRecord[] = [];
+    if (raw) {
+      const parsed = JSON.parse(raw) as TenantRecord[];
+      list = Array.isArray(parsed) ? parsed : [];
+    }
+    const { list: fixed, changed } = ensureBuiltInTenants(list);
+    if (changed) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(fixed));
+    }
+    return fixed;
   } catch {
-    return [];
+    const { list: fixed } = ensureBuiltInTenants([]);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(fixed));
+    } catch {
+      /* ignore */
+    }
+    return fixed;
   }
 }
 
@@ -68,7 +122,7 @@ export function createTenant(input: {
     displayName: input.displayName.trim() || slug,
     logoDataUrl: input.logoDataUrl,
     accentHex: input.accentHex?.trim() || undefined,
-    enabledModules: [...input.enabledModules],
+    enabledModules: migrateTenantModules([...input.enabledModules]),
     createdAt: new Date().toISOString(),
   };
   list.push(tenant);
@@ -83,16 +137,21 @@ export function updateTenant(
   const list = loadRaw();
   const i = list.findIndex((t) => t.id === id);
   if (i < 0) return { ok: false, error: "Organização não encontrada." };
+  const enabled =
+    patch.enabledModules !== undefined
+      ? migrateTenantModules([...patch.enabledModules])
+      : list[i].enabledModules;
   list[i] = {
     ...list[i],
     ...patch,
-    enabledModules: patch.enabledModules ? [...patch.enabledModules] : list[i].enabledModules,
+    enabledModules: enabled,
   };
   persist(list);
   return { ok: true };
 }
 
 export function deleteTenant(id: string): void {
+  if (id === BUILTIN_NORTER_ID) return;
   persist(loadRaw().filter((t) => t.id !== id));
 }
 

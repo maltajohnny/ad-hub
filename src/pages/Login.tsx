@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTenant } from "@/contexts/TenantContext";
@@ -6,12 +6,20 @@ import { getTenantBySlug } from "@/lib/tenantsStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff, LogIn } from "lucide-react";
-import norterLogo from "@/assets/norterlogo.png";
+import qtrafficFallback from "@/assets/qtraffic-mark-only.png";
+import {
+  extractOrgSlugFromUsername,
+  normalizeUsernameForLoginAttempt,
+  resolveLoginScreenBrand,
+} from "@/lib/loginBranding";
+import { QtrafficMarkLogo } from "@/components/QtrafficMarkLogo";
+import { NorterMarkLogo } from "@/components/NorterMarkLogo";
+import { defaultPathAfterLogin } from "@/lib/saasTypes";
 
 const Login = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { login } = useAuth();
-  const { setActiveSlug } = useTenant();
+  const { setActiveSlug, tenant } = useTenant();
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -20,6 +28,17 @@ const Login = () => {
 
   const tenantRecord = tenantSlug ? getTenantBySlug(tenantSlug) : undefined;
   const invalidTenant = Boolean(tenantSlug && !tenantRecord);
+
+  const brand = useMemo(
+    () =>
+      resolveLoginScreenBrand({
+        tenantSlug,
+        tenantRecord,
+        invalidTenant,
+        username,
+      }),
+    [tenantSlug, tenantRecord, invalidTenant, username],
+  );
 
   useEffect(() => {
     if (!tenantSlug) {
@@ -38,12 +57,19 @@ const Login = () => {
       setError("Organização não encontrada.");
       return;
     }
-    if (!login(username, password)) {
+    const userKey = normalizeUsernameForLoginAttempt(username);
+    const logged = login(userKey, password);
+    if (!logged) {
       setError("Credenciais inválidas");
       return;
     }
-    navigate("/", { replace: true });
+    const orgSlug = extractOrgSlugFromUsername(username);
+    if (orgSlug) setActiveSlug(orgSlug);
+    const modulesForRedirect = orgSlug ? getTenantBySlug(orgSlug)?.enabledModules : tenant?.enabledModules;
+    navigate(defaultPathAfterLogin(logged, modulesForRedirect), { replace: true });
   };
+
+  const showLogoSrc = brand.logo ?? qtrafficFallback;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
@@ -53,23 +79,38 @@ const Login = () => {
       </div>
 
       <div className="relative z-10 w-full max-w-sm px-6 animate-fade-in">
-        <div className="flex flex-col items-center mb-8">
-          {tenantRecord?.logoDataUrl ? (
-            <img
-              src={tenantRecord.logoDataUrl}
-              alt={tenantRecord.displayName}
-              className="h-24 w-auto max-w-[220px] object-contain mb-2"
-            />
+        <div
+          key={brand.key}
+          className="mb-8 animate-in fade-in zoom-in-95 duration-500 fill-mode-both"
+        >
+          {brand.key === "qtraffic" ? (
+            <QtrafficMarkLogo />
+          ) : brand.key === "norter" || brand.key === "tenant-norter" ? (
+            <NorterMarkLogo />
           ) : (
-            <img src={norterLogo} alt="Norter" className="w-40 h-40 object-contain" />
-          )}
-          <span className="text-foreground/80 font-display text-sm font-semibold tracking-wide">
-            {tenantRecord?.displayName ?? "Norter"}
-          </span>
-          {!tenantSlug && (
-            <span className="text-foreground/20 font-display text-[10px] tracking-[0.3em] uppercase -mt-1">
-              Aceleradora
-            </span>
+            <div className="flex flex-col items-center text-center">
+              <div className="mx-auto flex w-[min(92vw,260px)] justify-center">
+                <img
+                  src={showLogoSrc}
+                  alt={brand.alt}
+                  width={240}
+                  height={120}
+                  className="h-auto w-full max-h-[200px] object-contain mb-1 drop-shadow-lg sm:max-h-[220px]"
+                />
+              </div>
+              <span className="text-foreground/90 font-display text-base font-semibold tracking-wide mt-4">
+                {brand.name}
+              </span>
+              {brand.tagline ? (
+                <span className="font-display text-[11px] sm:text-xs tracking-[0.18em] uppercase mt-1.5 text-muted-foreground/85">
+                  {brand.tagline}
+                </span>
+              ) : tenantSlug && tenantRecord ? (
+                <span className="text-foreground/35 font-display text-[10px] tracking-[0.25em] uppercase mt-1">
+                  Organização
+                </span>
+              ) : null}
+            </div>
           )}
         </div>
 
@@ -88,7 +129,7 @@ const Login = () => {
             <Input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Digite seu usuário"
+              placeholder="Utilizador ou utilizador.organização"
               autoComplete="username"
               className="bg-secondary/50 border-border/50 focus:border-primary"
               disabled={invalidTenant}
@@ -140,8 +181,8 @@ const Login = () => {
         </form>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          <Link to="/landing" className="text-primary hover:underline">
-            Conheça a plataforma
+          <Link to="/" className="text-primary hover:underline">
+            Conheça a plataforma QTRAFFIC
           </Link>
         </p>
       </div>

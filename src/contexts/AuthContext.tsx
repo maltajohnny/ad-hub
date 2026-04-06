@@ -97,6 +97,30 @@ const defaultRegistry: Record<string, RegistryEntry> = {
       mustChangePassword: false,
     },
   },
+  qtrafficadmin: {
+    password: "Qtr@ffic#26",
+    user: {
+      role: "admin",
+      username: "qtrafficadmin",
+      name: "Operador QTRAFFIC",
+      email: "ops@qtraffic.com",
+      phone: "(11) 90000-0000",
+      document: "000.000.000-01",
+      mustChangePassword: false,
+    },
+  },
+  diego: {
+    password: "N0rt3rD!ego",
+    user: {
+      role: "admin",
+      username: "diego",
+      name: "Diego — Norter",
+      email: "diego@norter.com",
+      phone: "(11) 97777-0000",
+      document: "222.222.222-22",
+      mustChangePassword: false,
+    },
+  },
 };
 
 function loadRegistry(): Record<string, RegistryEntry> {
@@ -111,6 +135,14 @@ function loadRegistry(): Record<string, RegistryEntry> {
       parsed[OWNER_USERNAME] = defaultRegistry[OWNER_USERNAME];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
+    if (!parsed.qtrafficadmin?.user) {
+      parsed.qtrafficadmin = defaultRegistry.qtrafficadmin;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    }
+    if (!parsed.diego?.user) {
+      parsed.diego = defaultRegistry.diego;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    }
     return parsed;
   } catch {
     return { ...defaultRegistry };
@@ -123,7 +155,7 @@ function persistRegistry(next: Record<string, RegistryEntry>) {
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string, password: string) => boolean;
+  login: (username: string, password: string) => User | null;
   logout: () => void;
   updateProfile: (data: Partial<Omit<User, "username">>) => void;
   /** Nome exibido, contactos e login (exceto o owner `admin`, cujo login não pode mudar). */
@@ -150,6 +182,18 @@ interface AuthContextType {
   }) => { ok: boolean; error?: string };
   setUserAllowedModules: (username: string, modules: AppModule[] | null) => { ok: boolean; error?: string };
   deleteUser: (username: string) => { ok: boolean; error?: string };
+  /** Admin: editar dados de qualquer conta (exceto rebaixar o owner). */
+  updateUserByAdmin: (
+    username: string,
+    patch: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      document?: string;
+      role?: "admin" | "user";
+      newPassword?: string;
+    },
+  ) => { ok: boolean; error?: string };
   /** Somente admin: concede/revoga permissão de Settings do Board (usuários não-admin). */
   setBoardSettingsPermission: (username: string, allowed: boolean) => { ok: boolean; error?: string };
   /** Somente admin: concede/revoga permissão de excluir cards no Board (usuários não-admin). */
@@ -198,14 +242,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [registry]);
 
   const login = useCallback(
-    (username: string, password: string) => {
+    (username: string, password: string): User | null => {
       const key = username.trim().toLowerCase();
       const entry = registry[key];
       if (entry && entry.password === password) {
-        setUser({ ...entry.user });
-        return true;
+        const u = { ...entry.user };
+        setUser(u);
+        return u;
       }
-      return false;
+      return null;
     },
     [registry],
   );
@@ -363,7 +408,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const setUserAllowedModules = useCallback(
     (username: string, modules: AppModule[] | null): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
-      const key = username.trim();
+      const key = normalizeLoginKey(username);
       const entry = registry[key];
       if (!entry) return { ok: false, error: "Usuário não encontrado." };
       if (entry.user.role !== "user") return { ok: false, error: "Apenas para perfil padrão." };
@@ -438,7 +483,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const setBoardSettingsPermission = useCallback(
     (username: string, allowed: boolean): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
-      const key = username.trim();
+      const key = normalizeLoginKey(username);
       const entry = registry[key];
       if (!entry) return { ok: false, error: "Usuário não encontrado." };
       if (entry.user.role === "admin") return { ok: true };
@@ -475,10 +520,71 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     [user, registry, syncRegistry],
   );
 
+  const updateUserByAdmin = useCallback(
+    (
+      username: string,
+      patch: {
+        name?: string;
+        email?: string;
+        phone?: string;
+        document?: string;
+        role?: "admin" | "user";
+        newPassword?: string;
+      },
+    ): { ok: boolean; error?: string } => {
+      if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
+      const key = normalizeLoginKey(username);
+      const entry = registry[key];
+      if (!entry) return { ok: false, error: "Usuário não encontrado." };
+      if (key === OWNER_USERNAME && patch.role === "user") {
+        return { ok: false, error: "A conta proprietária deve permanecer como administrador." };
+      }
+
+      let nextUser: User = { ...entry.user };
+      if (patch.name !== undefined) nextUser.name = patch.name.trim() || nextUser.username;
+      if (patch.email !== undefined) nextUser.email = patch.email.trim();
+      if (patch.phone !== undefined) nextUser.phone = patch.phone.trim();
+      if (patch.document !== undefined) nextUser.document = patch.document.trim();
+
+      if (patch.role !== undefined) {
+        nextUser.role = patch.role;
+        if (patch.role === "admin") {
+          nextUser.mustChangePassword = false;
+          nextUser.allowedModules = undefined;
+          delete nextUser.canManageBoard;
+          delete nextUser.canDeleteBoardCards;
+        } else {
+          nextUser.canManageBoard = entry.user.canManageBoard ?? false;
+          nextUser.canDeleteBoardCards = entry.user.canDeleteBoardCards ?? false;
+        }
+      }
+
+      let nextPassword = entry.password;
+      if (patch.newPassword !== undefined && patch.newPassword.trim() !== "") {
+        if (!isStrongPassword(patch.newPassword)) {
+          return {
+            ok: false,
+            error: "Senha inválida: mínimo 6 caracteres, maiúscula, minúscula e caractere especial.",
+          };
+        }
+        nextPassword = patch.newPassword.trim();
+      }
+
+      const nextReg = {
+        ...registry,
+        [key]: { ...entry, password: nextPassword, user: nextUser },
+      };
+      syncRegistry(nextReg);
+      if (user.username === key) setUser(nextUser);
+      return { ok: true };
+    },
+    [user, registry, syncRegistry],
+  );
+
   const deleteUser = useCallback(
     (username: string): { ok: boolean; error?: string } => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
-      const key = username.trim();
+      const key = normalizeLoginKey(username);
       if (key === OWNER_USERNAME) return { ok: false, error: "A conta Administrador (owner) não pode ser excluída." };
       if (!registry[key]) return { ok: false, error: "Usuário não encontrado." };
       const rest = { ...registry };
@@ -548,6 +654,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         listUsers,
         createUser,
         setUserAllowedModules,
+        updateUserByAdmin,
         deleteUser,
         setBoardSettingsPermission,
         setBoardDeleteCardsPermission,

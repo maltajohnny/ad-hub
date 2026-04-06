@@ -10,13 +10,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAuth, OWNER_USERNAME } from "@/contexts/AuthContext";
+import { useAuth, OWNER_USERNAME, type User } from "@/contexts/AuthContext";
 import { Switch } from "@/components/ui/switch";
 import { clientsData } from "@/pages/Clientes";
-import { UsersRound, Trash2, Shield, User, Building2, Eye, EyeOff } from "lucide-react";
+import { UsersRound, Trash2, Shield, User, Building2, Eye, EyeOff, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { APP_MODULES, APP_MODULE_LABELS, type AppModule } from "@/lib/saasTypes";
+import { ModuleCheckboxLabel } from "@/components/ModuleCheckboxLabel";
+import { APP_MODULES, type AppModule } from "@/lib/saasTypes";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
 import {
@@ -26,6 +27,14 @@ import {
   STRONG_PASSWORD_HINT,
 } from "@/lib/passwordPolicy";
 import { sanitizeLoginInput } from "@/lib/loginUsername";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 const Usuarios = () => {
   const {
@@ -39,6 +48,7 @@ const Usuarios = () => {
     setBoardSettingsPermission,
     setBoardDeleteCardsPermission,
     setUserAllowedModules,
+    updateUserByAdmin,
   } = useAuth();
   const rows = listUsers();
   const usersOnly = rows.filter((u) => u.role === "user");
@@ -61,6 +71,48 @@ const Usuarios = () => {
 
   /** Utilizador (perfil padrão) para o qual se editam Negar/Permitir por cliente */
   const [permUser, setPermUser] = useState("");
+
+  const [editTarget, setEditTarget] = useState<User | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editDocument, setEditDocument] = useState("");
+  const [editRole, setEditRole] = useState<"admin" | "user">("user");
+  const [editNewPassword, setEditNewPassword] = useState("");
+  const [showEditPw, setShowEditPw] = useState(false);
+
+  const openEdit = (u: User) => {
+    setEditTarget(u);
+    setEditName(u.name);
+    setEditEmail(u.email);
+    setEditPhone(u.phone ?? "");
+    setEditDocument(u.document ?? "");
+    setEditRole(u.role);
+    setEditNewPassword("");
+    setShowEditPw(false);
+  };
+
+  const saveEdit = () => {
+    if (!editTarget) return;
+    if (editNewPassword.trim() && !isStrongPassword(editNewPassword.trim())) {
+      toast.error("A nova senha deve cumprir a política de senha forte.");
+      return;
+    }
+    const res = updateUserByAdmin(editTarget.username, {
+      name: editName,
+      email: editEmail,
+      phone: editPhone,
+      document: editDocument,
+      role: isOwner(editTarget.username) ? undefined : editRole,
+      newPassword: editNewPassword.trim() ? editNewPassword.trim() : undefined,
+    });
+    if (!res.ok) {
+      toast.error(res.error ?? "Não foi possível guardar.");
+      return;
+    }
+    toast.success("Conta atualizada.");
+    setEditTarget(null);
+  };
 
   useEffect(() => {
     if (usersOnly.length === 0) {
@@ -254,12 +306,13 @@ const Usuarios = () => {
               <p className="text-xs font-medium text-foreground">Módulos visíveis no menu</p>
               <div className="grid sm:grid-cols-2 gap-2">
                 {APP_MODULES.map((m) => (
-                  <label key={m} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <label key={m} className="flex items-start gap-2 text-sm cursor-pointer">
                     <Checkbox
+                      className="mt-0.5"
                       checked={modCreate[m]}
                       onCheckedChange={(c) => setModCreate((prev) => ({ ...prev, [m]: c === true }))}
                     />
-                    {APP_MODULE_LABELS[m]}
+                    <ModuleCheckboxLabel appModule={m} />
                   </label>
                 ))}
               </div>
@@ -294,12 +347,13 @@ const Usuarios = () => {
           </div>
           <div className="grid sm:grid-cols-2 gap-2 rounded-lg border border-border/50 p-3 mb-3">
             {APP_MODULES.map((m) => (
-              <label key={m} className="flex items-center gap-2 text-sm cursor-pointer">
+              <label key={m} className="flex items-start gap-2 text-sm cursor-pointer">
                 <Checkbox
+                  className="mt-0.5"
                   checked={modEdit[m]}
                   onCheckedChange={(c) => setModEdit((prev) => ({ ...prev, [m]: c === true }))}
                 />
-                {APP_MODULE_LABELS[m]}
+                <ModuleCheckboxLabel appModule={m} />
               </label>
             ))}
           </div>
@@ -475,27 +529,125 @@ const Usuarios = () => {
                     </div>
                   )}
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={owner}
-                  title={owner ? "A conta Administrador (owner) não pode ser excluída" : undefined}
-                  className={cn("text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0", owner && "opacity-40")}
-                  onClick={() => {
-                    if (owner) return;
-                    if (isSelf && !window.confirm("Excluir sua própria conta? Você será desconectado.")) return;
-                    if (!isSelf && !window.confirm(`Excluir o usuário @${u.username}?`)) return;
-                    handleDelete(u.username);
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                    title="Editar dados da conta"
+                    onClick={() => openEdit(u)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={owner}
+                    title={owner ? "A conta Administrador (owner) não pode ser excluída" : undefined}
+                    className={cn(
+                      "text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0",
+                      owner && "opacity-40",
+                    )}
+                    onClick={() => {
+                      if (owner) return;
+                      if (isSelf && !window.confirm("Excluir sua própria conta? Você será desconectado.")) return;
+                      if (!isSelf && !window.confirm(`Excluir o usuário @${u.username}?`)) return;
+                      handleDelete(u.username);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </li>
             );
           })}
         </ul>
       </Card>
+
+      <Dialog open={editTarget !== null} onOpenChange={(o) => !o && setEditTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar conta {editTarget ? `@${editTarget.username}` : ""}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-name">Nome</Label>
+              <Input id="edit-name" value={editName} onChange={(e) => setEditName(e.target.value)} className="h-10" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-email">E-mail</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                className="h-10"
+              />
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-phone">Telefone</Label>
+                <Input id="edit-phone" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} className="h-10" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-doc">Documento</Label>
+                <Input
+                  id="edit-doc"
+                  value={editDocument}
+                  onChange={(e) => setEditDocument(e.target.value)}
+                  className="h-10"
+                />
+              </div>
+            </div>
+            {editTarget && !isOwner(editTarget.username) ? (
+              <div className="space-y-1.5">
+                <Label>Perfil</Label>
+                <Select value={editRole} onValueChange={(v) => setEditRole(v as "admin" | "user")}>
+                  <SelectTrigger className="h-10 bg-secondary/50 border-border/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">Usuário</SelectItem>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-pw">Nova senha (opcional)</Label>
+              <div className="relative">
+                <Input
+                  id="edit-pw"
+                  type={showEditPw ? "text" : "password"}
+                  value={editNewPassword}
+                  onChange={(e) => setEditNewPassword(e.target.value)}
+                  placeholder="Deixe vazio para manter"
+                  className="h-10 pr-10"
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowEditPw((s) => !s)}
+                >
+                  {showEditPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">{STRONG_PASSWORD_HINT}</p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>
+              Cancelar
+            </Button>
+            <Button type="button" className="gradient-brand text-primary-foreground" onClick={() => void saveEdit()}>
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <p className="text-xs text-muted-foreground">
         O login <strong className="text-foreground">{OWNER_USERNAME}</strong> é a conta proprietária e não pode ser removida.

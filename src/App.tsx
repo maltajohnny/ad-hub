@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, Outlet } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -21,57 +21,45 @@ import Usuarios from "@/pages/Usuarios";
 import NotFound from "./pages/NotFound";
 import Landing from "@/pages/Landing";
 import Organizacoes from "@/pages/Organizacoes";
-import { TenantProvider } from "@/contexts/TenantContext";
+import IntelliSearch from "@/pages/IntelliSearch";
+import { TenantProvider, useTenant } from "@/contexts/TenantContext";
+import { defaultPathAfterLogin } from "@/lib/saasTypes";
 
 const queryClient = new QueryClient();
 
 const AdminRoute = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
+  const { tenant } = useTenant();
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "admin") return <Navigate to="/" replace />;
+  if (user.role !== "admin")
+    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
   return <>{children}</>;
 };
 
-const ProtectedRoutes = () => {
+/** Layout único para área autenticada — evita `<Routes>` aninhados sob `/*` (ecrã em branco no RR v6). */
+const ProtectedLayout = () => {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   return (
     <AppLayout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/board" element={<Board />} />
-        <Route path="/clientes/favoritos" element={<ClientesFavoritos />} />
-        <Route path="/clientes" element={<Clientes />} />
-        <Route path="/campanhas" element={<Campanhas />} />
-        <Route path="/ia-roi" element={<IaRoi />} />
-        <Route path="/configuracoes" element={<Configuracoes />} />
-        <Route
-          path="/usuarios"
-          element={
-            <AdminRoute>
-              <Usuarios />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="/organizacoes"
-          element={
-            <AdminRoute>
-              <Organizacoes />
-            </AdminRoute>
-          }
-        />
-        <Route path="/perfil" element={<Navigate to="/configuracoes?tab=conta" replace />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <Outlet />
     </AppLayout>
   );
 };
 
 const LoginRoute = () => {
   const { user } = useAuth();
-  if (user) return <Navigate to="/" replace />;
+  const { tenant } = useTenant();
+  if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
   return <Login />;
+};
+
+/** Página inicial pública; utilizadores autenticados vão direto ao painel. */
+const LandingRoute = () => {
+  const { user } = useAuth();
+  const { tenant } = useTenant();
+  if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+  return <Landing />;
 };
 
 const App = () => (
@@ -86,10 +74,40 @@ const App = () => (
               <BrowserRouter>
                 <TenantProvider>
                   <Routes>
-                    <Route path="/landing" element={<Landing />} />
+                    <Route path="/" element={<LandingRoute />} />
+                    <Route path="/landing" element={<Navigate to="/" replace />} />
                     <Route path="/login" element={<LoginRoute />} />
                     <Route path="/t/:tenantSlug/login" element={<LoginRoute />} />
-                    <Route path="/*" element={<ProtectedRoutes />} />
+
+                    <Route element={<ProtectedLayout />}>
+                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/board" element={<Board />} />
+                      <Route path="/clientes/favoritos" element={<ClientesFavoritos />} />
+                      <Route path="/clientes" element={<Clientes />} />
+                      <Route path="/campanhas" element={<Campanhas />} />
+                      <Route path="/intelli-search" element={<IntelliSearch />} />
+                      <Route path="/saude-google" element={<Navigate to="/intelli-search" replace />} />
+                      <Route path="/ia-roi" element={<IaRoi />} />
+                      <Route path="/configuracoes" element={<Configuracoes />} />
+                      <Route
+                        path="/usuarios"
+                        element={
+                          <AdminRoute>
+                            <Usuarios />
+                          </AdminRoute>
+                        }
+                      />
+                      <Route
+                        path="/organizacoes"
+                        element={
+                          <AdminRoute>
+                            <Organizacoes />
+                          </AdminRoute>
+                        }
+                      />
+                      <Route path="/perfil" element={<Navigate to="/configuracoes?tab=conta" replace />} />
+                      <Route path="*" element={<NotFound />} />
+                    </Route>
                   </Routes>
                 </TenantProvider>
               </BrowserRouter>
