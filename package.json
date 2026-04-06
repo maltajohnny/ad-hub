@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "preintellisearch-api": "kill-port 3041",
-    "intellisearch-api": "npx env-cmd -f .env -- sh -c 'cd api/intellisearch && PORT=3041 exec go run .'",
+    "intellisearch-api": "npx env-cmd -f .env -- sh -c 'cd backend/intellisearch && PORT=3041 exec go run .'",
     "dev:intellisearch": "concurrently -k -n web,api -c cyan,magenta \"npm run dev\" \"npm run intellisearch-api\"",
     "build": "vite build",
     "build:dev": "vite build --mode development",

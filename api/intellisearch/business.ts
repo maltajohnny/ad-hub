@@ -1,6 +1,6 @@
 /**
  * GET /api/intellisearch/business?query=...
- * Mesma lógica que o serviço Go em `api/intellisearch` — para produção na Vercel.
+ * Mesma lógica que o serviço Go em `backend/intellisearch` — para produção na Vercel.
  * Requer `SERPAPI_KEY` nas variáveis de ambiente do projeto (Dashboard Vercel).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";

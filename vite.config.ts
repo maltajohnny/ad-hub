@@ -41,7 +41,7 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
-    /** Backend Go (SerpAPI) em `api/intellisearch` — `npm run intellisearch-api` na porta 3041. */
+    /** Backend Go (SerpAPI) em `backend/intellisearch` — `npm run intellisearch-api` na porta 3041. */
     proxy: {
       "/api/intellisearch": intellisearchProxy,
     },

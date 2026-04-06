@@ -10,7 +10,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// LoadDotenv carrega `.env` (vários caminhos relativos ao cwd, típico `api/intellisearch`).
+// LoadDotenv carrega `.env` (vários caminhos relativos ao cwd, típico `backend/intellisearch`).
 // Ordem: pastas mais profundas primeiro; a raiz do repo por último — assim SERPAPI_KEY na raiz prevalece.
 //
 // Nota: godotenv.Overload pode definir SERPAPI_KEY= vazio a partir de um .env intermédio e apagar
