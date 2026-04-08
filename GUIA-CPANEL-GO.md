@@ -1,6 +1,6 @@
 # Guia cPanel (Go) — Passo a Passo
 
-Este guia mostra como subir sua aplicacao Go manualmente no cPanel, rodar em background e manter o processo ativo.
+Este guia mostra como subir sua aplicacao Go manualmente no cPanel, rodar em background e manter o processo ativo com seguranca.
 
 ## Ambiente real (seu caso)
 
