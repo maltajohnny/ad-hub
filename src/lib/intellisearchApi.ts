@@ -58,7 +58,7 @@ export async function fetchBusinessAnalysis(query: string): Promise<BusinessAnal
   const trimmed = text.trim();
   if (!trimmed) {
     throw new Error(
-      "Resposta vazia do servidor. Em desenvolvimento, inicie a API (npm run intellisearch-api) na porta 3041 para o proxy funcionar.",
+      "Resposta vazia do servidor. Em desenvolvimento, inicie a API (npm run intellisearch-api) na porta 3042 para o proxy funcionar.",
     );
   }
   let parsed: unknown;

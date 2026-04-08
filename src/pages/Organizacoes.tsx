@@ -17,7 +17,9 @@ export default function Organizacoes() {
   const [rows, setRows] = useState<TenantRecord[]>(() => listTenants());
   const [slug, setSlug] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [browserTabTitle, setBrowserTabTitle] = useState("");
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
+  const [faviconDataUrl, setFaviconDataUrl] = useState<string | null>(null);
   const [mod, setMod] = useState<Record<AppModule, boolean>>(() =>
     Object.fromEntries(APP_MODULES.map((m) => [m, true])) as Record<AppModule, boolean>,
   );
@@ -41,11 +43,25 @@ export default function Organizacoes() {
     reader.readAsDataURL(f);
   };
 
+  const onFaviconFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 512 * 1024) {
+      toast.error("Favicon até 512 KB (PNG ou ICO recomendado).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setFaviconDataUrl(typeof reader.result === "string" ? reader.result : null);
+    reader.readAsDataURL(f);
+  };
+
   const handleCreate = () => {
     const res = createTenant({
       slug,
       displayName,
       logoDataUrl,
+      browserTabTitle: browserTabTitle.trim() || undefined,
+      faviconDataUrl,
       enabledModules: enabledModulesList.length === APP_MODULES.length ? [] : enabledModulesList,
     });
     if (!res.ok) {
@@ -55,7 +71,9 @@ export default function Organizacoes() {
     toast.success("Organização criada.");
     setSlug("");
     setDisplayName("");
+    setBrowserTabTitle("");
     setLogoDataUrl(null);
+    setFaviconDataUrl(null);
     setMod(Object.fromEntries(APP_MODULES.map((m) => [m, true])) as Record<AppModule, boolean>);
     refresh();
   };
@@ -98,8 +116,27 @@ export default function Organizacoes() {
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Logo</Label>
-          <Input type="file" accept="image/*" onChange={onFile} className="cursor-pointer" />
+          <Label className="text-xs">Título da aba do navegador</Label>
+          <Input
+            value={browserTabTitle}
+            onChange={(e) => setBrowserTabTitle(e.target.value)}
+            placeholder='Ex.: "ACME — Portal" ou "ACME - MOVE FASTER"'
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Aparece no separador do browser após login com <code className="text-xs">utilizador.slug</code>. AD-Hub e
+            Norter já têm títulos predefinidos.
+          </p>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Logo</Label>
+            <Input type="file" accept="image/*" onChange={onFile} className="cursor-pointer" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Favicon (opcional)</Label>
+            <Input type="file" accept="image/png,image/x-icon,image/svg+xml" onChange={onFaviconFile} className="cursor-pointer" />
+            <p className="text-[11px] text-muted-foreground">Se não enviar, usa a logo ou ícone por defeito.</p>
+          </div>
         </div>
         <div className="space-y-2">
           <Label className="text-xs">Módulos permitidos na organização (vazio = todos)</Label>

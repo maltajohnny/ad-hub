@@ -31,3 +31,7 @@ dist-ssr
 # Artefatos de página salva no navegador (não versionar)
 Tina APP Team Stories Board - Boards_files/
 card_aberto_files/
+
+# Binários de build local (Go)
+.deploy/
+backend/intellisearch/api

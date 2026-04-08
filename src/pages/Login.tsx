@@ -1,23 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTenant } from "@/contexts/TenantContext";
 import { getTenantById, getTenantBySlug } from "@/lib/tenantsStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff, LogIn } from "lucide-react";
-import qtrafficFallback from "@/assets/qtraffic-mark-only.png";
+import adHubFallback from "@/assets/ad-hub-logo.png";
 import {
   extractOrgSlugFromUsername,
   normalizeUsernameForLoginAttempt,
   resolveLoginScreenBrand,
 } from "@/lib/loginBranding";
-import { QtrafficMarkLogo } from "@/components/QtrafficMarkLogo";
+import { OrbixMarkLogo } from "@/components/OrbixMarkLogo";
 import { NorterMarkLogo } from "@/components/NorterMarkLogo";
 import { defaultPathAfterLogin } from "@/lib/saasTypes";
+import { applyDocumentBranding, resolveTenantForLoginBranding } from "@/lib/documentBranding";
 
 const Login = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const location = useLocation();
   const { login } = useAuth();
   const { setActiveSlug, tenant } = useTenant();
   const navigate = useNavigate();
@@ -48,6 +50,19 @@ const Login = () => {
     if (t) setActiveSlug(t.slug);
     else setActiveSlug(null);
   }, [tenantSlug, setActiveSlug]);
+
+  useEffect(() => {
+    if (invalidTenant) {
+      applyDocumentBranding(null);
+      return;
+    }
+    const t = resolveTenantForLoginBranding({
+      pathname: location.pathname,
+      tenantSlugFromRoute: tenantSlug,
+      username,
+    });
+    applyDocumentBranding(t);
+  }, [invalidTenant, location.pathname, tenantSlug, username]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,7 +96,7 @@ const Login = () => {
     navigate(defaultPathAfterLogin(logged, tenantForModules?.enabledModules), { replace: true });
   };
 
-  const showLogoSrc = brand.logo ?? qtrafficFallback;
+  const showLogoSrc = brand.logo ?? adHubFallback;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
@@ -95,8 +110,8 @@ const Login = () => {
           key={brand.key}
           className="mb-8 animate-in fade-in zoom-in-95 duration-500 fill-mode-both"
         >
-          {brand.key === "qtraffic" ? (
-            <QtrafficMarkLogo />
+          {brand.key === "orbix" ? (
+            <OrbixMarkLogo />
           ) : brand.key === "norter" || brand.key === "tenant-norter" ? (
             <NorterMarkLogo />
           ) : (
@@ -212,7 +227,7 @@ const Login = () => {
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
           <Link to="/" className="text-primary hover:underline">
-            Conheça a plataforma QTRAFFIC
+            Conheça a plataforma AD-Hub
           </Link>
         </p>
       </div>

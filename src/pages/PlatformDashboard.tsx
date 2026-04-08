@@ -41,7 +41,7 @@ export default function PlatformDashboard() {
     {
       label: "Organizações na plataforma",
       value: String(orgCount),
-      hint: "Contas que assinam e utilizam a QTRAFFIC",
+      hint: "Contas que assinam e utilizam o AD-Hub",
       icon: Building2,
     },
     {
@@ -69,7 +69,7 @@ export default function PlatformDashboard() {
       <div className="space-y-1 pt-1">
         <h1 className="text-xl font-display font-bold">Dashboard da plataforma</h1>
         <p className="text-muted-foreground text-sm max-w-2xl leading-relaxed">
-          Visão para a equipa QTRAFFIC: organizações que assinam a plataforma e impacto agregado. Aqui não entram métricas de
+          Visão para a equipa AD-Hub: organizações que assinam a plataforma e impacto agregado. Aqui não entram métricas de
           campanhas dos clientes das suas organizações — isso continua nos módulos operacionais por organização.
         </p>
       </div>

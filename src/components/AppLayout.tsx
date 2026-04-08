@@ -19,10 +19,12 @@ import {
   Layers2,
   Building2,
   Search,
+  Clapperboard,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import norterSymbol from "@/assets/norter-symbol.png";
-import qtrafficMark from "@/assets/qtraffic-mark-only.png";
+import adHubMark from "@/assets/ad-hub-logo.png";
 /** Tema escuro UI: arte “white” (texto claro). Tema claro UI: arte “black”. Ambas 220×65. */
 import norterLogoDashboardDark from "@/assets/norter-logo-dashboard-dark.png";
 import norterLogoDashboardLight from "@/assets/norter-logo-dashboard-light.png";
@@ -36,9 +38,9 @@ import {
   pathToModule,
   type AppModule,
 } from "@/lib/saasTypes";
-import { isQtrafficTeamMember } from "@/lib/qtrafficAccess";
+import { isOrbixTeamMember } from "@/lib/orbixAccess";
 import { IntelliSearchNewBadge } from "@/components/IntelliSearchNewBadge";
-import { QtrafficSidebarBrand } from "@/components/QtrafficSidebarBrand";
+import { OrbixSidebarBrand } from "@/components/OrbixSidebarBrand";
 
 type MenuItem = {
   icon: typeof LayoutDashboard;
@@ -53,6 +55,7 @@ function AppLayoutMain({ children, className }: { children: ReactNode; className
   const isBoard = location.pathname === "/board";
   const isDashboardHome = location.pathname === "/dashboard";
   const isIntelliSearch = location.pathname.startsWith("/intelli-search");
+  const isSocialPulse = location.pathname.startsWith("/social-pulse");
 
   return (
     <main className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden", className)}>
@@ -83,7 +86,7 @@ function AppLayoutMain({ children, className }: { children: ReactNode; className
               ? "flex-1 flex flex-col min-h-0 w-full max-w-none px-4 lg:px-6 pb-4 pt-3"
               : cn(
                   "max-w-7xl mx-auto flex-1",
-                  isIntelliSearch
+                  isIntelliSearch || isSocialPulse
                     ? "py-6 pr-6 pl-3 sm:pl-4 lg:py-8 lg:pr-8 lg:pl-5"
                     : "p-6 lg:p-8",
                 ),
@@ -98,6 +101,7 @@ function AppLayoutMain({ children, className }: { children: ReactNode; className
 
 const menuAfterClientes: MenuItem[] = [
   { icon: BarChart3, label: "Campanhas", path: "/campanhas", module: "campanhas" },
+  { icon: Clapperboard, label: "Gestão de Mídias", path: "/gestao-midias", module: "gestao-midias" },
   {
     icon: Search,
     label: "IntelliSearch",
@@ -105,6 +109,7 @@ const menuAfterClientes: MenuItem[] = [
     module: "intelli-search",
   },
   { icon: TrendingUp, label: "IA & ROI", path: "/ia-roi", module: "ia-roi" },
+  { icon: Activity, label: "Social Pulse", path: "/social-pulse", module: "social-pulse" },
   { icon: UsersRound, label: "Usuários", path: "/usuarios", adminOnly: true, module: "usuarios" },
   { icon: Settings, label: "Configurações", path: "/configuracoes", module: "configuracoes" },
 ];
@@ -124,11 +129,11 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   const isLight = mounted && resolvedTheme === "light";
 
   const isAdmin = user?.role === "admin";
-  /** Equipa Qtraffic / operadores: marca Qtraffic na sidebar; org Norter (ou sem org) usa wordmark Norter. */
-  const sidebarQtraffic =
-    !brandingLogoSrc && (isQtrafficTeamMember(user) || tenant?.slug === "qtraffic");
+  /** Equipa AD-Hub / operadores: marca AD-Hub na sidebar; org Norter (ou sem org) usa wordmark Norter. */
+  const sidebarOrbix =
+    !brandingLogoSrc && (isOrbixTeamMember(user) || tenant?.slug === "qtraffic");
   const sidebarNorterWordmark =
-    !brandingLogoSrc && !sidebarQtraffic && (!tenant || tenant.slug === "norter");
+    !brandingLogoSrc && !sidebarOrbix && (!tenant || tenant.slug === "norter");
   const eff = effectiveModulesForUser(user, tenant?.enabledModules);
   const canSee = (m: AppModule) => eff === "all" || eff.includes(m);
   const homePath = eff === "all" ? "/dashboard" : firstAllowedPath(eff);
@@ -206,8 +211,8 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                   className="h-[65px] w-[220px] max-w-full shrink-0 object-contain object-left"
                   decoding="async"
                 />
-              ) : sidebarQtraffic ? (
-                <QtrafficSidebarBrand />
+              ) : sidebarOrbix ? (
+                <OrbixSidebarBrand />
               ) : sidebarNorterWordmark ? (
                 <img
                   src={isLight ? norterLogoDashboardLight : norterLogoDashboardDark}
@@ -245,10 +250,10 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                   alt=""
                   className="h-11 w-11 rounded-md object-contain"
                 />
-              ) : sidebarQtraffic ? (
+              ) : sidebarOrbix ? (
                 <img
-                  src={qtrafficMark}
-                  alt="Qtraffic"
+                  src={adHubMark}
+                  alt="AD-Hub"
                   className="h-11 w-11 object-contain object-center"
                 />
               ) : (
@@ -401,7 +406,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           </div>
           ) : null}
 
-          {isAdmin && isQtrafficTeamMember(user) && (
+          {isAdmin && isOrbixTeamMember(user) && (
             <button
               type="button"
               onClick={() => navigate("/organizacoes")}

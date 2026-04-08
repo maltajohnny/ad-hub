@@ -12,6 +12,10 @@ export type TenantRecord = {
   displayName: string;
   /** Data URL da logo (ou null = só nome no login). */
   logoDataUrl: string | null;
+  /** Título da aba do navegador (ex.: "AD-Hub — Move faster · Grow smarter"). */
+  browserTabTitle?: string;
+  /** Favicon (data URL). Se ausente, usa a logo ou ícone por defeito da org. */
+  faviconDataUrl?: string | null;
   /** Cor de destaque opcional (hex). */
   accentHex?: string;
   /** Módulos ativos nesta org (menu); vazio = todos. */
@@ -27,45 +31,73 @@ function migrateTenantModules(mods: AppModule[]): AppModule[] {
   return [...new Set(mapped)];
 }
 
+function withTenantDefaults(t: TenantRecord): TenantRecord {
+  if (t.slug === "qtraffic") {
+    const legacyName =
+      t.displayName === "Orbix" ||
+      t.displayName === "ORBIX" ||
+      t.displayName === "AD-HUB";
+    const oldTabPrefix = "AD-HUB —";
+    const title = t.browserTabTitle?.startsWith(oldTabPrefix)
+      ? `AD-Hub —${t.browserTabTitle.slice(oldTabPrefix.length)}`
+      : t.browserTabTitle;
+    return {
+      ...t,
+      displayName: legacyName ? "AD-Hub" : t.displayName,
+      browserTabTitle: title ?? "AD-Hub — Move faster · Grow smarter",
+    };
+  }
+  if (t.slug === "norter") {
+    return {
+      ...t,
+      browserTabTitle: t.browserTabTitle ?? "Norter — Aceleradora",
+    };
+  }
+  return {
+    ...t,
+    browserTabTitle: t.browserTabTitle?.trim() || undefined,
+  };
+}
+
 function ensureBuiltInTenants(list: TenantRecord[]): { list: TenantRecord[]; changed: boolean } {
   let changed = false;
   const migrated = list.map((t) => {
-    const next = migrateTenantModules(t.enabledModules);
-    const same =
-      next.length === t.enabledModules.length && next.every((m, i) => m === t.enabledModules[i]);
-    if (!same) {
-      changed = true;
-      return { ...t, enabledModules: next };
-    }
-    return t;
+    const nextMods = migrateTenantModules(t.enabledModules);
+    const merged = withTenantDefaults({ ...t, enabledModules: nextMods });
+    const modsDirty =
+      nextMods.length !== t.enabledModules.length || nextMods.some((m, i) => m !== t.enabledModules[i]);
+    const titleDirty = merged.browserTabTitle !== t.browserTabTitle;
+    const nameDirty = merged.displayName !== t.displayName;
+    if (modsDirty || titleDirty || nameDirty) changed = true;
+    return merged;
   });
 
   let out = migrated;
   if (!out.some((t) => t.slug === "norter")) {
     out = [
       ...out,
-      {
+      withTenantDefaults({
         id: BUILTIN_NORTER_ID,
         slug: "norter",
         displayName: "Norter",
         logoDataUrl: null,
         enabledModules: [],
         createdAt: new Date().toISOString(),
-      },
+      }),
     ];
     changed = true;
   }
   if (!out.some((t) => t.slug === "qtraffic")) {
     out = [
       ...out,
-      {
+      withTenantDefaults({
         id: BUILTIN_QTRAFFIC_ID,
         slug: "qtraffic",
-        displayName: "Qtraffic",
+        displayName: "AD-Hub",
         logoDataUrl: null,
         enabledModules: [],
         createdAt: new Date().toISOString(),
-      },
+      }),
     ];
     changed = true;
   }
@@ -128,6 +160,8 @@ export function createTenant(input: {
   slug: string;
   displayName: string;
   logoDataUrl: string | null;
+  browserTabTitle?: string;
+  faviconDataUrl?: string | null;
   accentHex?: string;
   enabledModules: AppModule[];
 }): { ok: true; tenant: TenantRecord } | { ok: false; error: string } {
@@ -136,15 +170,17 @@ export function createTenant(input: {
   const slug = input.slug.trim().toLowerCase();
   const list = loadRaw();
   if (list.some((t) => t.slug === slug)) return { ok: false, error: "Já existe uma organização com este slug." };
-  const tenant: TenantRecord = {
+  const tenant: TenantRecord = withTenantDefaults({
     id: crypto.randomUUID(),
     slug,
     displayName: input.displayName.trim() || slug,
     logoDataUrl: input.logoDataUrl,
+    browserTabTitle: input.browserTabTitle?.trim() || undefined,
+    faviconDataUrl: input.faviconDataUrl ?? null,
     accentHex: input.accentHex?.trim() || undefined,
     enabledModules: migrateTenantModules([...input.enabledModules]),
     createdAt: new Date().toISOString(),
-  };
+  });
   list.push(tenant);
   persist(list);
   return { ok: true, tenant };
@@ -152,7 +188,9 @@ export function createTenant(input: {
 
 export function updateTenant(
   id: string,
-  patch: Partial<Pick<TenantRecord, "displayName" | "logoDataUrl" | "accentHex" | "enabledModules">>,
+  patch: Partial<
+    Pick<TenantRecord, "displayName" | "logoDataUrl" | "accentHex" | "enabledModules" | "browserTabTitle" | "faviconDataUrl">
+  >,
 ): { ok: boolean; error?: string } {
   const list = loadRaw();
   const i = list.findIndex((t) => t.id === id);

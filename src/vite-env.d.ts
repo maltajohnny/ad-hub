@@ -23,6 +23,12 @@ interface ImportMetaEnv {
   readonly GEMINI_API_KEY?: string;
   /** Modelo (predef.: gemini-2.5-flash). */
   readonly GEMINI_MODEL?: string;
+  /** App Meta — URL de redirect OAuth deve coincidir (ex.: https://localhost:8080/gestao-midias). */
+  readonly VITE_META_APP_ID?: string;
+  /** Opcional: override do redirect OAuth (predef.: origin + /gestao-midias). */
+  readonly VITE_PLATFORM_OAUTH_REDIRECT_URI?: string;
+  readonly VITE_TIKTOK_APP_ID?: string;
+  readonly VITE_GOOGLE_OAUTH_CLIENT_ID?: string;
 }
 
 interface ImportMeta {

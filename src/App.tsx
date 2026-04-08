@@ -1,8 +1,8 @@
 import { ReactNode, useEffect, useRef } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate, Outlet } from "react-router-dom";
-import { ThemeProvider } from "next-themes";
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { UserThemeProvider } from "@/components/UserThemeProvider";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -15,6 +15,7 @@ import Board from "@/pages/Board";
 import Clientes from "@/pages/Clientes";
 import ClientesFavoritos from "@/pages/ClientesFavoritos";
 import Campanhas from "@/pages/Campanhas";
+import GestaoMidias from "@/pages/GestaoMidias";
 import IaRoi from "@/pages/IaRoi";
 import Configuracoes from "@/pages/Configuracoes";
 import Usuarios from "@/pages/Usuarios";
@@ -41,9 +42,12 @@ import IntelliSearchHistoryPage from "@/pages/intelli-search/IntelliSearchHistor
 import IntelliSearchEvolutionPage from "@/pages/intelli-search/IntelliSearchEvolutionPage";
 import IntelliSearchPerformanceReport from "@/pages/intelli-search/IntelliSearchPerformanceReport";
 import { TenantProvider, useTenant } from "@/contexts/TenantContext";
+import { DocumentBrandingSync } from "@/components/DocumentBrandingSync";
+import SocialPulse from "@/pages/SocialPulse";
+import { userCanAccessSocialPulse } from "@/lib/socialPulseAccess";
 import { defaultPathAfterLogin, isPlatformOperator } from "@/lib/saasTypes";
 import { getTenantById } from "@/lib/tenantsStore";
-import { isQtrafficTeamMember } from "@/lib/qtrafficAccess";
+import { isOrbixTeamMember } from "@/lib/orbixAccess";
 
 const queryClient = new QueryClient();
 
@@ -56,14 +60,25 @@ const AdminRoute = ({ children }: { children: ReactNode }) => {
   return <>{children}</>;
 };
 
-/** Módulo Organizações: só operadores da plataforma ou conta vinculada à org Qtraffic (equipa principal). */
-const QtrafficTeamAdminRoute = ({ children }: { children: ReactNode }) => {
+/** Módulo Social Pulse — respeita `enabledModules` da org e permissões por utilizador. */
+const SocialPulseRoute = ({ children }: { children: ReactNode }) => {
+  const { user } = useAuth();
+  const { tenant } = useTenant();
+  if (!user) return <Navigate to="/login" replace />;
+  if (!userCanAccessSocialPulse(user, tenant?.enabledModules)) {
+    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+  }
+  return <>{children}</>;
+};
+
+/** Organizações: operadores da plataforma ou conta da org AD-Hub (equipa principal). */
+const OrbixTeamAdminRoute = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
   const { tenant } = useTenant();
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "admin")
     return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
-  if (!isQtrafficTeamMember(user))
+  if (!isOrbixTeamMember(user))
     return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
   return <>{children}</>;
 };
@@ -121,15 +136,16 @@ const LandingRoute = () => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} storageKey="norter-theme">
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <AuthProvider>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <AuthProvider>
+        <UserThemeProvider>
           <FavoritesProvider>
             <KanbanProvider>
               <BrowserRouter>
                 <TenantProvider>
+                  <DocumentBrandingSync />
                   <Routes>
                     <Route path="/" element={<LandingRoute />} />
                     <Route path="/landing" element={<Navigate to="/" replace />} />
@@ -142,6 +158,7 @@ const App = () => (
                       <Route path="/clientes/favoritos" element={<ClientesFavoritos />} />
                       <Route path="/clientes" element={<Clientes />} />
                       <Route path="/campanhas" element={<Campanhas />} />
+                      <Route path="/gestao-midias" element={<GestaoMidias />} />
                       <Route path="/intelli-search" element={<IntelliSearchLayout />}>
                         <Route index element={<Navigate to="health/complete" replace />} />
                         <Route path="health/complete" element={<IntelliSearchCompleteAnalysis />} />
@@ -164,6 +181,14 @@ const App = () => (
                       </Route>
                       <Route path="/saude-google" element={<Navigate to="/intelli-search/health/complete" replace />} />
                       <Route path="/ia-roi" element={<IaRoi />} />
+                      <Route
+                        path="/social-pulse"
+                        element={
+                          <SocialPulseRoute>
+                            <SocialPulse />
+                          </SocialPulseRoute>
+                        }
+                      />
                       <Route path="/configuracoes" element={<Configuracoes />} />
                       <Route
                         path="/usuarios"
@@ -176,9 +201,9 @@ const App = () => (
                       <Route
                         path="/organizacoes"
                         element={
-                          <QtrafficTeamAdminRoute>
+                          <OrbixTeamAdminRoute>
                             <Organizacoes />
-                          </QtrafficTeamAdminRoute>
+                          </OrbixTeamAdminRoute>
                         }
                       />
                       <Route path="/perfil" element={<Navigate to="/configuracoes?tab=conta" replace />} />
@@ -189,9 +214,9 @@ const App = () => (
               </BrowserRouter>
             </KanbanProvider>
           </FavoritesProvider>
-        </AuthProvider>
-      </TooltipProvider>
-    </ThemeProvider>
+        </UserThemeProvider>
+      </AuthProvider>
+    </TooltipProvider>
   </QueryClientProvider>
 );
 

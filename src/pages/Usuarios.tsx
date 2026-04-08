@@ -57,7 +57,7 @@ const Usuarios = () => {
   const scopeTenantId = tenant?.id ?? null;
   const platformOp = isPlatformOperator(user?.username);
 
-  /** Carteira de clientes da app é da org Norter; operadores Qtraffic só gerem organizações/contas, não esta tabela. */
+  /** Carteira de clientes da app é da org Norter; operadores AD-Hub só gerem organizações/contas, não esta tabela. */
   const showNorterClientAssignments =
     user?.role === "admin" && !platformOp && user.organizationId === BUILTIN_NORTER_ID;
 
@@ -76,6 +76,23 @@ const Usuarios = () => {
   }, [listUsers, user, platformOp, scopeTenantId]);
 
   const usersOnly = useMemo(() => rows.filter((u) => u.role === "user"), [rows]);
+
+  /** Operador da plataforma: escolher organização para listar apenas utilizadores dessa org nos módulos. */
+  const [modulesOrgScopeId, setModulesOrgScopeId] = useState<string>(() => listTenants()[0]?.id ?? "");
+
+  const usersOnlyForModules = useMemo(() => {
+    if (!platformOp) return usersOnly;
+    if (!modulesOrgScopeId) return [];
+    return listUsers().filter(
+      (u) =>
+        u.role === "user" &&
+        !u.hideFromPlatformList &&
+        u.organizationId === modulesOrgScopeId,
+    );
+  }, [platformOp, modulesOrgScopeId, usersOnly, listUsers]);
+
+  /** Lista usada no cartão «Módulos do menu»: por org para operador da plataforma; caso contrário igual a `usersOnly`. */
+  const userListForModules = platformOp ? usersOnlyForModules : usersOnly;
 
   const [username, setUsername] = useState("");
   /** Só para operador da plataforma: organização do novo utilizador (`__none__` = login sem sufixo). */
@@ -110,10 +127,23 @@ const Usuarios = () => {
   const [showEditPw, setShowEditPw] = useState(false);
   /** `__none__` = sem organização (conta plataforma) */
   const [editOrganizationId, setEditOrganizationId] = useState<string>("__none__");
+  const createOrgId = platformOp
+    ? createOrganizationId !== "__none__"
+      ? createOrganizationId
+      : null
+    : scopeTenantId;
+  const createOrgSlug = createOrgId ? getTenantById(createOrgId)?.slug ?? null : null;
+
+  const stripOrgSuffix = (login: string) => {
+    const t = sanitizeLoginInput(login).trim().toLowerCase();
+    const dot = t.lastIndexOf(".");
+    if (dot <= 0) return t;
+    return t.slice(0, dot);
+  };
 
   const openEdit = (u: User) => {
     setEditTarget(u);
-    setEditUsername(u.username);
+    setEditUsername(u.organizationId ? stripOrgSuffix(u.username) : u.username);
     setEditOrganizationId(u.organizationId ?? "__none__");
     setEditName(u.name);
     setEditEmail(u.email);
@@ -131,10 +161,17 @@ const Usuarios = () => {
       toast.error("A nova senha deve cumprir a política de senha forte.");
       return;
     }
-    const nextLogin = sanitizeLoginInput(editUsername);
+    const rawLogin = sanitizeLoginInput(editUsername);
+    const editOrgId = platformOp
+      ? editOrganizationId !== "__none__"
+        ? editOrganizationId
+        : null
+      : (editTarget.organizationId ?? scopeTenantId);
+    const editOrgSlug = editOrgId ? getTenantById(editOrgId)?.slug ?? null : null;
+    const nextLogin = editOrgSlug ? (buildOrgScopedLogin(rawLogin, editOrgSlug) ?? "") : rawLogin;
     const owner = isOwner(editTarget.username);
     if (!owner) {
-      if (!isValidLoginUsername(nextLogin)) {
+      if (!isValidLoginUsername(rawLogin)) {
         toast.error("Login inválido: sem espaços nem vírgulas, até 80 caracteres.");
         return;
       }
@@ -172,17 +209,17 @@ const Usuarios = () => {
   };
 
   useEffect(() => {
-    if (usersOnly.length === 0) {
+    if (userListForModules.length === 0) {
       setPermUser("");
       return;
     }
-    if (!permUser || !usersOnly.some((u) => u.username === permUser)) {
-      setPermUser(usersOnly[0].username);
+    if (!permUser || !userListForModules.some((u) => u.username === permUser)) {
+      setPermUser(userListForModules[0].username);
     }
-  }, [usersOnly, permUser]);
+  }, [userListForModules, permUser]);
 
   useEffect(() => {
-    const u = usersOnly.find((x) => x.username === permUser);
+    const u = userListForModules.find((x) => x.username === permUser);
     if (!u) return;
     if (!u.allowedModules?.length) {
       setModEdit(Object.fromEntries(APP_MODULES.map((m) => [m, true])) as Record<AppModule, boolean>);
@@ -191,7 +228,7 @@ const Usuarios = () => {
         Object.fromEntries(APP_MODULES.map((m) => [m, u.allowedModules!.includes(m)])) as Record<AppModule, boolean>,
       );
     }
-  }, [permUser, usersOnly]);
+  }, [permUser, userListForModules]);
 
   const handleInitialPasswordBlur = () => {
     const p = password.trim();
@@ -310,26 +347,20 @@ const Usuarios = () => {
               value={username}
               onChange={(e) => setUsername(sanitizeLoginInput(e.target.value))}
               placeholder={
-                platformOp && createOrganizationId !== "__none__"
-                  ? "ex.: maria → maria.slugdaorg"
-                  : "ex.: maria ou maria.empresa"
+                createOrgSlug ? "ex.: diego" : "ex.: maria ou maria.empresa"
               }
               className="bg-secondary/50 border-border/50 h-10 font-mono text-sm"
             />
-            {!platformOp && tenant && scopeTenantId && username.trim() ? (
+            {createOrgSlug && username.trim() ? (
               <p className="text-[11px] text-muted-foreground">
-                Login de acesso:{" "}
+                Login de acesso automático:{" "}
                 <span className="font-mono text-foreground">
-                  {buildOrgScopedLogin(username, tenant.slug) ?? "…"}
+                  {buildOrgScopedLogin(username, createOrgSlug) ?? "…"}
                 </span>
               </p>
-            ) : null}
-            {platformOp && createOrganizationId !== "__none__" && username.trim() ? (
+            ) : platformOp ? (
               <p className="text-[11px] text-muted-foreground">
-                Login de acesso:{" "}
-                <span className="font-mono text-foreground">
-                  {buildOrgScopedLogin(username, getTenantById(createOrganizationId)?.slug ?? "") ?? "…"}
-                </span>
+                Sem organização selecionada: o login fica exatamente como digitado.
               </p>
             ) : null}
           </div>
@@ -440,12 +471,30 @@ const Usuarios = () => {
         </Button>
       </Card>
 
-      {usersOnly.length > 0 && (
+      {userListForModules.length > 0 && (
         <Card className="glass-card p-5 border-border/60">
           <h3 className="font-display font-semibold mb-2">Módulos do menu (utilizador existente)</h3>
           <p className="text-xs text-muted-foreground mb-3">
-            Selecione o utilizador e ajuste os módulos. Todos ativos = mesmo comportamento que antes (acesso completo).
+            Selecione a organização (operador da plataforma), depois o utilizador e ajuste os módulos. Todos ativos = mesmo
+            comportamento que antes (acesso completo). Cada organização só vê as suas contas.
           </p>
+          {platformOp && (
+            <div className="mb-4 max-w-md space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Organização</Label>
+              <Select value={modulesOrgScopeId} onValueChange={setModulesOrgScopeId}>
+                <SelectTrigger className="h-10 bg-secondary/50 border-border/50">
+                  <SelectValue placeholder="Selecionar organização" />
+                </SelectTrigger>
+                <SelectContent>
+                  {listTenants().map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.displayName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="mb-4 max-w-md space-y-1.5">
             <label className="text-xs text-muted-foreground">Utilizador</label>
             <Select value={permUser} onValueChange={setPermUser}>
@@ -453,7 +502,7 @@ const Usuarios = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {usersOnly.map((u) => (
+                {userListForModules.map((u) => (
                   <SelectItem key={u.username} value={u.username}>
                     {u.name} (@{u.username})
                   </SelectItem>
@@ -748,6 +797,23 @@ const Usuarios = () => {
                   className="h-10 font-mono text-sm"
                   autoComplete="off"
                 />
+                {(() => {
+                  const effectiveOrgId = platformOp
+                    ? editOrganizationId !== "__none__"
+                      ? editOrganizationId
+                      : null
+                    : (editTarget.organizationId ?? scopeTenantId);
+                  const effectiveOrgSlug = effectiveOrgId ? getTenantById(effectiveOrgId)?.slug ?? null : null;
+                  if (!effectiveOrgSlug || !editUsername.trim()) return null;
+                  return (
+                    <p className="text-[11px] text-muted-foreground">
+                      Login final:{" "}
+                      <span className="font-mono text-foreground">
+                        {buildOrgScopedLogin(editUsername, effectiveOrgSlug) ?? "…"}
+                      </span>
+                    </p>
+                  );
+                })()}
               </div>
             ) : editTarget ? (
               <p className="text-xs text-muted-foreground rounded-md border border-border/50 bg-secondary/30 px-3 py-2">

@@ -11,7 +11,7 @@ import {
   Target,
   Zap,
 } from "lucide-react";
-import qtrafficMark from "@/assets/qtraffic-mark-only.png";
+import adHubLogo from "@/assets/ad-hub-logo.png";
 import landingHeroAi from "@/assets/landing-hero-ai.png";
 
 export default function Landing() {
@@ -21,12 +21,12 @@ export default function Landing() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <Link to="/" className="flex items-center gap-3 min-w-0 group">
             <img
-              src={qtrafficMark}
-              alt="QTRAFFIC"
-              className="h-10 w-auto max-w-[140px] sm:h-11 object-contain object-left shrink-0 transition-opacity group-hover:opacity-95"
+              src={adHubLogo}
+              alt="AD-Hub"
+              className="h-[55px] w-[55px] object-contain object-left shrink-0 transition-opacity group-hover:opacity-95"
             />
             <span className="hidden sm:flex flex-col border-l border-white/10 pl-3">
-              <span className="font-display text-sm font-bold tracking-tight text-white leading-tight">QTRAFFIC</span>
+              <span className="font-display text-sm font-bold tracking-tight text-white leading-tight">AD-Hub</span>
               <span className="text-[10px] tracking-[0.22em] uppercase text-cyan-400/90">Move faster · Grow smarter</span>
             </span>
           </Link>
@@ -56,13 +56,13 @@ export default function Landing() {
                 IA + tráfego pago numa única plataforma
               </p>
               <h1 className="font-display text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl lg:text-[3.15rem]">
-                QTRAFFIC —{" "}
+                AD-Hub —{" "}
                 <span className="bg-gradient-to-r from-cyan-300 via-white to-violet-200 bg-clip-text text-transparent">
                   Move faster. Grow smarter.
                 </span>
               </h1>
               <p className="mt-6 text-lg text-slate-400 leading-relaxed">
-                Centralize campanhas, métricas e decisões com inteligência artificial. A QTRAFFIC automatiza análises de
+                Centralize campanhas, métricas e decisões com inteligência artificial. A plataforma AD-Hub automatiza análises de
                 tráfego pago e entrega insights precisos de <strong className="text-slate-200 font-semibold">CPA</strong>,{" "}
                 <strong className="text-slate-200 font-semibold">conversões</strong>,{" "}
                 <strong className="text-slate-200 font-semibold">CPM</strong>,{" "}
@@ -83,13 +83,13 @@ export default function Landing() {
               </div>
             </div>
 
-            <div className="relative flex min-h-0 flex-col justify-center lg:h-[clamp(380px,min(52vh,640px),min(580px,56vh))]">
+            <div className="relative flex flex-col justify-center">
               <div className="absolute -inset-4 rounded-3xl bg-gradient-to-br from-violet-500/20 via-transparent to-cyan-500/15 blur-2xl" />
-              <div className="relative flex min-h-[min(280px,78vw)] flex-1 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/40 shadow-2xl shadow-black/50 ring-1 ring-white/5 sm:min-h-[min(320px,70vw)] lg:min-h-0 lg:h-full">
+              <div className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-slate-900/40 shadow-2xl shadow-black/50 ring-1 ring-white/5 aspect-[4/3] sm:aspect-[16/11] lg:aspect-[16/10]">
                 <img
                   src={landingHeroAi}
                   alt="Gestora de tráfego com assistente de IA a analisar métricas de CPA, ROI e leads"
-                  className="h-full w-full object-cover object-[center_22%] sm:object-[center_25%] lg:scale-[1.07] lg:object-[center_28%] xl:scale-[1.05] 2xl:scale-[1.03]"
+                  className="h-full w-full object-cover object-[center_24%]"
                   loading="eager"
                   sizes="(min-width: 1024px) min(58vw, 720px), 100vw"
                 />
@@ -143,7 +143,7 @@ export default function Landing() {
             },
             {
               icon: CheckCircle2,
-              title: "Controlo humano",
+              title: "Controle humano",
               desc: "A IA propõe; o gestor mantém a palavra final quando a estratégia exige.",
             },
           ].map((f) => (
@@ -170,7 +170,7 @@ export default function Landing() {
               </p>
             </div>
             <Button size="lg" className="gradient-brand shrink-0 text-primary-foreground shadow-lg" asChild>
-              <Link to="/login">Entrar na QTRAFFIC</Link>
+              <Link to="/login">Entrar na AD-Hub</Link>
             </Button>
           </CardContent>
         </Card>
@@ -178,7 +178,7 @@ export default function Landing() {
 
       <footer className="border-t border-white/[0.06] py-10 text-center text-xs text-slate-500">
         <p>
-          © {new Date().getFullYear()} QTRAFFIC — Move faster. Grow smarter. Plataforma de gestão de tráfego pago e
+          © {new Date().getFullYear()} AD-Hub — Move faster. Grow smarter. Plataforma de gestão de tráfego pago e
           inteligência operacional.
         </p>
       </footer>

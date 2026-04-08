@@ -198,8 +198,8 @@ const defaultRegistry: Record<string, RegistryEntry> = {
     user: {
       role: "admin",
       username: "qtrafficadmin",
-      name: "Operador QTRAFFIC",
-      email: "ops@qtraffic.com",
+      name: "Operador AD-Hub",
+      email: "ops@orbix.com",
       phone: "(11) 90000-0000",
       document: "000.000.000-01",
       mustChangePassword: false,

@@ -26,6 +26,11 @@ func LoadDotenv() {
 		filepath.Join(wd, ".env"),
 		filepath.Join(wd, "..", ".env"),
 		filepath.Join(wd, "..", "..", ".env"),
+		// Deploy típico: binário em ~/apps/minha-api e clone em ~/ad-hub.digital
+		filepath.Join(wd, "..", "..", "ad-hub.digital", ".env"),
+	}
+	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
+		paths = append(paths, filepath.Join(home, "ad-hub.digital", ".env"))
 	}
 	for _, p := range paths {
 		if err := godotenv.Overload(p); err != nil {
@@ -53,9 +58,13 @@ func applySerpAPIKeyFromRootEnvFiles(wd string) {
 		return
 	}
 	candidates := []string{
+		filepath.Join(wd, "..", "..", "ad-hub.digital", ".env"),
 		filepath.Join(wd, "..", "..", ".env"),
 		filepath.Join(wd, "..", ".env"),
 		filepath.Join(wd, ".env"),
+	}
+	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
+		candidates = append([]string{filepath.Join(home, "ad-hub.digital", ".env")}, candidates...)
 	}
 	for _, p := range candidates {
 		data, err := os.ReadFile(p)

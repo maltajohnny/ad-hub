@@ -5,16 +5,16 @@ export type LoginBrandResolved = {
   key: string;
   name: string;
   tagline?: string;
-  /** Data URL ou path; null = usar componente SVG Qtraffic no ecrã de login */
+  /** Data URL ou path; null = usar componente AD-Hub no ecrã de login */
   logo: string | null;
   alt: string;
 };
 
-const QTRAFFIC_DEFAULT: LoginBrandResolved = {
-  key: "qtraffic",
-  name: "QTRAFFIC",
+const ORBIX_DEFAULT: LoginBrandResolved = {
+  key: "orbix",
+  name: "AD-Hub",
   logo: null,
-  alt: "QTRAFFIC",
+  alt: "AD-Hub",
 };
 
 const NORTER_BUILTIN: LoginBrandResolved = {
@@ -33,7 +33,7 @@ function isKnownOrgSlug(slug: string): boolean {
 
 /**
  * Extrai o slug da organização após o último `.` só se for uma org conhecida (Norter embutida ou tenant registado).
- * Emails (`@`) não são analisados. Sem `.` ou org desconhecida → null (marca Qtraffic).
+ * Emails (`@`) não são analisados. Sem `.` ou org desconhecida → null (marca AD-Hub).
  */
 export function extractOrgSlugFromUsername(username: string): string | null {
   const t = username.trim();
@@ -47,12 +47,12 @@ export function extractOrgSlugFromUsername(username: string): string | null {
 }
 
 /**
- * Login principal: Qtraffic por defeito; se o utilizador indica org conhecida após `.`, mostra essa marca.
+ * Login principal: AD-Hub por defeito; se o utilizador indica org conhecida após `.`, mostra essa marca.
  */
 export function resolveBrandingForMainLogin(username: string): LoginBrandResolved {
   const slug = extractOrgSlugFromUsername(username);
   if (!slug) {
-    return QTRAFFIC_DEFAULT;
+    return ORBIX_DEFAULT;
   }
   const tenant = getTenantBySlug(slug);
   if (tenant) {
@@ -67,11 +67,16 @@ export function resolveBrandingForMainLogin(username: string): LoginBrandResolve
   if (slug === "norter") {
     return NORTER_BUILTIN;
   }
-  return QTRAFFIC_DEFAULT;
+  return ORBIX_DEFAULT;
 }
 
+export function getOrbixDefaultBranding(): LoginBrandResolved {
+  return ORBIX_DEFAULT;
+}
+
+/** @deprecated Use `getOrbixDefaultBranding`. */
 export function getQtrafficDefaultBranding(): LoginBrandResolved {
-  return QTRAFFIC_DEFAULT;
+  return ORBIX_DEFAULT;
 }
 
 /**
@@ -93,7 +98,7 @@ export function resolveLoginScreenBrand(input: {
   username: string;
 }): LoginBrandResolved {
   if (input.invalidTenant) {
-    return getQtrafficDefaultBranding();
+    return getOrbixDefaultBranding();
   }
   if (input.tenantSlug && input.tenantRecord) {
     return {

@@ -282,10 +282,10 @@ const Configuracoes = () => {
             <Card className="glass-card p-6">
               <div className="flex items-center gap-2 mb-3">
                 <Building2 size={18} className="text-primary" />
-                <h3 className="font-display font-semibold">Organização (equipa Qtraffic)</h3>
+                <h3 className="font-display font-semibold">Organização (equipa AD-Hub)</h3>
               </div>
               <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-                Associe a sua conta à organização principal Qtraffic para fazer parte do mesmo contexto de módulos e permissões
+                  Associe a sua conta à organização principal AD-Hub para fazer parte do mesmo contexto de módulos e permissões
                 da equipa. Pode remover o vínculo a qualquer momento.
               </p>
               <div className="space-y-3 max-w-md">
@@ -299,7 +299,7 @@ const Configuracoes = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Sem vínculo (só operador da plataforma)</SelectItem>
-                    <SelectItem value="qtraffic">Qtraffic — equipa principal</SelectItem>
+                    <SelectItem value="qtraffic">AD-Hub — equipa principal</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button type="button" variant="secondary" size="sm" onClick={handleSaveOrgVinculo}>

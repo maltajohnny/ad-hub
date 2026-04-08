@@ -5,8 +5,10 @@ export const APP_MODULES = [
   "clientes",
   "clientes-favoritos",
   "campanhas",
+  "gestao-midias",
   "intelli-search",
   "ia-roi",
+  "social-pulse",
   "usuarios",
   "configuracoes",
 ] as const;
@@ -19,13 +21,15 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   clientes: "Clientes",
   "clientes-favoritos": "Clientes · Favoritos",
   campanhas: "Campanhas",
+  "gestao-midias": "Gestão de Mídias",
   "intelli-search": "IntelliSearch",
   "ia-roi": "IA & ROI",
+  "social-pulse": "Social Pulse",
   usuarios: "Usuários",
   configuracoes: "Configurações",
 };
 
-/** Contas internas Qtraffic (não veem módulos de entrega para clientes). */
+/** Contas internas AD-Hub (não veem módulos de entrega para clientes). */
 export const PLATFORM_OPERATOR_USERNAMES = new Set(["admin", "qtrafficadmin"]);
 
 export function isPlatformOperator(username: string | undefined | null): boolean {
@@ -33,7 +37,7 @@ export function isPlatformOperator(username: string | undefined | null): boolean
   return PLATFORM_OPERATOR_USERNAMES.has(username.trim().toLowerCase());
 }
 
-/** Módulos visíveis para admin / qtrafficadmin — serviços da plataforma (IntelliSearch é por organização). */
+/** Módulos visíveis para admin / operador AD-Hub — serviços da plataforma (IntelliSearch é por organização). */
 export const PLATFORM_OPERATOR_MODULES: AppModule[] = ["dashboard", "usuarios", "configuracoes"];
 
 /** Slugs reservados — não podem ser usados por organizações cliente. */
@@ -49,7 +53,7 @@ export const RESERVED_TENANT_SLUGS = new Set([
   "t",
 ]);
 
-/** Intersecção org + utilizador; admin de organização respeita módulos da org; operador de plataforma vê só serviços Qtraffic. */
+/** Intersecção org + utilizador; admin de organização respeita módulos da org; operador de plataforma vê só serviços AD-Hub. */
 export function effectiveModulesForUser(
   user: { role: string; username: string; allowedModules?: AppModule[] | null } | null,
   tenantEnabled: AppModule[] | undefined,
@@ -78,8 +82,10 @@ export function pathToModule(pathname: string): AppModule | null {
   if (pathname === "/clientes") return "clientes";
   if (pathname === "/clientes/favoritos") return "clientes-favoritos";
   if (pathname === "/campanhas") return "campanhas";
+  if (pathname === "/gestao-midias") return "gestao-midias";
   if (pathname === "/intelli-search" || pathname.startsWith("/intelli-search/")) return "intelli-search";
   if (pathname === "/ia-roi") return "ia-roi";
+  if (pathname === "/social-pulse" || pathname.startsWith("/social-pulse/")) return "social-pulse";
   if (pathname === "/usuarios") return "usuarios";
   if (pathname.startsWith("/configuracoes")) return "configuracoes";
   return null;
@@ -97,10 +103,14 @@ export function moduleToDefaultPath(m: AppModule): string {
       return "/clientes/favoritos";
     case "campanhas":
       return "/campanhas";
+    case "gestao-midias":
+      return "/gestao-midias";
     case "intelli-search":
       return "/intelli-search/health/complete";
     case "ia-roi":
       return "/ia-roi";
+    case "social-pulse":
+      return "/social-pulse";
     case "usuarios":
       return "/usuarios";
     case "configuracoes":
