@@ -51,14 +51,15 @@ import {
   getVisibleAccountIdsForUser,
   listAccountsForOrg,
   listAuditForOrg,
+  normalizeProfileUrl,
   PROFILE_URL_PLACEHOLDERS,
   removeMonitoredAccount,
   setUserVisibleAccounts,
   suggestLabelFromProfileUrl,
-  urlMatchesPlatform,
   type MonitoredAccount,
   type SocialPulsePlatform,
 } from "@/lib/socialPulseStore";
+import { InstagramProfileInput } from "@/components/social-pulse/InstagramProfileInput";
 import { platformLabel } from "@/lib/socialPulseMetrics";
 import { getInstagramMetrics } from "@/social-pulse/services/instagram.service";
 import type { SocialMetricsPayload } from "@/social-pulse/models/social-metrics.model";
@@ -258,17 +259,18 @@ export default function SocialPulse() {
 
   const onAddAccount = () => {
     if (!orgId || !user) return;
-    if (!urlMatchesPlatform(urlInput, addPlatform)) {
+    const normalized = normalizeProfileUrl(urlInput, addPlatform);
+    if (!normalized) {
       toast.error(
-        `O URL tem de ser um perfil em ${platformLabel(addPlatform)} (ex.: ${PROFILE_URL_PLACEHOLDERS[addPlatform]}).`,
+        `Indique um perfil válido em ${platformLabel(addPlatform)} (ex.: ${PROFILE_URL_PLACEHOLDERS[addPlatform]}).`,
       );
       return;
     }
     const friendly =
-      labelInput.trim() || suggestLabelFromProfileUrl(urlInput, addPlatform) || urlInput.trim();
+      labelInput.trim() || suggestLabelFromProfileUrl(normalized, addPlatform) || normalized;
     const res = addMonitoredAccount({
       organizationId: orgId,
-      profileUrl: urlInput,
+      profileUrl: normalized,
       platform: addPlatform,
       label: friendly,
       actorUsername: user.username,
@@ -383,9 +385,9 @@ export default function SocialPulse() {
                 <Card className="glass-card p-5 border-border/60 space-y-4">
                   <h3 className="font-display font-semibold">Adicionar perfil</h3>
                   <p className="text-xs text-muted-foreground">
-                    Escolha a rede, cole o URL público do <strong>seu</strong> perfil (não a página inicial da rede) e um
-                    nome opcional. Para Instagram, configure o token Graph API abaixo e/ou o proxy de perfil
-                    (`VITE_SOCIAL_PULSE_IG_PROXY_URL` no build).
+                    Escolha a rede e indique o <strong>perfil</strong> (utilizador ou link completo). O nome amigável é o que
+                    aparece no painel e nas permissões. Para Instagram, use o token Graph API e/ou o proxy em{" "}
+                    <code className="text-[10px]">/api/social/ig-profile.php</code>.
                   </p>
                   <AddProfileFields
                     addPlatform={addPlatform}
@@ -575,8 +577,9 @@ export default function SocialPulse() {
               <Card className="glass-card p-5 border-border/60 space-y-4">
                 <h3 className="font-display font-semibold">Adicionar perfil</h3>
                 <p className="text-xs text-muted-foreground">
-                  Escolha a rede e cole o URL completo do <strong>perfil</strong> a monitorizar (ex.: o seu Instagram,
-                  não instagram.com sozinho). Se colar um link de outra rede, a seleção atualiza automaticamente.
+                  Indique o <strong>perfil</strong> por utilizador ou URL; a plataforma já define o endereço da rede. Ao colar
+                  um link de outra rede, a seleção de plataforma atualiza. No Instagram, pode pesquisar e escolher na lista
+                  (se o servidor conseguir falar com o Instagram) ou confirmar «Utilizar este utilizador».
                 </p>
                 <AddProfileFields
                   addPlatform={addPlatform}
@@ -767,8 +770,12 @@ function AddProfileFields({
         </Select>
       </div>
       <div className="space-y-1.5 sm:col-span-2">
-        <Label className="text-xs">URL do perfil</Label>
-        <Input value={urlInput} onChange={(e) => onUrlChange(e.target.value)} placeholder={ph} />
+        <Label className="text-xs">Perfil</Label>
+        {addPlatform === "instagram" ? (
+          <InstagramProfileInput value={urlInput} onChange={onUrlChange} placeholder={ph} />
+        ) : (
+          <Input value={urlInput} onChange={(e) => onUrlChange(e.target.value)} placeholder={ph} />
+        )}
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs">Nome amigável (opcional)</Label>

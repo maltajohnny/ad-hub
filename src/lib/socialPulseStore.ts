@@ -82,34 +82,108 @@ export function detectPlatformFromUrl(url: string): SocialPulsePlatform | null {
   return null;
 }
 
-/** Verifica se o URL parece ser da rede escolhida (antes de guardar). */
-export function urlMatchesPlatform(url: string, platform: SocialPulsePlatform): boolean {
-  const u = url.trim().toLowerCase();
-  if (!u) return false;
-  switch (platform) {
-    case "youtube":
-      return /(youtube\.com|youtu\.be)/.test(u);
-    case "instagram":
-      return /instagram\.com/.test(u);
-    case "twitter":
-      return /(twitter\.com|x\.com)/.test(u);
-    case "tiktok":
-      return /tiktok\.com/.test(u);
-    default:
-      return false;
+function tryParseUrl(s: string): URL | null {
+  try {
+    return new URL(s.startsWith("http") ? s : `https://${s}`);
+  } catch {
+    return null;
   }
 }
 
+function firstPathSegment(pathname: string): string {
+  return pathname.replace(/\/+$/, "").split("/").filter(Boolean)[0] ?? "";
+}
+
+function stripAt(s: string): string {
+  return s.replace(/^@+/, "").trim();
+}
+
+/**
+ * Converte @handle, handle só ou URL completo num URL canónico do perfil para a plataforma escolhida.
+ */
+export function normalizeProfileUrl(input: string, platform: SocialPulsePlatform): string | null {
+  const t = input.trim();
+  if (!t) return null;
+
+  if (platform === "instagram") {
+    const u = tryParseUrl(t);
+    if (u && /(^|\.)instagram\.com$/i.test(u.hostname)) {
+      const seg = stripAt(firstPathSegment(u.pathname));
+      if (!seg || /^(p|reel|reels|stories|explore|accounts)$/i.test(seg)) return null;
+      if (!/^[a-zA-Z0-9._]{1,30}$/.test(seg)) return null;
+      return `https://www.instagram.com/${seg}/`;
+    }
+    const h = stripAt(t).replace(/\//g, "");
+    if (!/^[a-zA-Z0-9._]{1,30}$/.test(h)) return null;
+    return `https://www.instagram.com/${h}/`;
+  }
+
+  if (platform === "twitter") {
+    const u = tryParseUrl(t);
+    if (u && /(^|\.)(x\.com|twitter\.com)$/i.test(u.hostname)) {
+      const seg = stripAt(firstPathSegment(u.pathname));
+      if (!/^[a-zA-Z0-9_]{1,15}$/.test(seg)) return null;
+      return `https://x.com/${seg}`;
+    }
+    const h = stripAt(t);
+    if (!/^[a-zA-Z0-9_]{1,15}$/.test(h)) return null;
+    return `https://x.com/${h}`;
+  }
+
+  if (platform === "tiktok") {
+    const u = tryParseUrl(t);
+    if (u && /(^|\.)tiktok\.com$/i.test(u.hostname)) {
+      const m = u.pathname.match(/@([a-zA-Z0-9._]{2,24})/);
+      const seg = m?.[1] ?? stripAt(firstPathSegment(u.pathname));
+      if (!seg || !/^[a-zA-Z0-9._]{2,24}$/.test(seg)) return null;
+      return `https://www.tiktok.com/@${seg}`;
+    }
+    const h = stripAt(t);
+    if (!/^[a-zA-Z0-9._]{2,24}$/.test(h)) return null;
+    return `https://www.tiktok.com/@${h}`;
+  }
+
+  if (platform === "youtube") {
+    const u = tryParseUrl(t);
+    if (u && (u.hostname.replace(/^www\./, "").endsWith("youtube.com") || u.hostname === "youtu.be")) {
+      if (u.hostname === "youtu.be") {
+        return null;
+      }
+      const path = u.pathname;
+      const mAt = path.match(/\/@([^/?#]+)/);
+      if (mAt?.[1]) return `https://www.youtube.com/@${mAt[1]}`;
+      const mCh = path.match(/\/channel\/([^/?#]+)/);
+      if (mCh?.[1]) return `https://www.youtube.com/channel/${mCh[1]}`;
+      const mC = path.match(/\/c\/([^/?#]+)/);
+      if (mC?.[1]) return `https://www.youtube.com/c/${mC[1]}`;
+      const mUser = path.match(/\/user\/([^/?#]+)/);
+      if (mUser?.[1]) return `https://www.youtube.com/user/${mUser[1]}`;
+      return null;
+    }
+    const h = stripAt(t);
+    if (h.length < 3 || !/^[\w-]{3,30}$/.test(h)) return null;
+    return `https://www.youtube.com/@${h}`;
+  }
+
+  return null;
+}
+
+/** Verifica se o texto é um perfil válido para a rede escolhida (URL ou @handle). */
+export function urlMatchesPlatform(input: string, platform: SocialPulsePlatform): boolean {
+  return normalizeProfileUrl(input, platform) !== null;
+}
+
 export const PROFILE_URL_PLACEHOLDERS: Record<SocialPulsePlatform, string> = {
-  youtube: "https://www.youtube.com/@canal",
-  instagram: "https://www.instagram.com/utilizador/",
-  twitter: "https://x.com/utilizador",
-  tiktok: "https://www.tiktok.com/@utilizador",
+  youtube: "@canal ou https://www.youtube.com/@canal",
+  instagram: "utilizador, @utilizador ou link do Instagram",
+  twitter: "utilizador ou https://x.com/utilizador",
+  tiktok: "@utilizador ou link do TikTok",
 };
 
 /** Sugere nome amigável a partir do caminho do perfil (ex.: último segmento do Instagram). */
-export function suggestLabelFromProfileUrl(url: string, platform: SocialPulsePlatform): string {
-  const raw = url.trim();
+export function suggestLabelFromProfileUrl(input: string, platform: SocialPulsePlatform): string {
+  const canonical = normalizeProfileUrl(input, platform);
+  const raw = canonical ?? input.trim();
   if (!raw) return "";
   try {
     const u = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
@@ -160,12 +234,16 @@ export function addMonitoredAccount(input: {
   label: string;
   actorUsername: string;
 }): { ok: true; account: MonitoredAccount } | { ok: false; error: string } {
-  const url = input.profileUrl.trim();
-  if (!url) return { ok: false, error: "Indique o link do perfil." };
+  const url = normalizeProfileUrl(input.profileUrl, input.platform);
+  if (!url) {
+    return { ok: false, error: "Indique um perfil válido para a plataforma escolhida (utilizador ou URL)." };
+  }
   let data = load();
-  const dup = data.accounts.some(
-    (a) => a.organizationId === input.organizationId && a.profileUrl.trim() === url,
-  );
+  const dup = data.accounts.some((a) => {
+    if (a.organizationId !== input.organizationId) return false;
+    const other = normalizeProfileUrl(a.profileUrl, a.platform) ?? a.profileUrl.trim();
+    return other === url;
+  });
   if (dup) return { ok: false, error: "Este perfil já está na lista." };
   const account: MonitoredAccount = {
     id: crypto.randomUUID(),
