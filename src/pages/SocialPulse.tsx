@@ -179,6 +179,29 @@ export default function SocialPulse() {
       );
       setMetricsByAccountId((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
       setSnapshotTick((x) => x + 1);
+
+      const igEntries = entries.filter(([id]) => {
+        const acc = visibleAccounts.find((x) => x.id === id);
+        return acc?.platform === "instagram";
+      });
+      if (igEntries.length > 0) {
+        const ok = igEntries.filter(([, m]) => m.followers !== null).length;
+        const fail = igEntries.length - ok;
+        if (ok === igEntries.length) {
+          toast.success(`Métricas Instagram atualizadas (${ok} conta(s)).`);
+        } else if (ok > 0) {
+          toast.warning(
+            `${ok} conta(s) OK · ${fail} sem dados. Confira token Graph ou o proxy /api/social/ig-profile.php no servidor.`,
+          );
+        } else {
+          toast.error(
+            "Instagram: nenhuma métrica obtida. Token de acesso Graph (conta Business) ou proxy PHP no site; veja a consola [SocialPulse].",
+          );
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Erro ao atualizar métricas: ${msg}`);
     } finally {
       setLoadingMetrics(false);
     }

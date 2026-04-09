@@ -20,19 +20,42 @@ export type GetInstagramMetricsOptions = {
   accountIdForSnapshot?: string;
 };
 
+function resolveIgProxyTemplate(): string {
+  const env = (import.meta.env.VITE_SOCIAL_PULSE_IG_PROXY_URL ?? "").trim();
+  if (env) return env;
+  if (import.meta.env.PROD && typeof window !== "undefined") {
+    const h = window.location.hostname;
+    if (h === "ad-hub.digital" || h === "www.ad-hub.digital") {
+      return "/api/social/ig-profile.php?user=";
+    }
+  }
+  return "";
+}
+
+function buildIgProxyUrl(template: string, handle: string): string {
+  const t = template.trim();
+  if (t.includes("{user}")) {
+    return t.replaceAll("{user}", encodeURIComponent(handle));
+  }
+  if (t.endsWith("=")) {
+    return `${t}${encodeURIComponent(handle)}`;
+  }
+  const base = t.replace(/\/$/, "");
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}user=${encodeURIComponent(handle)}`;
+}
+
 function defaultFetchProfileHtml(): (username: string) => Promise<string | null> {
-  const template = (import.meta.env.VITE_SOCIAL_PULSE_IG_PROXY_URL ?? "").trim();
   return async (handle: string) => {
+    const template = resolveIgProxyTemplate();
     if (!template) {
       console.info(
         LOG_PREFIX,
-        "scraper_skip: defina VITE_SOCIAL_PULSE_IG_PROXY_URL (proxy same-origin que devolve HTML do perfil) ou passe fetchProfileHtml",
+        "scraper_skip: defina VITE_SOCIAL_PULSE_IG_PROXY_URL ou faça deploy de public/api/social/ig-profile.php (em ad-hub.digital usa-se /api/social/ig-profile.php?user= automaticamente)",
       );
       return null;
     }
-    const url = template.includes("{user}")
-      ? template.replace("{user}", encodeURIComponent(handle))
-      : `${template.replace(/\/$/, "")}?user=${encodeURIComponent(handle)}`;
+    const url = buildIgProxyUrl(template, handle);
     try {
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) return null;
@@ -121,7 +144,7 @@ export async function getInstagramMetrics(
         followers: s.data.followers,
         following: s.data.following,
         posts: s.data.posts,
-        engagementRate: null,
+        engagementRate: s.data.engagementRate,
         source: "scraper",
         lastUpdated: new Date().toISOString(),
       };

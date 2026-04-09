@@ -7,7 +7,13 @@ const LOG_PREFIX = "[SocialPulse:scraper]";
 
 export type InstagramScraperSuccess = {
   ok: true;
-  data: { followers: number; following: number | null; posts: number | null };
+  data: {
+    followers: number;
+    following: number | null;
+    posts: number | null;
+    /** Só se existir no HTML embutido (muitas vezes ausente). */
+    engagementRate: number | null;
+  };
   source: "scraper";
 };
 
@@ -25,10 +31,12 @@ export function parseInstagramProfileHtml(html: string): {
   followers: number | null;
   following: number | null;
   posts: number | null;
+  engagementRate: number | null;
 } {
   let followers: number | null = null;
   let following: number | null = null;
   let posts: number | null = null;
+  let engagementRate: number | null = null;
 
   const pick = (re: RegExp, s: string): number | null => {
     const m = s.match(re);
@@ -52,7 +60,16 @@ export function parseInstagramProfileHtml(html: string): {
     if (posts === null && f3?.[1]) posts = parseInt(f3[1].replace(/,/g, ""), 10) || null;
   }
 
-  return { followers, following, posts };
+  const engM =
+    html.match(/"engagement_rate":\s*([\d.]+)/) ||
+    html.match(/([\d.]+)\s*%\s*engagement/i) ||
+    html.match(/engagement[^0-9]*([\d.]+)\s*%/i);
+  if (engM?.[1]) {
+    const n = Number(engM[1]);
+    engagementRate = Number.isFinite(n) ? n : null;
+  }
+
+  return { followers, following, posts, engagementRate };
 }
 
 export async function fetchInstagramViaScraper(
@@ -90,6 +107,7 @@ export async function fetchInstagramViaScraper(
       followers: parsed.followers,
       following: parsed.following,
       posts: parsed.posts,
+      engagementRate: parsed.engagementRate,
     },
     source: "scraper",
   };
