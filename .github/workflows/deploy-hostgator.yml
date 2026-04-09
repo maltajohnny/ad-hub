@@ -1,0 +1,52 @@
+# Deploy automático: push na branch `main` → build Vite → envia `dist/` por FTP para a HostGator.
+#
+# Configure no repositório GitHub → Settings → Secrets and variables → Actions:
+#   FTP_HOST     — servidor FTP (ex.: ftp.seudominio.com ou o IP do cPanel)
+#   FTP_USER     — utilizador FTP (muitas vezes o mesmo do cPanel, ex.: johnn315)
+#   FTP_PASSWORD — palavra-passe da conta FTP
+#
+# Se o deploy falhar com "path not found", no cPanel confira o caminho real no File Manager:
+# às vezes o FTP usa caminho relativo à pasta inicial (ex.: só `ad-hub.digital` em vez do caminho absoluto).
+
+name: Deploy para HostGator (FTP)
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-hostgator-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Build (Vite)
+        run: npm run build
+
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: /home3/johnn315/ad-hub.digital/
+          dangerous-clean-slate: false
