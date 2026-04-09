@@ -7,12 +7,14 @@
 #
 # IMPORTANTE — server-dir é RELATIVO à pasta inicial do utilizador FTP (nunca `/home3/...` absoluto).
 #
-# No cPanel → Contas FTP → vê o campo "Diretório" dessa conta:
-#   • Se for /home3/USER/ (raiz da conta)     → usa `ad-hub.digital/` (ou deixa o default da variável).
-#   • Se for .../ad-hub.digital/ (já o site) → define em GitHub → Variables → FTP_SERVER_DIR = `./`
-# Sem isso, o deploy pode ir para ad-hub.digital/ad-hub.digital/ e o domínio continua a servir a raiz antiga.
+# O destino tem de ser o MESMO que cPanel → Domínios → Document Root do site (ex.: public_html/).
+# Se enviares para `ad-hub.digital/` mas o domínio aponta para `public_html/`, o site não atualiza.
 #
-# Opcional: repositório → Settings → Variables → Actions → FTP_SERVER_DIR (ex.: `./` ou `ad-hub.digital/`).
+# Variável (recomendado): GitHub → Settings → Variables → Actions → FTP_SERVER_DIR
+#   Exemplos: `public_html/`  |  `ad-hub.digital/`  |  `public_html/ad-hub.digital/`  |  `./`
+# (depende da conta FTP: raiz da conta vs pasta já fixada ao domínio)
+#
+# Vários destinos: duplica o step "Deploy via FTP" com outro `local-dir` + `server-dir`, ou um job extra.
 
 name: Deploy para HostGator (FTP)
 
@@ -47,6 +49,7 @@ jobs:
       - name: Build (Vite)
         run: npm run build
 
+      # Front (Vite): pasta = Document Root do domínio (no teu caso: public_html/)
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
@@ -54,6 +57,17 @@ jobs:
           username: ${{ secrets.FTP_USER }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
-          # Default ad-hub.digital/; em GitHub → Settings → Variables → FTP_SERVER_DIR usa `./` se o FTP já abre na pasta do domínio
-          server-dir: ${{ vars.FTP_SERVER_DIR || 'ad-hub.digital/' }}
+          server-dir: ${{ vars.FTP_SERVER_DIR || 'public_html/' }}
           dangerous-clean-slate: false
+
+      # Descomenta se precisares de enviar OUTRO conjunto de ficheiros para ad-hub.digital/ (ex. estáticos, API estática).
+      # Prepara uma pasta no repo (ex. deploy/ad-hub-extras/) e usa local-dir + server-dir adequados.
+      # - name: Deploy extras para ad-hub.digital
+      #   uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+      #   with:
+      #     server: ${{ secrets.FTP_HOST }}
+      #     username: ${{ secrets.FTP_USER }}
+      #     password: ${{ secrets.FTP_PASSWORD }}
+      #     local-dir: ./deploy/ad-hub-extras/
+      #     server-dir: ad-hub.digital/
+      #     dangerous-clean-slate: false
