@@ -5,9 +5,14 @@
 #   FTP_USER     — utilizador FTP (muitas vezes o mesmo do cPanel, ex.: johnn315)
 #   FTP_PASSWORD — palavra-passe da conta FTP
 #
-# IMPORTANTE — server-dir deve ser RELATIVO à pasta inicial do utilizador FTP (ex.: `ad-hub.digital/`).
-# Não uses caminho absoluto tipo `/home3/...`: o servidor cria pastas `home3/johnn315/...` *dentro*
-# do teu diretório e o site fica no sítio errado (build escondido na subpasta `home3`).
+# IMPORTANTE — server-dir é RELATIVO à pasta inicial do utilizador FTP (nunca `/home3/...` absoluto).
+#
+# No cPanel → Contas FTP → vê o campo "Diretório" dessa conta:
+#   • Se for /home3/USER/ (raiz da conta)     → usa `ad-hub.digital/` (ou deixa o default da variável).
+#   • Se for .../ad-hub.digital/ (já o site) → define em GitHub → Variables → FTP_SERVER_DIR = `./`
+# Sem isso, o deploy pode ir para ad-hub.digital/ad-hub.digital/ e o domínio continua a servir a raiz antiga.
+#
+# Opcional: repositório → Settings → Variables → Actions → FTP_SERVER_DIR (ex.: `./` ou `ad-hub.digital/`).
 
 name: Deploy para HostGator (FTP)
 
@@ -49,5 +54,6 @@ jobs:
           username: ${{ secrets.FTP_USER }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
-          server-dir: ad-hub.digital/
+          # Default ad-hub.digital/; em GitHub → Settings → Variables → FTP_SERVER_DIR usa `./` se o FTP já abre na pasta do domínio
+          server-dir: ${{ vars.FTP_SERVER_DIR || 'ad-hub.digital/' }}
           dangerous-clean-slate: false
