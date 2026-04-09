@@ -104,8 +104,24 @@
     @apply border-border;
   }
 
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    overflow-x: hidden;
+  }
+
   body {
     @apply bg-background text-foreground font-body antialiased;
+    overflow-x: hidden;
+    min-height: 100dvh;
+    min-height: 100svh;
+  }
+
+  /* Toque mais previsível em Android / iPhone (evita double-tap zoom em controlos) */
+  button,
+  [role="button"],
+  a[href] {
+    touch-action: manipulation;
   }
 }
 
@@ -121,6 +137,18 @@
   }
   .glass-card {
     @apply bg-card/70 backdrop-blur-xl border border-border/60 dark:bg-card/60 dark:border-border/50;
+  }
+
+  /** Preenchimento para notch / home indicator (iPhone X+) e gestos Android */
+  .safe-area-x {
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+  .safe-area-t {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .safe-area-b {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
   }
   .glow-primary {
     box-shadow: 0 0 30px -5px hsl(var(--primary) / 0.22);

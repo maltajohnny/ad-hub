@@ -3,8 +3,13 @@ import norterBrand from "@/assets/norter-brand-norterx.png";
 
 export function NorterMarkLogo({ className }: { className?: string }) {
   return (
-    <div className={cn("mx-auto w-full max-w-[min(22rem,88vw)]", className)}>
-      <div className="flex justify-center px-1">
+    <div
+      className={cn(
+        "mx-auto w-full max-w-[min(22rem,min(88vw,calc(100vw-env(safe-area-inset-left)-env(safe-area-inset-right))))]",
+        className,
+      )}
+    >
+      <div className="flex justify-center px-[max(0.25rem,env(safe-area-inset-left,0px))] pr-[max(0.25rem,env(safe-area-inset-right,0px))]">
         <img
           src={norterBrand}
           alt="Norter"

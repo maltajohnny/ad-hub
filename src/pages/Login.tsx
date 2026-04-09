@@ -99,13 +99,15 @@ const Login = () => {
   const showLogoSrc = brand.logo ?? adHubFallback;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full gradient-brand opacity-5 blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full gradient-brand opacity-5 blur-3xl" />
+    <div className="relative flex min-h-screen min-h-[100dvh] w-full max-w-[100vw] flex-col items-center justify-center overflow-x-hidden overflow-y-auto bg-background">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute top-1/4 left-1/4 w-96 max-w-[80vw] rounded-full gradient-brand opacity-5 blur-3xl aspect-square" />
+        <div className="absolute bottom-1/4 right-1/4 w-80 max-w-[70vw] rounded-full gradient-brand opacity-5 blur-3xl aspect-square" />
       </div>
 
-      <div className="relative z-10 w-full max-w-sm px-6 animate-fade-in">
+      <div
+        className="relative z-10 w-full max-w-sm animate-fade-in px-[max(1.25rem,env(safe-area-inset-left,0px))] py-8 pr-[max(1.25rem,env(safe-area-inset-right,0px))] pt-[max(1.5rem,env(safe-area-inset-top,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]"
+      >
         <div
           key={brand.key}
           className="mb-8 animate-in fade-in zoom-in-95 duration-500 fill-mode-both"
@@ -156,7 +158,7 @@ const Login = () => {
           action="#"
           autoComplete="off"
           onSubmit={handleSubmit}
-          className="glass-card rounded-xl p-8 space-y-5"
+          className="glass-card space-y-5 rounded-xl p-6 sm:p-8"
         >
           <div className="space-y-2">
             <label className="text-sm text-muted-foreground" htmlFor="login-username">
@@ -216,7 +218,7 @@ const Login = () => {
 
           <Button
             type="submit"
-            className="w-full gradient-brand text-primary-foreground font-semibold hover:opacity-90 transition-opacity"
+            className="min-h-12 w-full gradient-brand text-base font-semibold text-primary-foreground transition-opacity hover:opacity-90"
             disabled={invalidTenant}
           >
             <LogIn size={16} className="mr-2" />

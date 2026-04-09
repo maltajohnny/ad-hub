@@ -74,9 +74,9 @@ function AppLayoutMain({ children, className }: { children: ReactNode; className
           <UserMenuDropdown avatarOnly />
         </div>
       </div>
-      <div
+        <div
         className={cn(
-          "flex-1 flex flex-col min-h-0",
+          "flex min-h-0 flex-1 flex-col pb-[env(safe-area-inset-bottom,0px)]",
           isBoard ? "overflow-hidden" : "overflow-auto",
         )}
       >
@@ -176,13 +176,13 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   }, [path]);
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-[100dvh] min-h-[100svh] w-full max-w-full overflow-x-hidden bg-background">
       {user?.mustChangePassword ? <FirstAccessPasswordModal /> : null}
       {user && !user.mustChangePassword ? <SlackReportScheduler /> : null}
       {/* `isolate` + borda única evita “degrau” visual na junção com o main; `z-10` mantém a linha vertical contínua */}
       <aside
         className={cn(
-          "relative z-10 flex h-screen max-h-screen shrink-0 flex-col bg-sidebar transition-[width] duration-300",
+          "relative z-10 flex h-[100dvh] max-h-[100dvh] shrink-0 flex-col bg-sidebar pt-[env(safe-area-inset-top,0px)] transition-[width] duration-300",
           "sticky top-0 border-r border-border/40",
           collapsed ? "w-20" : "w-64",
         )}
