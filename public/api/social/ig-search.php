@@ -9,7 +9,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 $q = isset($_GET['q']) ? trim((string) $_GET['q']) : '';
 $q = preg_replace('/[^a-zA-Z0-9._]/', '', $q);
-if (strlen($q) < 2 || strlen($q) > 64) {
+if (strlen($q) < 1 || strlen($q) > 64) {
     echo json_encode(['users' => []], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -63,7 +63,7 @@ if ($body !== false && $code < 400) {
                 'full_name' => $full,
                 'profile_pic_url' => $pic !== '' ? $pic : null,
             ];
-            if (count($out) >= 12) {
+            if (count($out) >= 20) {
                 break;
             }
         }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { fetchInstagramSearchSuggestions } from "@/lib/instagramSearch";
 import { cn } from "@/lib/utils";
@@ -9,7 +9,6 @@ type SuggestionRow = {
   username: string;
   full_name: string;
   profile_pic_url: string | null;
-  manual?: boolean;
 };
 
 type Props = {
@@ -20,60 +19,104 @@ type Props = {
   className?: string;
 };
 
-export function InstagramProfileInput({ value, onChange, id, placeholder, className }: Props) {
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [remote, setRemote] = useState<SuggestionRow[]>([]);
+function filterByQuery(rows: SuggestionRow[], query: string): SuggestionRow[] {
+  const ql = query.toLowerCase();
+  if (!ql) return rows;
+  return rows.filter((r) => r.username.toLowerCase().startsWith(ql));
+}
 
-  const q = value.trim().replace(/^@+/, "");
-  const manualOk = q.length >= 1 && IG_HANDLE.test(q);
+/** Lista exibida: última resposta da API + afunilamento imediato por prefixo (estilo Instagram / Social Blade). */
+function useFunnelRemote(
+  q: string,
+  open: boolean,
+): {
+  displayRemote: SuggestionRow[];
+  fetchedRemote: SuggestionRow[];
+  fetchedForQ: string;
+  loading: boolean;
+} {
+  const [fetchedRemote, setFetchedRemote] = useState<SuggestionRow[]>([]);
+  const [fetchedForQ, setFetchedForQ] = useState("");
+  const [loading, setLoading] = useState(false);
+  const fetchGen = useRef(0);
 
   useEffect(() => {
-    if (!open || q.length < 2) {
-      setRemote([]);
+    if (!open || q.length < 1) {
+      fetchGen.current += 1;
+      setFetchedRemote([]);
+      setFetchedForQ("");
       setLoading(false);
       return;
     }
+
     let cancelled = false;
+    const myGen = ++fetchGen.current;
+
     const timer = window.setTimeout(() => {
+      if (cancelled || myGen !== fetchGen.current) return;
       setLoading(true);
-      void fetchInstagramSearchSuggestions(q).then((rows) => {
-        if (cancelled) return;
-        setRemote(
-          rows.map((r) => ({
-            username: r.username,
-            full_name: r.full_name,
-            profile_pic_url: r.profile_pic_url,
-          })),
-        );
-        setLoading(false);
-      });
-    }, 300);
+      void fetchInstagramSearchSuggestions(q)
+        .then((rows) => {
+          if (cancelled || myGen !== fetchGen.current) return;
+          setFetchedRemote(
+            rows.map((r) => ({
+              username: r.username,
+              full_name: r.full_name,
+              profile_pic_url: r.profile_pic_url,
+            })),
+          );
+          setFetchedForQ(q);
+        })
+        .finally(() => {
+          if (cancelled || myGen !== fetchGen.current) return;
+          setLoading(false);
+        });
+    }, 260);
+
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
   }, [q, open]);
 
-  const suggestions: SuggestionRow[] = (() => {
-    const lowerQ = q.toLowerCase();
-    const manual: SuggestionRow[] =
-      manualOk && !remote.some((r) => r.username.toLowerCase() === lowerQ)
-        ? [
-            {
-              username: q,
-              full_name: "Utilizar este utilizador",
-              profile_pic_url: null,
-              manual: true,
-            },
-          ]
-        : [];
-    return [...manual, ...remote];
-  })();
+  const displayRemote = useMemo(() => {
+    if (q.length < 1) return [];
+    if (!fetchedRemote.length || !fetchedForQ) return [];
+    if (fetchedForQ === q) return fetchedRemote;
+    if (q.startsWith(fetchedForQ) || fetchedForQ.startsWith(q)) {
+      return filterByQuery(fetchedRemote, q);
+    }
+    return [];
+  }, [q, fetchedRemote, fetchedForQ]);
+
+  return { displayRemote, fetchedForQ, loading };
+}
+
+export function InstagramProfileInput({ value, onChange, id, placeholder, className }: Props) {
+  const [open, setOpen] = useState(false);
+  const q = value.trim().replace(/^@+/, "");
+  const manualOk = q.length >= 1 && IG_HANDLE.test(q);
+
+  const { displayRemote, loading } = useFunnelRemote(q, open);
 
   const close = () => setOpen(false);
 
-  const showList = open && (loading || suggestions.length > 0);
+  /** Linha «A pesquisar» só quando ainda não há resultados da rede para afunilar. */
+  const showLoadingLine = loading && displayRemote.length === 0;
+  const showList =
+    open && q.length >= 1 && (showLoadingLine || displayRemote.length > 0 || manualOk);
+
+  const pickUsername = (username: string) => {
+    onChange(username);
+    close();
+  };
+
+  const pickRow = (row: SuggestionRow) => pickUsername(row.username);
+
+  const confirmCurrentQuery = () => {
+    if (!manualOk) return;
+    pickUsername(q);
+  };
 
   return (
     <div className={cn("relative", className)}>
@@ -86,7 +129,18 @@ export function InstagramProfileInput({ value, onChange, id, placeholder, classN
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => {
-          window.setTimeout(() => close(), 180);
+          window.setTimeout(() => close(), 200);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            if (displayRemote.length > 0) pickRow(displayRemote[0]!);
+            else confirmCurrentQuery();
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            close();
+          }
         }}
         placeholder={placeholder}
         autoComplete="off"
@@ -94,24 +148,27 @@ export function InstagramProfileInput({ value, onChange, id, placeholder, classN
         aria-expanded={showList}
       />
       {showList ? (
-        <ul
-          className="absolute z-[200] mt-1 max-h-56 w-full overflow-auto rounded-md border border-border/60 bg-popover text-popover-foreground shadow-md"
+        <div
+          className="absolute z-[200] mt-1 w-full overflow-hidden rounded-md border border-border/60 bg-popover text-popover-foreground shadow-md"
           role="listbox"
         >
-          {loading && suggestions.length === 0 ? (
-            <li className="px-3 py-2 text-xs text-muted-foreground">A pesquisar…</li>
-          ) : null}
-          {suggestions.map((s) => (
-            <li key={s.manual ? `m:${s.username}` : s.username}>
+          <div className="max-h-56 overflow-auto">
+            {displayRemote.length > 0 ? (
+              <div className="border-b border-border/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Resultados
+              </div>
+            ) : null}
+            {showLoadingLine ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">A pesquisar…</div>
+            ) : null}
+            {displayRemote.map((s) => (
               <button
+                key={s.username}
                 type="button"
                 role="option"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onChange(s.username);
-                  close();
-                }}
+                onClick={() => pickRow(s)}
               >
                 {s.profile_pic_url ? (
                   <img
@@ -133,9 +190,19 @@ export function InstagramProfileInput({ value, onChange, id, placeholder, classN
                   ) : null}
                 </span>
               </button>
-            </li>
-          ))}
-        </ul>
+            ))}
+          </div>
+          {manualOk ? (
+            <button
+              type="button"
+              className="w-full border-t border-border/50 bg-muted/40 px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted/60"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={confirmCurrentQuery}
+            >
+              Usar <span className="font-medium text-foreground">@{q}</span> — Enter
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

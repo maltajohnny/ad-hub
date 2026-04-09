@@ -6,7 +6,7 @@ export type InstagramSearchUser = {
 
 export async function fetchInstagramSearchSuggestions(query: string): Promise<InstagramSearchUser[]> {
   const q = query.trim().replace(/^@+/, "");
-  if (q.length < 2) return [];
+  if (q.length < 1) return [];
   const res = await fetch(`/api/social/ig-search.php?q=${encodeURIComponent(q)}`, { cache: "no-store" });
   if (!res.ok) return [];
   const data: unknown = await res.json().catch(() => null);

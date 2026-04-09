@@ -173,11 +173,12 @@ export function urlMatchesPlatform(input: string, platform: SocialPulsePlatform)
   return normalizeProfileUrl(input, platform) !== null;
 }
 
+/** Texto do campo Perfil: com a plataforma já escolhida, o exemplo é só o utilizador (URL completo continua aceite). */
 export const PROFILE_URL_PLACEHOLDERS: Record<SocialPulsePlatform, string> = {
-  youtube: "@canal ou https://www.youtube.com/@canal",
-  instagram: "utilizador, @utilizador ou link do Instagram",
-  twitter: "utilizador ou https://x.com/utilizador",
-  tiktok: "@utilizador ou link do TikTok",
+  youtube: "MrBeast",
+  instagram: "brunocosta",
+  twitter: "usuario",
+  tiktok: "usuario",
 };
 
 /** Sugere nome amigável a partir do caminho do perfil (ex.: último segmento do Instagram). */

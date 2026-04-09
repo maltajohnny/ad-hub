@@ -385,9 +385,9 @@ export default function SocialPulse() {
                 <Card className="glass-card p-5 border-border/60 space-y-4">
                   <h3 className="font-display font-semibold">Adicionar perfil</h3>
                   <p className="text-xs text-muted-foreground">
-                    Escolha a rede e indique o <strong>perfil</strong> (utilizador ou link completo). O nome amigável é o que
-                    aparece no painel e nas permissões. Para Instagram, use o token Graph API e/ou o proxy em{" "}
-                    <code className="text-[10px]">/api/social/ig-profile.php</code>.
+                    Escolha a rede e o <strong>nome de utilizador</strong> (a plataforma já sabe o site). O nome amigável é o
+                    que aparece no painel. Instagram: pesquisa em tempo real; token Graph e{" "}
+                    <code className="text-[10px]">/api/social/ig-profile.php</code> para métricas.
                   </p>
                   <AddProfileFields
                     addPlatform={addPlatform}
@@ -577,9 +577,9 @@ export default function SocialPulse() {
               <Card className="glass-card p-5 border-border/60 space-y-4">
                 <h3 className="font-display font-semibold">Adicionar perfil</h3>
                 <p className="text-xs text-muted-foreground">
-                  Indique o <strong>perfil</strong> por utilizador ou URL; a plataforma já define o endereço da rede. Ao colar
-                  um link de outra rede, a seleção de plataforma atualiza. No Instagram, pode pesquisar e escolher na lista
-                  (se o servidor conseguir falar com o Instagram) ou confirmar «Utilizar este utilizador».
+                  Indique o <strong>perfil</strong> (só o nome de utilizador, como no Instagram); URL completo continua a
+                  funcionar. A lista afunila enquanto escreve; se o Instagram bloquear o servidor, use «Usar @…» na barra de
+                  baixo ou Enter.
                 </p>
                 <AddProfileFields
                   addPlatform={addPlatform}
