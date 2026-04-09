@@ -34,6 +34,11 @@ interface ImportMetaEnv {
    * Obrigatório em deploy estático se a API estiver noutro domínio/subdomínio.
    */
   readonly VITE_INTELLISEARCH_API_URL?: string;
+  /**
+   * Social Pulse — URL same-origin que devolve HTML do perfil Instagram (ex.: /api/social/ig-profile.php?user=).
+   * Pode usar `{user}` no path em vez de query se preferir.
+   */
+  readonly VITE_SOCIAL_PULSE_IG_PROXY_URL?: string;
 }
 
 interface ImportMeta {

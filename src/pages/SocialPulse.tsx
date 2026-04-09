@@ -33,7 +33,6 @@ import {
   Trash2,
   TrendingUp,
   Eye,
-  DollarSign,
 } from "lucide-react";
 import {
   AreaChart,
@@ -43,8 +42,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
 } from "recharts";
 import { normalizeLoginKey } from "@/lib/loginUsername";
 import {
@@ -62,15 +59,51 @@ import {
   type MonitoredAccount,
   type SocialPulsePlatform,
 } from "@/lib/socialPulseStore";
-import {
-  buildFollowerSeries,
-  estimateMonthlyEarningsUsd,
-  platformLabel,
-  projectFollowers30d,
-} from "@/lib/socialPulseMetrics";
+import { platformLabel } from "@/lib/socialPulseMetrics";
+import { getInstagramMetrics } from "@/social-pulse/services/instagram.service";
+import type { SocialMetricsPayload } from "@/social-pulse/models/social-metrics.model";
+import { getFollowerSnapshots } from "@/social-pulse/storage/metrics-snapshots";
 import { cn } from "@/lib/utils";
 
 const PLATFORMS: SocialPulsePlatform[] = ["youtube", "instagram", "twitter", "tiktok"];
+
+const GRAPH_TOKEN_STORAGE_KEY = "social_pulse_graph_user_token";
+
+function extractInstagramUsername(account: MonitoredAccount): string {
+  return suggestLabelFromProfileUrl(account.profileUrl, "instagram").replace(/^@/, "") || account.label.replace(/^@/, "");
+}
+
+function buildAggregatedFollowerSeries(accounts: MonitoredAccount[]): { day: string; followers: number }[] {
+  const ig = accounts.filter((a) => a.platform === "instagram");
+  type Ev = { t: number; accountId: string; f: number };
+  const events: Ev[] = [];
+  for (const a of ig) {
+    for (const s of getFollowerSnapshots(a.id)) {
+      events.push({ t: new Date(s.at).getTime(), accountId: a.id, f: s.followers });
+    }
+  }
+  if (!events.length) return [];
+  events.sort((x, y) => x.t - y.t);
+  const last: Record<string, number> = {};
+  return events.map((e) => {
+    last[e.accountId] = e.f;
+    const sum = ig.reduce((acc, x) => acc + (last[x.id] ?? 0), 0);
+    return { day: new Date(e.t).toISOString().slice(0, 10), followers: sum };
+  });
+}
+
+function emptyPlatformPayload(account: MonitoredAccount): SocialMetricsPayload {
+  return {
+    username: account.label,
+    followers: null,
+    following: null,
+    posts: null,
+    engagementRate: null,
+    source: "none",
+    error: "PLATFORM_NOT_SUPPORTED_YET",
+    lastUpdated: new Date().toISOString(),
+  };
+}
 
 export default function SocialPulse() {
   const { user, listUsers } = useAuth();
@@ -78,22 +111,24 @@ export default function SocialPulse() {
   const orgId = user?.organizationId ?? tenant?.id ?? null;
   const isOrgAdmin = user?.role === "admin";
 
-  const [liveTick, setLiveTick] = useState(0);
   const [platformFilter, setPlatformFilter] = useState<SocialPulsePlatform | "all">("all");
   const [selectedAccountId, setSelectedAccountId] = useState<string>("__all__");
   const [urlInput, setUrlInput] = useState("");
   const [labelInput, setLabelInput] = useState("");
   const [addPlatform, setAddPlatform] = useState<SocialPulsePlatform>("instagram");
   const [version, setVersion] = useState(0);
+  const [metricsByAccountId, setMetricsByAccountId] = useState<Record<string, SocialMetricsPayload>>({});
+  const [loadingMetrics, setLoadingMetrics] = useState(false);
+  const [graphTokenInput, setGraphTokenInput] = useState(() => {
+    try {
+      return localStorage.getItem(GRAPH_TOKEN_STORAGE_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [snapshotTick, setSnapshotTick] = useState(0);
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setLiveTick((t) => t + 1);
-    }, 22000);
-    return () => window.clearInterval(id);
-  }, []);
 
   useEffect(() => {
     const d = detectPlatformFromUrl(urlInput);
@@ -124,68 +159,64 @@ export default function SocialPulse() {
     return filteredByPlatform.filter((a) => a.id === selectedAccountId);
   }, [filteredByPlatform, selectedAccountId]);
 
+  const refreshMetrics = useCallback(async () => {
+    if (!visibleAccounts.length) return;
+    const token = graphTokenInput.trim() || localStorage.getItem(GRAPH_TOKEN_STORAGE_KEY) || "";
+    setLoadingMetrics(true);
+    try {
+      const entries = await Promise.all(
+        visibleAccounts.map(async (a) => {
+          if (a.platform !== "instagram") {
+            return [a.id, emptyPlatformPayload(a)] as const;
+          }
+          const handle = extractInstagramUsername(a);
+          const m = await getInstagramMetrics(handle, {
+            graphAccessToken: token || undefined,
+            accountIdForSnapshot: a.id,
+          });
+          return [a.id, m] as const;
+        }),
+      );
+      setMetricsByAccountId((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+      setSnapshotTick((x) => x + 1);
+    } finally {
+      setLoadingMetrics(false);
+    }
+  }, [visibleAccounts, graphTokenInput]);
+
+  useEffect(() => {
+    if (visibleAccounts.length === 0) return;
+    void refreshMetrics();
+  }, [visibleAccounts.length, version, refreshMetrics]);
+
   const kpis = useMemo(() => {
-    if (!chartAccounts.length) {
-      return { followers: 0, views: 0, engagement: 0, earnings: 0 };
-    }
-    let followers = 0;
-    let views = 0;
-    let engSum = 0;
-    let earnings = 0;
+    let followers: number | null = 0;
+    let posts: number | null = 0;
+    let igCount = 0;
     for (const a of chartAccounts) {
-      const s = buildFollowerSeries(a, 1, liveTick);
-      const last = s[s.length - 1];
-      followers += last.followers;
-      views += last.views;
-      engSum += last.engagementPct;
-      earnings += estimateMonthlyEarningsUsd(a, liveTick);
-    }
-    return {
-      followers,
-      views,
-      engagement: chartAccounts.length ? engSum / chartAccounts.length : 0,
-      earnings,
-    };
-  }, [chartAccounts, liveTick]);
-
-  const mergedSeries = useMemo(() => {
-    if (!chartAccounts.length) return [];
-    const days = 30;
-    const seriesPerAccount = chartAccounts.map((a) => buildFollowerSeries(a, days, liveTick));
-    const len = seriesPerAccount[0]?.length ?? 0;
-    const out: { day: string; followers: number; views: number }[] = [];
-    for (let i = 0; i < len; i++) {
-      let f = 0;
-      let v = 0;
-      let day = "";
-      for (const sp of seriesPerAccount) {
-        const row = sp[i];
-        if (!row) continue;
-        day = row.day;
-        f += row.followers;
-        v += row.views;
+      if (a.platform !== "instagram") continue;
+      igCount += 1;
+      const m = metricsByAccountId[a.id];
+      if (!m) {
+        followers = null;
+        posts = null;
+        break;
       }
-      out.push({ day, followers: f, views: v });
+      if (m.followers === null) followers = null;
+      else if (followers !== null) followers += m.followers;
+      if (m.posts === null) posts = null;
+      else if (posts !== null) posts += m.posts;
     }
-    return out;
-  }, [chartAccounts, liveTick]);
+    if (igCount === 0) {
+      return { followers: null as number | null, posts: null as number | null };
+    }
+    return { followers, posts };
+  }, [chartAccounts, metricsByAccountId]);
 
-  const engagementByPlatform = useMemo(() => {
-    const map = new Map<SocialPulsePlatform, { sum: number; n: number }>();
-    for (const p of PLATFORMS) map.set(p, { sum: 0, n: 0 });
-    for (const a of filteredByPlatform) {
-      const s = buildFollowerSeries(a, 1, liveTick);
-      const last = s[s.length - 1];
-      const cur = map.get(a.platform)!;
-      cur.sum += last.engagementPct;
-      cur.n += 1;
-    }
-    return PLATFORMS.map((p) => {
-      const c = map.get(p)!;
-      const avg = c.n ? c.sum / c.n : 0;
-      return { platform: platformLabel(p), engagement: Number(avg.toFixed(2)) };
-    }).filter((row) => row.engagement > 0);
-  }, [filteredByPlatform, liveTick]);
+  const mergedSeries = useMemo(
+    () => buildAggregatedFollowerSeries(chartAccounts),
+    [chartAccounts, snapshotTick],
+  );
 
   const orgUsersForAssign = useMemo(() => {
     if (!orgId) return [];
@@ -278,8 +309,9 @@ export default function SocialPulse() {
             Social Pulse
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Crescimento e métricas de redes sociais — painel centralizado por organização. Dados de demonstração com
-            atualização periódica; integrações oficiais por API podem ser ligadas no backend.
+            Métricas reais por conta: Instagram via Instagram Graph API (Meta) ou, em alternativa, leitura do HTML
+            público através de proxy same-origin. Sem dados inventados — campos vazios quando a fonte não está
+            disponível.
           </p>
         </div>
         <Button
@@ -287,9 +319,10 @@ export default function SocialPulse() {
           variant="outline"
           size="sm"
           className="gap-2 shrink-0"
-          onClick={() => setLiveTick((t) => t + 1)}
+          disabled={loadingMetrics || !visibleAccounts.length}
+          onClick={() => void refreshMetrics()}
         >
-          <RefreshCw className="h-3.5 w-3.5" />
+          <RefreshCw className={cn("h-3.5 w-3.5", loadingMetrics && "animate-spin")} />
           Atualizar métricas
         </Button>
       </div>
@@ -328,8 +361,8 @@ export default function SocialPulse() {
                   <h3 className="font-display font-semibold">Adicionar perfil</h3>
                   <p className="text-xs text-muted-foreground">
                     Escolha a rede, cole o URL público do <strong>seu</strong> perfil (não a página inicial da rede) e um
-                    nome opcional. As métricas do painel são estimativas de demonstração até existir API oficial no
-                    backend (estilo métricas públicas agregadas).
+                    nome opcional. Para Instagram, configure o token Graph API abaixo e/ou o proxy de perfil
+                    (`VITE_SOCIAL_PULSE_IG_PROXY_URL` no build).
                   </p>
                   <AddProfileFields
                     addPlatform={addPlatform}
@@ -345,6 +378,44 @@ export default function SocialPulse() {
             </div>
           ) : (
             <>
+              <Card className="glass-card p-4 border-border/60 space-y-3">
+                <h3 className="font-display font-semibold text-sm">Instagram — Instagram Graph API (Meta)</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Token de utilizador com permissões para <code className="text-[10px]">me/accounts</code> e conta
+                  Instagram Business ligada à página. O token fica só neste browser (localStorage). Para produção,
+                  prefira backend OAuth.
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <Label className="text-xs">Token de acesso (Graph API)</Label>
+                    <Input
+                      type="password"
+                      autoComplete="off"
+                      value={graphTokenInput}
+                      onChange={(e) => setGraphTokenInput(e.target.value)}
+                      placeholder="EAAB… (não commite)"
+                      className="bg-secondary/50 border-border/50 font-mono text-xs"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      try {
+                        localStorage.setItem(GRAPH_TOKEN_STORAGE_KEY, graphTokenInput.trim());
+                        toast.success("Token guardado neste dispositivo.");
+                        void refreshMetrics();
+                      } catch {
+                        toast.error("Não foi possível guardar o token.");
+                      }
+                    }}
+                  >
+                    Guardar e atualizar
+                  </Button>
+                </div>
+              </Card>
+
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
                 <div className="space-y-1.5 min-w-[160px]">
                   <Label className="text-xs">Plataforma</Label>
@@ -383,102 +454,81 @@ export default function SocialPulse() {
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <KpiCard
                   icon={<TrendingUp className="h-4 w-4" />}
-                  label="Seguidores (est.)"
-                  value={kpis.followers.toLocaleString("pt-BR")}
-                  sub="Soma das contas filtradas"
-                />
-                <KpiCard
-                  icon={<Eye className="h-4 w-4" />}
-                  label="Visualizações (24h)"
-                  value={kpis.views.toLocaleString("pt-BR")}
-                  sub="Estimativa agregada"
+                  label="Seguidores (Instagram, real)"
+                  value={
+                    kpis.followers === null
+                      ? "N/D"
+                      : kpis.followers.toLocaleString("pt-BR")
+                  }
+                  sub="Soma das contas Instagram no filtro; Graph API ou scraper"
                 />
                 <KpiCard
                   icon={<Radio className="h-4 w-4" />}
-                  label="Engajamento médio"
-                  value={`${kpis.engagement.toFixed(2)}%`}
-                  sub="Interação / alcance"
+                  label="Publicações (Instagram, real)"
+                  value={
+                    kpis.posts === null
+                      ? "N/D"
+                      : kpis.posts.toLocaleString("pt-BR")
+                  }
+                  sub="media_count (Graph) ou parse do HTML"
                 />
                 <KpiCard
-                  icon={<DollarSign className="h-4 w-4" />}
-                  label="Ganhos mensais (est.)"
-                  value={`US$ ${kpis.earnings.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
-                  sub="Modelo simplificado"
+                  icon={<Eye className="h-4 w-4" />}
+                  label="Taxa de engajamento"
+                  value="N/D"
+                  sub="Exige Insights com janela temporal na Graph API (não implementado)"
                 />
               </div>
 
               <div className="grid gap-4 lg:grid-cols-3">
                 <Card className="glass-card p-4 lg:col-span-2 border-border/60">
-                  <h3 className="font-display font-semibold text-sm mb-3">Crescimento de seguidores (30 dias)</h3>
-                  <div className="h-[280px] w-full min-w-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={mergedSeries}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
-                        <XAxis dataKey="day" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
-                        <YAxis tick={{ fontSize: 10 }} />
-                        <Tooltip
-                          contentStyle={{ borderRadius: 8 }}
-                          labelFormatter={(l) => String(l)}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="followers"
-                          stroke="hsl(var(--primary))"
-                          fill="hsl(var(--primary) / 0.2)"
-                          name="Seguidores"
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
+                  <h3 className="font-display font-semibold text-sm mb-3">
+                    Seguidores — leituras reais guardadas (por atualização)
+                  </h3>
+                  {mergedSeries.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-12 text-center">
+                      Ainda não há histórico. Use «Atualizar métricas» para gravar leituras reais (sem interpolação).
+                    </p>
+                  ) : (
+                    <div className="h-[280px] w-full min-w-0">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={mergedSeries}>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
+                          <XAxis dataKey="day" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
+                          <YAxis tick={{ fontSize: 10 }} />
+                          <Tooltip
+                            contentStyle={{ borderRadius: 8 }}
+                            labelFormatter={(l) => String(l)}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="followers"
+                            stroke="hsl(var(--primary))"
+                            fill="hsl(var(--primary) / 0.2)"
+                            name="Seguidores"
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
                 </Card>
 
                 <Card className="glass-card p-4 border-border/60">
-                  <h3 className="font-display font-semibold text-sm mb-3">Projeção 30 dias (agregado)</h3>
-                  <ProjectionBlock accounts={chartAccounts} liveTick={liveTick} />
+                  <h3 className="font-display font-semibold text-sm mb-3">Projeção / tendência</h3>
+                  <ProjectionBlock accounts={chartAccounts} />
                 </Card>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid gap-4 lg:grid-cols-1">
                 <Card className="glass-card p-4 border-border/60">
-                  <h3 className="font-display font-semibold text-sm mb-3">Visualizações (30 dias)</h3>
-                  <div className="h-[240px] w-full min-w-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={mergedSeries}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
-                        <XAxis dataKey="day" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
-                        <YAxis tick={{ fontSize: 10 }} />
-                        <Tooltip />
-                        <Area
-                          type="monotone"
-                          dataKey="views"
-                          stroke="hsl(var(--chart-2))"
-                          fill="hsl(var(--chart-2) / 0.25)"
-                          name="Views"
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
-                <Card className="glass-card p-4 border-border/60">
-                  <h3 className="font-display font-semibold text-sm mb-3">Engajamento por plataforma</h3>
-                  <div className="h-[240px] w-full min-w-0">
-                    {engagementByPlatform.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-8 text-center">Sem dados no filtro atual.</p>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={engagementByPlatform} layout="vertical">
-                          <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
-                          <XAxis type="number" tick={{ fontSize: 10 }} />
-                          <YAxis dataKey="platform" type="category" width={88} tick={{ fontSize: 10 }} />
-                          <Tooltip />
-                          <Bar dataKey="engagement" fill="hsl(var(--primary))" name="%" radius={[0, 4, 4, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
+                  <h3 className="font-display font-semibold text-sm mb-3">Outras redes (YouTube, X, TikTok)</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Integrações com dados oficiais por plataforma — a preparar (estrutura em{" "}
+                    <code className="text-xs">src/social-pulse/</code>). Nada é exibido de forma inventada.
+                  </p>
                 </Card>
               </div>
 
@@ -487,7 +537,7 @@ export default function SocialPulse() {
                 <ScrollArea className="max-h-[220px] pr-3">
                   <div className="space-y-2">
                     {visibleAccounts.map((a) => (
-                      <AccountRow key={a.id} account={a} liveTick={liveTick} />
+                      <AccountRow key={a.id} account={a} metrics={metricsByAccountId[a.id]} />
                     ))}
                   </div>
                 </ScrollArea>
@@ -737,67 +787,83 @@ function KpiCard({
   );
 }
 
-function ProjectionBlock({ accounts, liveTick }: { accounts: MonitoredAccount[]; liveTick: number }) {
-  if (!accounts.length) return <p className="text-sm text-muted-foreground">Sem contas para projetar.</p>;
-  let low = 0;
-  let mid = 0;
-  let high = 0;
-  for (const a of accounts) {
-    const p = projectFollowers30d(a, liveTick);
-    low += p.low;
-    mid += p.mid;
-    high += p.high;
+function ProjectionBlock({ accounts }: { accounts: MonitoredAccount[] }) {
+  const ig = accounts.filter((a) => a.platform === "instagram");
+  if (!ig.length) {
+    return <p className="text-sm text-muted-foreground">Sem contas Instagram no filtro atual.</p>;
   }
+  const series = buildAggregatedFollowerSeries(accounts);
+  if (series.length < 2) {
+    return (
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        São necessárias pelo menos <strong>duas</strong> leituras reais guardadas (use «Atualizar métricas» em dias
+        diferentes ou após novas contagens) para estimar tendência sem inventar dados.
+      </p>
+    );
+  }
+  const a0 = series[series.length - 2]!.followers;
+  const a1 = series[series.length - 1]!.followers;
+  const delta = a1 - a0;
+  const projected = Math.max(0, Math.round(a1 + delta));
   return (
     <div className="space-y-3 text-sm">
       <div className="rounded-lg bg-muted/50 p-3">
-        <div className="text-xs text-muted-foreground mb-1">Cenário conservador</div>
-        <div className="font-semibold">{low.toLocaleString("pt-BR")} seguidores</div>
+        <div className="text-xs text-muted-foreground mb-1">Última soma (Instagram)</div>
+        <div className="font-semibold">{a1.toLocaleString("pt-BR")} seguidores</div>
       </div>
       <div className="rounded-lg bg-primary/10 border border-primary/20 p-3">
-        <div className="text-xs text-muted-foreground mb-1">Tendência central</div>
-        <div className="font-semibold text-lg">{mid.toLocaleString("pt-BR")}</div>
+        <div className="text-xs text-muted-foreground mb-1">Extrapolação linear (indicativa)</div>
+        <div className="font-semibold text-lg">{projected.toLocaleString("pt-BR")}</div>
+        <p className="text-[10px] text-muted-foreground mt-1">
+          Baseada só na diferença entre as duas últimas leituras reais agregadas; não é previsão garantida.
+        </p>
       </div>
-      <div className="rounded-lg bg-muted/50 p-3">
-        <div className="text-xs text-muted-foreground mb-1">Cenário otimista</div>
-        <div className="font-semibold">{high.toLocaleString("pt-BR")} seguidores</div>
-      </div>
-      <p className="text-[11px] text-muted-foreground leading-relaxed">
-        Projeções baseadas na série sintética dos últimos 30 dias; substituível por modelo treinado com dados reais das
-        APIs.
-      </p>
     </div>
   );
 }
 
-function AccountRow({ account, liveTick }: { account: MonitoredAccount; liveTick: number }) {
-  const s = buildFollowerSeries(account, 1, liveTick);
-  const last = s[s.length - 1];
-  const earn = estimateMonthlyEarningsUsd(account, liveTick);
-  const proj = projectFollowers30d(account, liveTick);
+function AccountRow({ account, metrics }: { account: MonitoredAccount; metrics?: SocialMetricsPayload }) {
+  if (account.platform !== "instagram") {
+    return (
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-border/40 px-3 py-2">
+        <div className="min-w-0">
+          <div className="font-medium truncate">{account.label}</div>
+          <Badge variant="secondary" className="text-[10px] mt-1">
+            {platformLabel(account.platform)}
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground">Integração real ainda não ligada para esta rede.</p>
+      </div>
+    );
+  }
+  const m = metrics;
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-border/40 px-3 py-2">
       <div className="min-w-0">
         <div className="font-medium truncate">{account.label}</div>
-        <div className="text-xs text-muted-foreground flex flex-wrap gap-2">
+        <div className="text-xs text-muted-foreground flex flex-wrap gap-2 items-center">
           <Badge variant="secondary" className="text-[10px]">
             {platformLabel(account.platform)}
           </Badge>
-          <span>Eng. {last.engagementPct.toFixed(2)}%</span>
+          {m ? (
+            <span className="text-[10px] uppercase tracking-wide">Fonte: {m.source}</span>
+          ) : (
+            <span className="text-[10px]">A carregar…</span>
+          )}
         </div>
       </div>
       <div className="text-xs sm:text-right shrink-0 space-y-0.5">
         <div>
           <span className="text-muted-foreground">Seguidores: </span>
-          {last.followers.toLocaleString("pt-BR")}
+          {m?.followers != null ? m.followers.toLocaleString("pt-BR") : "N/D"}
         </div>
         <div>
-          <span className="text-muted-foreground">Ganhos est.: </span>US${" "}
-          {earn.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+          <span className="text-muted-foreground">Posts: </span>
+          {m?.posts != null ? m.posts.toLocaleString("pt-BR") : "N/D"}
         </div>
-        <div className="text-[10px] text-muted-foreground">
-          Projeção 30d: {proj.low.toLocaleString("pt-BR")} – {proj.high.toLocaleString("pt-BR")}
-        </div>
+        {m?.error ? (
+          <div className="text-[10px] text-amber-600 dark:text-amber-400 max-w-[220px] sm:ml-auto">{m.error}</div>
+        ) : null}
       </div>
     </div>
   );

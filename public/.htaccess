@@ -10,6 +10,10 @@ RewriteRule ^index\.html$ - [L]
 RewriteCond %{REQUEST_URI} ^/api/intellisearch/ [NC]
 RewriteRule ^ - [L]
 
+# Scripts PHP em /api/social/ (ex.: HTML perfil Instagram para Social Pulse)
+RewriteCond %{REQUEST_URI} ^/api/social/ [NC]
+RewriteRule ^ - [L]
+
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
