@@ -12,7 +12,7 @@ export type TenantRecord = {
   displayName: string;
   /** Data URL da logo (ou null = só nome no login). */
   logoDataUrl: string | null;
-  /** Título da aba do navegador (ex.: "AD-Hub — Move faster · Grow smarter"). */
+  /** Título da aba do navegador (ex.: "AD-HUB — Move faster · Grow smarter"). */
   browserTabTitle?: string;
   /** Favicon (data URL). Se ausente, usa a logo ou ícone por defeito da org. */
   faviconDataUrl?: string | null;
@@ -36,15 +36,19 @@ function withTenantDefaults(t: TenantRecord): TenantRecord {
     const legacyName =
       t.displayName === "Orbix" ||
       t.displayName === "ORBIX" ||
+      t.displayName === "AD-Hub" ||
       t.displayName === "AD-HUB";
-    const oldTabPrefix = "AD-HUB —";
-    const title = t.browserTabTitle?.startsWith(oldTabPrefix)
-      ? `AD-Hub —${t.browserTabTitle.slice(oldTabPrefix.length)}`
-      : t.browserTabTitle;
+    const rawTitle = t.browserTabTitle;
+    const title =
+      rawTitle?.startsWith("AD-Hub —")
+        ? `AD-HUB —${rawTitle.slice("AD-Hub —".length)}`
+        : rawTitle?.startsWith("AD-HUB —")
+          ? rawTitle
+          : rawTitle;
     return {
       ...t,
-      displayName: legacyName ? "AD-Hub" : t.displayName,
-      browserTabTitle: title ?? "AD-Hub — Move faster · Grow smarter",
+      displayName: legacyName ? "AD-HUB" : t.displayName,
+      browserTabTitle: title ?? "AD-HUB — Move faster · Grow smarter",
     };
   }
   if (t.slug === "norter") {
@@ -93,7 +97,7 @@ function ensureBuiltInTenants(list: TenantRecord[]): { list: TenantRecord[]; cha
       withTenantDefaults({
         id: BUILTIN_QTRAFFIC_ID,
         slug: "qtraffic",
-        displayName: "AD-Hub",
+        displayName: "AD-HUB",
         logoDataUrl: null,
         enabledModules: [],
         createdAt: new Date().toISOString(),

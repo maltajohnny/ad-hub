@@ -22,12 +22,14 @@ export default function Landing() {
           <Link to="/" className="flex items-center gap-3 min-w-0 group">
             <img
               src={adHubLogo}
-              alt="AD-Hub"
-              className="h-[55px] w-[55px] object-contain object-left shrink-0 transition-opacity group-hover:opacity-95"
+              alt="AD-HUB"
+              className="h-[65px] w-[65px] object-contain object-left shrink-0 transition-opacity group-hover:opacity-95"
             />
             <span className="hidden sm:flex flex-col border-l border-white/10 pl-3">
-              <span className="font-display text-sm font-bold tracking-tight text-white leading-tight">AD-Hub</span>
-              <span className="text-[10px] tracking-[0.22em] uppercase text-cyan-400/90">Move faster · Grow smarter</span>
+              <span className="font-display text-sm font-bold tracking-[0.08em] text-white leading-tight">AD-HUB</span>
+              <span className="text-[10px] tracking-[0.22em] uppercase text-cyan-400/90">
+                MOVE FASTER · GROW SMARTER
+              </span>
             </span>
           </Link>
           <div className="flex items-center gap-2 shrink-0">
@@ -56,13 +58,13 @@ export default function Landing() {
                 IA + tráfego pago numa única plataforma
               </p>
               <h1 className="font-display text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl lg:text-[3.15rem]">
-                AD-Hub —{" "}
+                AD-HUB —{" "}
                 <span className="bg-gradient-to-r from-cyan-300 via-white to-violet-200 bg-clip-text text-transparent">
                   Move faster. Grow smarter.
                 </span>
               </h1>
               <p className="mt-6 text-lg text-slate-400 leading-relaxed">
-                Centralize campanhas, métricas e decisões com inteligência artificial. A plataforma AD-Hub automatiza análises de
+                Centralize campanhas, métricas e decisões com inteligência artificial. A plataforma AD-HUB automatiza análises de
                 tráfego pago e entrega insights precisos de <strong className="text-slate-200 font-semibold">CPA</strong>,{" "}
                 <strong className="text-slate-200 font-semibold">conversões</strong>,{" "}
                 <strong className="text-slate-200 font-semibold">CPM</strong>,{" "}
@@ -170,7 +172,7 @@ export default function Landing() {
               </p>
             </div>
             <Button size="lg" className="gradient-brand shrink-0 text-primary-foreground shadow-lg" asChild>
-              <Link to="/login">Entrar na AD-Hub</Link>
+              <Link to="/login">Entrar na AD-HUB</Link>
             </Button>
           </CardContent>
         </Card>
@@ -178,7 +180,7 @@ export default function Landing() {
 
       <footer className="border-t border-white/[0.06] py-10 text-center text-xs text-slate-500">
         <p>
-          © {new Date().getFullYear()} AD-Hub — Move faster. Grow smarter. Plataforma de gestão de tráfego pago e
+          © {new Date().getFullYear()} AD-HUB — Move faster. Grow smarter. Plataforma de gestão de tráfego pago e
           inteligência operacional.
         </p>
       </footer>

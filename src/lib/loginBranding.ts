@@ -12,9 +12,9 @@ export type LoginBrandResolved = {
 
 const ORBIX_DEFAULT: LoginBrandResolved = {
   key: "orbix",
-  name: "AD-Hub",
+  name: "AD-HUB",
   logo: null,
-  alt: "AD-Hub",
+  alt: "AD-HUB",
 };
 
 const NORTER_BUILTIN: LoginBrandResolved = {

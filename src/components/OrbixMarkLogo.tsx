@@ -1,29 +1,30 @@
 import adHubLogo from "@/assets/ad-hub-logo.png";
+import { cn } from "@/lib/utils";
 
-/** Marca AD-Hub no ecrã de login (logo + wordmark). */
+/** Marca AD-HUB no ecrã de login — mesma escala visual que {@link NorterMarkLogo}. */
 export function OrbixMarkLogo({ className }: { className?: string }) {
   return (
-    <div className={className}>
-      <div className="mx-auto flex w-[55px] justify-center">
+    <div className={cn("mx-auto w-full max-w-[min(22rem,88vw)]", className)}>
+      <div className="flex justify-center px-1">
         <img
           src={adHubLogo}
-          alt="AD-Hub"
-          width={55}
-          height={55}
-          className="h-[55px] w-[55px] object-contain drop-shadow-[0_12px_40px_rgba(138,63,252,0.2)]"
+          alt="AD-HUB"
+          width={640}
+          height={640}
+          className="h-auto w-full max-h-[min(32vh,300px)] object-contain object-center drop-shadow-[0_6px_24px_rgba(0,0,0,0.2)] sm:max-h-[min(30vh,280px)] md:max-h-[min(28vh,320px)] lg:max-h-[min(26vh,340px)]"
           loading="eager"
           decoding="async"
         />
       </div>
-      <div className="mt-5 flex flex-col items-center text-center px-1">
-        <span className="font-display text-xl font-bold tracking-[0.14em] text-white sm:text-2xl">AD-Hub</span>
-        <span className="mt-2 max-w-[300px] font-display text-[10px] uppercase leading-relaxed sm:text-[11px] tracking-[0.22em]">
+      <div className="mt-1 flex flex-col items-center text-center px-1 sm:mt-1.5">
+        <span className="font-display text-lg font-bold tracking-[0.14em] text-white sm:text-xl">AD-HUB</span>
+        <span className="mt-2 max-w-[320px] font-display text-[10px] uppercase leading-relaxed sm:text-[11px] tracking-[0.22em]">
           <span className="bg-gradient-to-r from-violet-300 via-sky-300 to-cyan-400 bg-clip-text text-transparent">
-            Move faster
+            MOVE FASTER
           </span>
           <span className="mx-1.5 text-slate-500">·</span>
           <span className="bg-gradient-to-r from-sky-300 to-cyan-400 bg-clip-text text-transparent">
-            Grow smarter
+            GROW SMARTER
           </span>
         </span>
       </div>

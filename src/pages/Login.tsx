@@ -227,7 +227,7 @@ const Login = () => {
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
           <Link to="/" className="text-primary hover:underline">
-            Conheça a plataforma AD-Hub
+            Conheça a plataforma AD-HUB
           </Link>
         </p>
       </div>

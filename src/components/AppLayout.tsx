@@ -253,7 +253,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
               ) : sidebarOrbix ? (
                 <img
                   src={adHubMark}
-                  alt="AD-Hub"
+                  alt="AD-HUB"
                   className="h-11 w-11 object-contain object-center"
                 />
               ) : (

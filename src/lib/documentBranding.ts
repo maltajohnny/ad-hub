@@ -4,7 +4,7 @@ import { getTenantById, getTenantBySlug, type TenantRecord } from "@/lib/tenants
 import { extractOrgSlugFromUsername } from "@/lib/loginBranding";
 
 /** Título da aba quando a experiência é a plataforma AD-Hub (landing, login sem org, operadores). */
-export const PLATFORM_DEFAULT_DOCUMENT_TITLE = "AD-Hub — Move faster · Grow smarter";
+export const PLATFORM_DEFAULT_DOCUMENT_TITLE = "AD-HUB — Move faster · Grow smarter";
 
 let lastAppliedHref = "";
 
