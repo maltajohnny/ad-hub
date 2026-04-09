@@ -1910,47 +1910,26 @@ const Clientes = () => {
               <p className="text-[10px] text-muted-foreground mt-3 pt-2 border-t border-border/40">
                 {isLg
                   ? open
-                    ? "Clique para recolher"
-                    : "Clique para painel completo (IA, gráficos, ROI)"
+                    ? "Clique para fechar o modal"
+                    : "Clique para abrir modal completo (IA, gráficos, ROI)"
                   : open
                     ? "Toque novamente para fechar"
-                    : "Toque para ver detalhes"}
+                    : "Toque para abrir o modal de detalhes"}
               </p>
             </Card>
           );
         })}
       </div>
 
-      {selected && isLg && (
-        <ClientExpandedPanel
-          key={selected.id}
-          client={selected}
-          onOpenSettings={() => setSettingsClientId(selected.id)}
-          supervisedPendingApprovals={pendingByClientId[selected.id] ?? []}
-          onSupervisedPendingChange={(updater) => {
-            setPendingByClientId((m) => {
-              const id = selected.id;
-              const prev = m[id] ?? [];
-              const next = typeof updater === "function" ? updater(prev) : updater;
-              if (next.length === 0) {
-                const { [id]: _, ...rest } = m;
-                return rest;
-              }
-              return { ...m, [id]: next };
-            });
-          }}
-        />
-      )}
-
       <Dialog
-        open={Boolean(selected && !isLg)}
+        open={Boolean(selected)}
         onOpenChange={(open) => {
           if (!open) closeClientDetail();
         }}
       >
         <DialogContent
           key={selected?.id}
-          className="flex max-h-[min(92dvh,56rem)] w-[calc(100vw-1.25rem)] max-w-4xl flex-col gap-0 overflow-hidden border-border/60 p-0 sm:max-h-[min(90dvh,56rem)]"
+          className="flex max-h-[min(92dvh,56rem)] w-[calc(100vw-1.25rem)] max-w-[min(96vw,72rem)] flex-col gap-0 overflow-hidden border-border/60 p-0 sm:max-h-[min(90dvh,56rem)]"
         >
           {selected && (
             <>
