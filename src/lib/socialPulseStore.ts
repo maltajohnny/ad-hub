@@ -82,6 +82,53 @@ export function detectPlatformFromUrl(url: string): SocialPulsePlatform | null {
   return null;
 }
 
+/** Verifica se o URL parece ser da rede escolhida (antes de guardar). */
+export function urlMatchesPlatform(url: string, platform: SocialPulsePlatform): boolean {
+  const u = url.trim().toLowerCase();
+  if (!u) return false;
+  switch (platform) {
+    case "youtube":
+      return /(youtube\.com|youtu\.be)/.test(u);
+    case "instagram":
+      return /instagram\.com/.test(u);
+    case "twitter":
+      return /(twitter\.com|x\.com)/.test(u);
+    case "tiktok":
+      return /tiktok\.com/.test(u);
+    default:
+      return false;
+  }
+}
+
+export const PROFILE_URL_PLACEHOLDERS: Record<SocialPulsePlatform, string> = {
+  youtube: "https://www.youtube.com/@canal",
+  instagram: "https://www.instagram.com/utilizador/",
+  twitter: "https://x.com/utilizador",
+  tiktok: "https://www.tiktok.com/@utilizador",
+};
+
+/** Sugere nome amigável a partir do caminho do perfil (ex.: último segmento do Instagram). */
+export function suggestLabelFromProfileUrl(url: string, platform: SocialPulsePlatform): string {
+  const raw = url.trim();
+  if (!raw) return "";
+  try {
+    const u = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+    const parts = u.pathname.replace(/\/+$/, "").split("/").filter(Boolean);
+    if (platform === "youtube") {
+      const at = parts.find((p) => p.startsWith("@"));
+      if (at) return at;
+      const idx = parts.indexOf("channel");
+      if (idx >= 0 && parts[idx + 1]) return parts[idx + 1].slice(0, 24);
+    }
+    const last = parts[parts.length - 1];
+    if (!last) return "";
+    if (["p", "reel", "reels", "stories", "explore"].includes(last)) return "";
+    return last.replace(/^@/, "").slice(0, 80);
+  } catch {
+    return "";
+  }
+}
+
 export function listAccountsForOrg(organizationId: string): MonitoredAccount[] {
   return load().accounts.filter((a) => a.organizationId === organizationId);
 }

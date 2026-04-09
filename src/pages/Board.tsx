@@ -28,6 +28,7 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import type { User } from "@/contexts/AuthContext";
 import { canDeleteKanbanCards, canManageKanbanBoard, useAuth } from "@/contexts/AuthContext";
+import { useAppHeaderSlot } from "@/contexts/AppHeaderSlotContext";
 import type { DiscussionEntry, KanbanAttachment, KanbanCard, KanbanColumn } from "@/contexts/KanbanContext";
 import { canLinkRelated, useKanban, WorkItemType } from "@/contexts/KanbanContext";
 import { RichTextEditor } from "@/components/RichTextEditor";
@@ -756,6 +757,7 @@ const boardCollisionDetection: CollisionDetection = (args) => {
 };
 
 const Board = () => {
+  const boardHeaderSlotEl = useAppHeaderSlot();
   const { user, listUsers, canUserSeeClient } = useAuth();
   const currentUsername = user?.username ?? "";
   const canBoardSettings = canManageKanbanBoard(user);
@@ -1798,12 +1800,9 @@ const Board = () => {
     ],
   );
 
-  const boardHeaderSlot =
-    typeof document !== "undefined" ? document.getElementById("app-header-slot") : null;
-
   return (
     <>
-      {boardHeaderSlot ? createPortal(boardHeaderChrome, boardHeaderSlot) : null}
+      {boardHeaderSlotEl ? createPortal(boardHeaderChrome, boardHeaderSlotEl) : null}
       <div className="flex flex-1 flex-col min-h-0 gap-3 animate-fade-in w-full">
       <Dialog
         open={wipModal !== null}

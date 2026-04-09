@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/contexts/AuthContext";
 import { isPlatformOperator } from "@/lib/saasTypes";
@@ -9,13 +8,6 @@ import { clientsData, getClientDetail, type Client, type RoiTableRow } from "@/p
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FavoriteButton } from "@/components/FavoriteButton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
 import { TrendingUp, DollarSign, Eye, MousePointerClick, Target, ArrowUpRight, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { buildTrafficPerformanceReport } from "@/services/slackReportService";
@@ -220,58 +212,6 @@ const Dashboard = () => {
     }
   }, [currentClient]);
 
-  const dashboardHeaderChrome = useMemo(
-    () => (
-      <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3 md:gap-4">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h1 className="text-lg sm:text-xl font-display font-bold shrink-0 text-foreground">Dashboard</h1>
-          <span className="text-muted-foreground/80 hidden sm:inline" aria-hidden>
-            —
-          </span>
-          {clientsByPerformance.length > 0 && currentClient ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    "inline-flex max-w-[min(100%,18rem)] items-center gap-1.5 rounded-full border border-transparent px-2.5 py-1 text-sm font-semibold text-foreground transition-colors",
-                    "hover:border-border hover:bg-muted/25",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                  )}
-                  aria-label={`Cliente: ${currentClient.name}. Clique para trocar.`}
-                >
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/80" aria-hidden />
-                  <span className="truncate">{currentClient.name}</span>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-[12rem] p-1">
-                {clientsByPerformance.map((cl) => (
-                  <DropdownMenuItem
-                    key={cl.id}
-                    className={cn("cursor-pointer text-sm", cl.id === boardClientId && "bg-accent/80")}
-                    onSelect={() => setBoardClientId(cl.id)}
-                  >
-                    <span className="flex w-full items-center justify-between gap-2">
-                      <span className="truncate">{cl.name}</span>
-                      <span className="text-[10px] tabular-nums text-muted-foreground">{cl.roi}</span>
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <span className="text-sm text-muted-foreground">Nenhum cliente disponível</span>
-          )}
-        </div>
-        <div className="hidden min-h-[1.75rem] sm:block" aria-hidden />
-      </div>
-    ),
-    [clientsByPerformance, currentClient, boardClientId, setBoardClientId],
-  );
-
-  const headerSlot =
-    typeof document !== "undefined" ? document.getElementById("app-header-slot") : null;
-
   const isLight = mounted && resolvedTheme === "light";
   const chartGrid = isLight ? "hsl(220, 13%, 88%)" : "hsl(220, 14%, 18%)";
   const chartAxis = isLight ? "hsl(220, 9%, 42%)" : "hsl(215, 12%, 55%)";
@@ -291,21 +231,23 @@ const Dashboard = () => {
 
   return (
     <>
-      {headerSlot ? createPortal(dashboardHeaderChrome, headerSlot) : null}
-      <div className="space-y-6 animate-fade-in">
-        <div className="space-y-1 pt-1">
+      <div className="flex min-w-0 w-full max-w-full flex-col gap-6 animate-fade-in">
+        <div className="order-1 space-y-1 pt-1">
           <p className="text-muted-foreground text-sm">
             Visão geral do tráfego pago — {currentClient ? currentClient.name : "—"} — Junho 2026
           </p>
         </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {/* KPIs — mobile: 2 por linha; desktop: fila completa. No telemóvel fica abaixo dos gráficos (order). */}
+        <div className="order-3 grid min-w-0 grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 md:gap-4 lg:order-2 lg:grid-cols-6 lg:gap-4">
           {view.kpis.map((kpi) => {
             const slug = encodeURIComponent(kpi.label);
             return (
-              <Card key={`${cid}:${kpi.label}`} className="glass-card p-4 hover:glow-primary transition-shadow relative">
-                <div className="absolute top-2 right-2 z-10">
+              <Card
+                key={`${cid}:${kpi.label}`}
+                className="glass-card p-3 hover:glow-primary transition-shadow sm:p-4 relative"
+              >
+                <div className="absolute top-1.5 right-1.5 z-10 sm:top-2 sm:right-2">
                   <FavoriteButton
                     id={`dashboard:${cid}:kpi:${slug}`}
                     kind="dashboard-kpi"
@@ -315,22 +257,26 @@ const Dashboard = () => {
                     size="sm"
                   />
                 </div>
-                <div className="flex items-center justify-between mb-2 pr-6">
-                  <kpi.icon size={16} className="text-primary" />
-                  <span className={`text-xs font-medium ${kpi.up ? "text-success" : "text-destructive"}`}>
+                <div className="mb-1.5 flex items-center justify-between pr-5 sm:mb-2 sm:pr-6">
+                  <kpi.icon className="h-3.5 w-3.5 shrink-0 text-primary sm:h-4 sm:w-4" />
+                  <span
+                    className={`text-[10px] font-medium sm:text-xs ${kpi.up ? "text-success" : "text-destructive"}`}
+                  >
                     {kpi.change}
                   </span>
                 </div>
-                <p className="text-lg font-display font-bold">{kpi.value}</p>
-                <p className="text-xs text-muted-foreground mt-1">{kpi.label}</p>
+                <p className="font-display text-base font-bold tabular-nums sm:text-lg">{kpi.value}</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground leading-snug sm:mt-1 sm:text-xs">
+                  {kpi.label}
+                </p>
               </Card>
             );
           })}
         </div>
 
-        {/* Charts row */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          <Card className="glass-card p-5 lg:col-span-2 relative">
+        {/* Gráficos: no mobile aparecem primeiro (após subtítulo); ordem Investimento → ROI. */}
+        <div className="order-2 grid gap-4 sm:gap-6 lg:order-3 lg:grid-cols-3 lg:gap-6">
+          <Card className="glass-card relative p-4 sm:p-5 lg:col-span-2">
             <div className="absolute top-4 right-4 z-10">
               <FavoriteButton
                 id={`dashboard:${cid}:chart:investimento-plataforma`}
@@ -341,8 +287,11 @@ const Dashboard = () => {
                 size="sm"
               />
             </div>
-            <h3 className="font-display font-semibold mb-4 pr-10">Investimento por Plataforma</h3>
-            <ResponsiveContainer width="100%" height={280}>
+            <h3 className="mb-3 pr-10 font-display text-sm font-semibold sm:mb-4 sm:text-base">
+              Investimento por Plataforma
+            </h3>
+            <div className="h-[220px] w-full sm:h-[280px]">
+              <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={view.monthlyData}>
                 <defs>
                   <linearGradient id={`${gradPrefix}-metaGrad`} x1="0" y1="0" x2="0" y2="1">
@@ -388,10 +337,11 @@ const Dashboard = () => {
                 />
               </AreaChart>
             </ResponsiveContainer>
+            </div>
           </Card>
 
-          <Card className="glass-card p-5 relative">
-            <div className="absolute top-4 right-4 z-10">
+          <Card className="glass-card relative p-4 sm:p-5">
+            <div className="absolute right-4 top-4 z-10">
               <FavoriteButton
                 id={`dashboard:${cid}:chart:roi-plataforma`}
                 kind="dashboard-chart"
@@ -401,8 +351,11 @@ const Dashboard = () => {
                 size="sm"
               />
             </div>
-            <h3 className="font-display font-semibold mb-4 pr-10">ROI por Plataforma</h3>
-            <ResponsiveContainer width="100%" height={200}>
+            <h3 className="mb-3 pr-10 font-display text-sm font-semibold sm:mb-4 sm:text-base">
+              ROI por Plataforma
+            </h3>
+            <div className="h-[200px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
               <BarChart data={view.platformROI} layout="vertical">
                 <XAxis type="number" stroke={chartAxis} fontSize={12} />
                 <YAxis type="category" dataKey="name" stroke={chartAxis} fontSize={12} width={90} />
@@ -414,6 +367,7 @@ const Dashboard = () => {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            </div>
             <div className="mt-4 space-y-2">
               {view.platformROI.map((p) => (
                 <div key={`${cid}-${p.name}`} className="flex items-center justify-between text-sm">
@@ -429,7 +383,7 @@ const Dashboard = () => {
         </div>
 
         {/* AI Recommendations */}
-        <Card className="glass-card p-5">
+        <Card className="order-4 glass-card p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-2 h-2 rounded-full gradient-brand animate-pulse-glow shrink-0" />

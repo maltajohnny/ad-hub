@@ -54,8 +54,11 @@ import {
   getVisibleAccountIdsForUser,
   listAccountsForOrg,
   listAuditForOrg,
+  PROFILE_URL_PLACEHOLDERS,
   removeMonitoredAccount,
   setUserVisibleAccounts,
+  suggestLabelFromProfileUrl,
+  urlMatchesPlatform,
   type MonitoredAccount,
   type SocialPulsePlatform,
 } from "@/lib/socialPulseStore";
@@ -80,6 +83,7 @@ export default function SocialPulse() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>("__all__");
   const [urlInput, setUrlInput] = useState("");
   const [labelInput, setLabelInput] = useState("");
+  const [addPlatform, setAddPlatform] = useState<SocialPulsePlatform>("instagram");
   const [version, setVersion] = useState(0);
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
@@ -90,6 +94,11 @@ export default function SocialPulse() {
     }, 22000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const d = detectPlatformFromUrl(urlInput);
+    if (d) setAddPlatform(d);
+  }, [urlInput]);
 
   const allOrgAccounts = useMemo(() => {
     if (!orgId) return [];
@@ -195,16 +204,19 @@ export default function SocialPulse() {
 
   const onAddAccount = () => {
     if (!orgId || !user) return;
-    const detected = detectPlatformFromUrl(urlInput);
-    if (!detected) {
-      toast.error("Não foi possível detetar a rede. Use um URL de YouTube, Instagram, X ou TikTok.");
+    if (!urlMatchesPlatform(urlInput, addPlatform)) {
+      toast.error(
+        `O URL tem de ser um perfil em ${platformLabel(addPlatform)} (ex.: ${PROFILE_URL_PLACEHOLDERS[addPlatform]}).`,
+      );
       return;
     }
+    const friendly =
+      labelInput.trim() || suggestLabelFromProfileUrl(urlInput, addPlatform) || urlInput.trim();
     const res = addMonitoredAccount({
       organizationId: orgId,
       profileUrl: urlInput,
-      platform: detected,
-      label: labelInput,
+      platform: addPlatform,
+      label: friendly,
       actorUsername: user.username,
     });
     if (!res.ok) {
@@ -303,13 +315,34 @@ export default function SocialPulse() {
 
         <TabsContent value="painel" className="space-y-4 mt-2">
           {visibleAccounts.length === 0 ? (
-            <Card className="glass-card border-dashed border-border/70 p-8 text-center">
-              <p className="text-muted-foreground text-sm">
-                {isOrgAdmin
-                  ? "Ainda não há contas monitoradas. Adicione perfis no separador «Contas e permissões»."
-                  : "O administrador ainda não associou contas ao seu acesso. Peça permissões em Social Pulse."}
-              </p>
-            </Card>
+            <div className="space-y-4">
+              <Card className="glass-card border-dashed border-border/70 p-8 text-center">
+                <p className="text-muted-foreground text-sm">
+                  {isOrgAdmin
+                    ? "Ainda não há contas monitoradas. Use o formulário abaixo ou o separador «Contas e permissões»."
+                    : "O administrador ainda não associou contas ao seu acesso. Peça permissões em Social Pulse."}
+                </p>
+              </Card>
+              {isOrgAdmin ? (
+                <Card className="glass-card p-5 border-border/60 space-y-4">
+                  <h3 className="font-display font-semibold">Adicionar perfil</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Escolha a rede, cole o URL público do <strong>seu</strong> perfil (não a página inicial da rede) e um
+                    nome opcional. As métricas do painel são estimativas de demonstração até existir API oficial no
+                    backend (estilo métricas públicas agregadas).
+                  </p>
+                  <AddProfileFields
+                    addPlatform={addPlatform}
+                    onPlatformChange={setAddPlatform}
+                    urlInput={urlInput}
+                    onUrlChange={setUrlInput}
+                    labelInput={labelInput}
+                    onLabelChange={setLabelInput}
+                    onAdd={onAddAccount}
+                  />
+                </Card>
+              ) : null}
+            </div>
           ) : (
             <>
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
@@ -322,7 +355,7 @@ export default function SocialPulse() {
                     <SelectTrigger>
                       <SelectValue placeholder="Todas" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[200]" position="popper">
                       <SelectItem value="all">Todas</SelectItem>
                       {PLATFORMS.map((p) => (
                         <SelectItem key={p} value={p}>
@@ -334,11 +367,11 @@ export default function SocialPulse() {
                 </div>
                 <div className="space-y-1.5 min-w-[200px] flex-1">
                   <Label className="text-xs">Conta no gráfico</Label>
-                  <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                    <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[200]" position="popper">
                       <SelectItem value="__all__">Agregado (todas visíveis)</SelectItem>
                       {filteredByPlatform.map((a) => (
                         <SelectItem key={a.id} value={a.id}>
@@ -469,32 +502,18 @@ export default function SocialPulse() {
               <Card className="glass-card p-5 border-border/60 space-y-4">
                 <h3 className="font-display font-semibold">Adicionar perfil</h3>
                 <p className="text-xs text-muted-foreground">
-                  Cole o URL público do perfil. A plataforma é detetada automaticamente. Em produção, o backend validará
-                  o token/API de cada rede.
+                  Escolha a rede e cole o URL completo do <strong>perfil</strong> a monitorizar (ex.: o seu Instagram,
+                  não instagram.com sozinho). Se colar um link de outra rede, a seleção atualiza automaticamente.
                 </p>
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs">URL do perfil</Label>
-                    <Input
-                      value={urlInput}
-                      onChange={(e) => setUrlInput(e.target.value)}
-                      placeholder="https://www.youtube.com/@canal"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Nome amigável (opcional)</Label>
-                    <Input
-                      value={labelInput}
-                      onChange={(e) => setLabelInput(e.target.value)}
-                      placeholder="Ex.: Canal principal"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <Button type="button" className="w-full sm:w-auto" onClick={onAddAccount}>
-                      Adicionar
-                    </Button>
-                  </div>
-                </div>
+                <AddProfileFields
+                  addPlatform={addPlatform}
+                  onPlatformChange={setAddPlatform}
+                  urlInput={urlInput}
+                  onUrlChange={setUrlInput}
+                  labelInput={labelInput}
+                  onLabelChange={setLabelInput}
+                  onAdd={onAddAccount}
+                />
               </Card>
 
               <Card className="glass-card border-border/60 overflow-hidden">
@@ -635,6 +654,62 @@ export default function SocialPulse() {
           </>
         ) : null}
       </Tabs>
+    </div>
+  );
+}
+
+function AddProfileFields({
+  addPlatform,
+  onPlatformChange,
+  urlInput,
+  onUrlChange,
+  labelInput,
+  onLabelChange,
+  onAdd,
+}: {
+  addPlatform: SocialPulsePlatform;
+  onPlatformChange: (p: SocialPulsePlatform) => void;
+  urlInput: string;
+  onUrlChange: (v: string) => void;
+  labelInput: string;
+  onLabelChange: (v: string) => void;
+  onAdd: () => void;
+}) {
+  const ph = PROFILE_URL_PLACEHOLDERS[addPlatform];
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Plataforma</Label>
+        <Select value={addPlatform} onValueChange={(v) => onPlatformChange(v as SocialPulsePlatform)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="z-[200]" position="popper">
+            {PLATFORMS.map((p) => (
+              <SelectItem key={p} value={p}>
+                {platformLabel(p)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5 sm:col-span-2">
+        <Label className="text-xs">URL do perfil</Label>
+        <Input value={urlInput} onChange={(e) => onUrlChange(e.target.value)} placeholder={ph} />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Nome amigável (opcional)</Label>
+        <Input
+          value={labelInput}
+          onChange={(e) => onLabelChange(e.target.value)}
+          placeholder="Ex.: Perfil pessoal"
+        />
+      </div>
+      <div className="flex items-end">
+        <Button type="button" className="w-full sm:w-auto" onClick={onAdd}>
+          Adicionar
+        </Button>
+      </div>
     </div>
   );
 }

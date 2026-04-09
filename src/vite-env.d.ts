@@ -29,6 +29,11 @@ interface ImportMetaEnv {
   readonly VITE_PLATFORM_OAUTH_REDIRECT_URI?: string;
   readonly VITE_TIKTOK_APP_ID?: string;
   readonly VITE_GOOGLE_OAUTH_CLIENT_ID?: string;
+  /**
+   * URL base da API IntelliSearch (Go). Vazio = mesmo origin (`/api/intellisearch/...`).
+   * Obrigatório em deploy estático se a API estiver noutro domínio/subdomínio.
+   */
+  readonly VITE_INTELLISEARCH_API_URL?: string;
 }
 
 interface ImportMeta {

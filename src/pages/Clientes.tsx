@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { FavoriteButton } from "@/components/FavoriteButton";
@@ -38,6 +38,7 @@ import {
   LineChart as LineChartIconLucide,
   BrainCircuit,
   SlidersHorizontal,
+  ArrowUpDown,
   CircleCheck,
   Settings,
   Loader2,
@@ -57,6 +58,14 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ClientSettingsModal } from "@/components/ClientSettingsModal";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   LineChart,
   Line,
   XAxis,
@@ -71,6 +80,12 @@ import {
 } from "recharts";
 
 type SortKey = "cpa_desc" | "cpa_asc" | "name_asc";
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "cpa_desc", label: "CPA mais alto primeiro" },
+  { value: "cpa_asc", label: "CPA mais baixo primeiro" },
+  { value: "name_asc", label: "Nome (A–Z)" },
+];
 
 export type Client = {
   id: number;
@@ -536,6 +551,7 @@ function ClientExpandedPanel({
   onOpenSettings,
   supervisedPendingApprovals,
   onSupervisedPendingChange,
+  embeddedInModal = false,
 }: {
   client: Client;
   onOpenSettings: () => void;
@@ -543,6 +559,8 @@ function ClientExpandedPanel({
   onSupervisedPendingChange: (
     updater: SupervisedPendingItem[] | ((prev: SupervisedPendingItem[]) => SupervisedPendingItem[]),
   ) => void;
+  /** Quando true, omite cabeçalho duplicado (título vem do Dialog) e usa wrapper sem Card. */
+  embeddedInModal?: boolean;
 }) {
   const detail = useMemo(() => getClientDetail(client), [client.id]);
   const [aiMode, setAiMode] = useState<"autonomous" | "supervised">("autonomous");
@@ -700,20 +718,35 @@ function ClientExpandedPanel({
   );
   const latest = decisionsDisplay[0];
 
+  const Shell = embeddedInModal ? "div" : Card;
+
   return (
-    <Card className="glass-card p-5 sm:p-6 border-primary/20 animate-fade-in space-y-6">
+    <Shell
+      className={cn(
+        embeddedInModal
+          ? "space-y-6 animate-fade-in"
+          : "glass-card p-5 sm:p-6 border-primary/20 animate-fade-in space-y-6",
+      )}
+    >
       {/* Cabeçalho cliente */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-display font-bold">{client.name}</h2>
-          <p className="text-muted-foreground text-sm mt-1">
-            {client.segment} · Budget: {client.budgetLabel}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {client.email} · CNPJ {client.cnpj}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0 mt-2 sm:mt-0 flex-wrap justify-end">
+        {!embeddedInModal && (
+          <div>
+            <h2 className="text-xl sm:text-2xl font-display font-bold">{client.name}</h2>
+            <p className="text-muted-foreground text-sm mt-1">
+              {client.segment} · Budget: {client.budgetLabel}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {client.email} · CNPJ {client.cnpj}
+            </p>
+          </div>
+        )}
+        <div
+          className={cn(
+            "flex items-center gap-2 shrink-0 flex-wrap justify-end",
+            embeddedInModal ? "w-full justify-start sm:justify-end" : "mt-2 sm:mt-0",
+          )}
+        >
           <Button
             type="button"
             variant="outline"
@@ -1418,7 +1451,7 @@ function ClientExpandedPanel({
           Análise assistida por IA — valide sempre nas plataformas antes de alterar orçamentos ou campanhas.
         </p>
       </div>
-    </Card>
+    </Shell>
   );
 }
 
@@ -1433,6 +1466,21 @@ const Clientes = () => {
   const [settingsClientId, setSettingsClientId] = useState<number | null>(null);
   /** Aprovações supervisionadas pendentes por cliente (persistem ao recolher o card). */
   const [pendingByClientId, setPendingByClientId] = useState<Record<number, SupervisedPendingItem[]>>({});
+  /** Busca única no mobile (nome, e-mail ou CNPJ). */
+  const [filterQuick, setFilterQuick] = useState("");
+  /** Filtros avançados no mobile: estado local (evita saltos de largura do Collapsible Radix). */
+  const [filtersAdvancedMobileOpen, setFiltersAdvancedMobileOpen] = useState(false);
+  const [sortMobileOpen, setSortMobileOpen] = useState(false);
+  const [isLg, setIsLg] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => setIsLg(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   useEffect(() => {
     const ex = searchParams.get("expand");
@@ -1455,11 +1503,18 @@ const Clientes = () => {
 
   const filtered = useMemo(() => {
     const n = (s: string) => s.replace(/\D/g, "");
-    const qName = filterName.trim().toLowerCase();
-    const qEmail = filterEmail.trim().toLowerCase();
-    const qCnpj = n(filterCnpj);
-
     const list = clientsData.filter((c) => {
+      if (!isLg && filterQuick.trim()) {
+        const q = filterQuick.trim().toLowerCase();
+        const qd = n(filterQuick);
+        const byName = c.name.toLowerCase().includes(q);
+        const byEmail = c.email.toLowerCase().includes(q);
+        const byCnpj = qd.length > 0 && n(c.cnpj).includes(qd);
+        return byName || byEmail || byCnpj;
+      }
+      const qName = filterName.trim().toLowerCase();
+      const qEmail = filterEmail.trim().toLowerCase();
+      const qCnpj = n(filterCnpj);
       if (qName && !c.name.toLowerCase().includes(qName)) return false;
       if (qEmail && !c.email.toLowerCase().includes(qEmail)) return false;
       if (qCnpj && !n(c.cnpj).includes(qCnpj)) return false;
@@ -1478,7 +1533,7 @@ const Clientes = () => {
           return 0;
       }
     });
-  }, [filterName, filterEmail, filterCnpj, sortBy]);
+  }, [isLg, filterQuick, filterName, filterEmail, filterCnpj, sortBy]);
 
   const visibleClients = useMemo(() => {
     if (user?.role === "admin") return filtered;
@@ -1518,8 +1573,16 @@ const Clientes = () => {
     });
   };
 
+  const closeClientDetail = useCallback(() => {
+    setExpandedId(null);
+    setSearchParams((p) => {
+      p.delete("expand");
+      return p;
+    });
+  }, [setSearchParams]);
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="min-w-0 w-full max-w-full space-y-5 animate-fade-in">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-display font-bold">Clientes</h1>
@@ -1532,21 +1595,172 @@ const Clientes = () => {
         </div>
       </div>
 
-      <Card className="glass-card p-4 sm:p-5 border-border/60">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Filtros</p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
+      <Card className="glass-card min-w-0 w-full max-w-full overflow-x-hidden border-border/60 p-2.5 sm:p-5">
+        <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Filtros</p>
+
+        <div className="min-w-0 space-y-4 lg:hidden">
+          <div className="relative min-w-0">
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 z-[1] -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              id="f-quick"
+              placeholder="Buscar por nome, e-mail ou CNPJ…"
+              value={filterQuick}
+              onChange={(e) => setFilterQuick(e.target.value)}
+              className="h-11 min-w-0 w-full max-w-full border-border/50 bg-secondary/50 pl-10 text-base"
+              autoComplete="off"
+            />
+          </div>
+          <div className="min-w-0 w-full max-w-full">
+            <Button
+              type="button"
+              variant="outline"
+              aria-expanded={sortMobileOpen}
+              aria-haspopup="listbox"
+              aria-label={`Ordenação: ${SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? ""}`}
+              onClick={() => setSortMobileOpen((o) => !o)}
+              className="h-11 min-w-0 w-full max-w-full justify-between gap-2 border-border/60 bg-secondary/30 font-normal focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:ring-offset-0"
+            >
+              <span className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+                <ArrowUpDown className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                <span className="truncate text-left">
+                  <span className="text-muted-foreground">Ordenação · </span>
+                  {SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? "Ordenar por"}
+                </span>
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 opacity-70 transition-transform duration-200",
+                  sortMobileOpen && "rotate-180",
+                )}
+                aria-hidden
+              />
+            </Button>
+            <div
+              className={cn(
+                "grid w-full min-w-0 max-w-full transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+                sortMobileOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+              )}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <ul className="min-w-0 list-none space-y-1.5 pt-2" role="listbox" aria-label="Opções de ordenação">
+                  {SORT_OPTIONS.map((opt) => (
+                    <li key={opt.value} role="none">
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={sortBy === opt.value}
+                        onClick={() => {
+                          setSortBy(opt.value);
+                          setSortMobileOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full min-w-0 items-center justify-between gap-2 rounded-md border px-3 py-2.5 text-left text-sm transition-colors",
+                          sortBy === opt.value
+                            ? "border-primary/40 bg-primary/10 font-medium text-foreground"
+                            : "border-border/50 bg-secondary/25 font-normal hover:bg-secondary/45",
+                        )}
+                      >
+                        <span className="min-w-0">{opt.label}</span>
+                        {sortBy === opt.value ? (
+                          <CircleCheck className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                        ) : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div className="min-w-0 w-full max-w-full">
+            <Button
+              type="button"
+              variant="outline"
+              aria-expanded={filtersAdvancedMobileOpen}
+              onClick={() => setFiltersAdvancedMobileOpen((o) => !o)}
+              className="h-11 min-w-0 w-full max-w-full justify-between gap-2 border-border/60 bg-secondary/30 font-normal focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:ring-offset-0"
+            >
+              <span className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+                <SlidersHorizontal className="h-4 w-4 shrink-0 opacity-80" />
+                <span className="truncate text-left">Filtros avançados</span>
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 opacity-70 transition-transform duration-200",
+                  filtersAdvancedMobileOpen && "rotate-180",
+                )}
+                aria-hidden
+              />
+            </Button>
+            <div
+              className={cn(
+                "grid w-full min-w-0 max-w-full transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+                filtersAdvancedMobileOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+              )}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <div className="min-w-0 max-w-full space-y-4 pt-4">
+                  <div className="min-w-0 space-y-1.5">
+                    <label htmlFor="f-name-m" className="text-xs text-muted-foreground">
+                      Nome do cliente
+                    </label>
+                    <Input
+                      id="f-name-m"
+                      placeholder="Buscar por nome…"
+                      value={filterName}
+                      onChange={(e) => setFilterName(e.target.value)}
+                      className="h-11 min-w-0 w-full max-w-full bg-secondary/50 border-border/50"
+                    />
+                  </div>
+                  <div className="min-w-0 space-y-1.5">
+                    <label htmlFor="f-email-m" className="text-xs text-muted-foreground">
+                      E-mail
+                    </label>
+                    <Input
+                      id="f-email-m"
+                      type="email"
+                      placeholder="contato@empresa.com"
+                      value={filterEmail}
+                      onChange={(e) => setFilterEmail(e.target.value)}
+                      className="h-11 min-w-0 w-full max-w-full bg-secondary/50 border-border/50"
+                    />
+                  </div>
+                  <div className="min-w-0 space-y-1.5">
+                    <label htmlFor="f-cnpj-m" className="text-xs text-muted-foreground">
+                      CNPJ
+                    </label>
+                    <Input
+                      id="f-cnpj-m"
+                      placeholder="00.000.000/0000-00"
+                      value={filterCnpj}
+                      onChange={(e) => setFilterCnpj(e.target.value)}
+                      className="h-11 min-w-0 w-full max-w-full bg-secondary/50 border-border/50"
+                    />
+                  </div>
+                  <p className="break-words text-[11px] leading-relaxed text-muted-foreground">
+                    Com a busca rápida preenchida, ela tem prioridade. Esvazie-a para usar estes campos em conjunto.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden gap-3 lg:grid lg:grid-cols-4 lg:items-end">
           <div className="space-y-1.5 lg:col-span-1">
             <label htmlFor="f-name" className="text-xs text-muted-foreground">
               Nome do cliente
             </label>
             <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="f-name"
                 placeholder="Buscar por nome..."
                 value={filterName}
                 onChange={(e) => setFilterName(e.target.value)}
-                className="pl-8 h-10 bg-secondary/50 border-border/50"
+                className="h-10 border-border/50 bg-secondary/50 pl-8"
               />
             </div>
           </div>
@@ -1560,7 +1774,7 @@ const Clientes = () => {
               placeholder="contato@empresa.com"
               value={filterEmail}
               onChange={(e) => setFilterEmail(e.target.value)}
-              className="h-10 bg-secondary/50 border-border/50"
+              className="h-10 border-border/50 bg-secondary/50"
             />
           </div>
           <div className="space-y-1.5">
@@ -1572,13 +1786,13 @@ const Clientes = () => {
               placeholder="00.000.000/0000-00"
               value={filterCnpj}
               onChange={(e) => setFilterCnpj(e.target.value)}
-              className="h-10 bg-secondary/50 border-border/50"
+              className="h-10 border-border/50 bg-secondary/50"
             />
           </div>
           <div className="space-y-1.5">
-            <span className="text-xs text-muted-foreground block">Ordenação</span>
+            <span className="block text-xs text-muted-foreground">Ordenação</span>
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
-              <SelectTrigger className="h-10 bg-secondary/50 border-border/50">
+              <SelectTrigger className="h-10 border-border/50 bg-secondary/50">
                 <SelectValue placeholder="Ordenar por" />
               </SelectTrigger>
               <SelectContent>
@@ -1598,7 +1812,7 @@ const Clientes = () => {
         </Card>
       )}
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid min-w-0 w-full max-w-full grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-4 xl:grid-cols-4">
         {visibleClients.map((client) => {
           const open = expandedId === client.id;
           const pendingApprovalCount = pendingByClientId[client.id]?.length ?? 0;
@@ -1615,7 +1829,7 @@ const Clientes = () => {
                 }
               }}
               className={cn(
-                "glass-card p-5 hover:glow-primary transition-all cursor-pointer group text-left relative",
+                "glass-card min-w-0 max-w-full p-3 hover:glow-primary transition-all cursor-pointer group text-left sm:p-5",
                 open && "ring-2 ring-primary/50 glow-primary",
               )}
             >
@@ -1694,14 +1908,20 @@ const Clientes = () => {
                 ))}
               </div>
               <p className="text-[10px] text-muted-foreground mt-3 pt-2 border-t border-border/40">
-                {open ? "Clique para recolher" : "Clique para painel completo (IA, gráficos, ROI)"}
+                {isLg
+                  ? open
+                    ? "Clique para recolher"
+                    : "Clique para painel completo (IA, gráficos, ROI)"
+                  : open
+                    ? "Toque novamente para fechar"
+                    : "Toque para ver detalhes"}
               </p>
             </Card>
           );
         })}
       </div>
 
-      {selected && (
+      {selected && isLg && (
         <ClientExpandedPanel
           key={selected.id}
           client={selected}
@@ -1721,6 +1941,62 @@ const Clientes = () => {
           }}
         />
       )}
+
+      <Dialog
+        open={Boolean(selected && !isLg)}
+        onOpenChange={(open) => {
+          if (!open) closeClientDetail();
+        }}
+      >
+        <DialogContent
+          key={selected?.id}
+          className="flex max-h-[min(92dvh,56rem)] w-[calc(100vw-1.25rem)] max-w-4xl flex-col gap-0 overflow-hidden border-border/60 p-0 sm:max-h-[min(90dvh,56rem)]"
+        >
+          {selected && (
+            <>
+              <DialogHeader className="shrink-0 space-y-1.5 border-b border-border/60 px-4 py-3 pr-14 text-left">
+                <DialogTitle className="font-display text-lg leading-snug sm:text-xl">{selected.name}</DialogTitle>
+                <DialogDescription asChild>
+                  <div className="text-left text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                    <p>
+                      {selected.segment} · Budget: {selected.budgetLabel}
+                    </p>
+                    <p className="mt-0.5">
+                      {selected.email} · CNPJ {selected.cnpj}
+                    </p>
+                  </div>
+                </DialogDescription>
+              </DialogHeader>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-4">
+                <ClientExpandedPanel
+                  key={selected.id}
+                  client={selected}
+                  embeddedInModal
+                  onOpenSettings={() => setSettingsClientId(selected.id)}
+                  supervisedPendingApprovals={pendingByClientId[selected.id] ?? []}
+                  onSupervisedPendingChange={(updater) => {
+                    setPendingByClientId((m) => {
+                      const id = selected.id;
+                      const prev = m[id] ?? [];
+                      const next = typeof updater === "function" ? updater(prev) : updater;
+                      if (next.length === 0) {
+                        const { [id]: _, ...rest } = m;
+                        return rest;
+                      }
+                      return { ...m, [id]: next };
+                    });
+                  }}
+                />
+              </div>
+              <DialogFooter className="shrink-0 border-t border-border/60 px-4 py-3 sm:justify-center">
+                <Button type="button" variant="secondary" className="w-full sm:w-auto min-w-[8rem]" onClick={closeClientDetail}>
+                  Fechar
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <ClientSettingsModal
         clientId={settingsClientId}

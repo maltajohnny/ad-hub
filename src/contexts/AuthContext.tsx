@@ -282,14 +282,8 @@ function loadRegistry(): Record<string, RegistryEntry> {
       parsed[OWNER_USERNAME] = defaultRegistry[OWNER_USERNAME];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
-    if (!parsed.qtrafficadmin?.user) {
-      parsed.qtrafficadmin = defaultRegistry.qtrafficadmin;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-    }
-    if (!parsed.norter?.user) {
-      parsed.norter = defaultRegistry.norter;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-    }
+    // Contas demo (`norter`, `qtrafficadmin`, `diego.norter`) só existem no primeiro arranque (`!raw` acima).
+    // Não as recriar aqui — senão voltam sempre que o admin as apaga.
     if (parsed.diego?.user && !parsed["diego.norter"]?.user) {
       const e = parsed.diego;
       parsed["diego.norter"] = {
@@ -301,10 +295,6 @@ function loadRegistry(): Record<string, RegistryEntry> {
         },
       };
       delete parsed.diego;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-    }
-    if (!parsed["diego.norter"]?.user) {
-      parsed["diego.norter"] = defaultRegistry["diego.norter"];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
     return applyBuiltinOrgMigrations(parsed);

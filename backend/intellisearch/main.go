@@ -30,6 +30,9 @@ func main() {
 	}))
 
 	api := app.Group("/api/intellisearch")
+	api.Get("/ping", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"ok": true, "service": "intellisearch"})
+	})
 	api.Get("/business", handlers.GetBusiness)
 	api.Get("/ranking", handlers.GetOrganicRank)
 

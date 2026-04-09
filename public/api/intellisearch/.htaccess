@@ -1,0 +1,13 @@
+# Encaminha /api/intellisearch/* (exceto ficheiros reais) para proxy.php → Go em 127.0.0.1:PORT
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /api/intellisearch/
+RewriteRule ^proxy\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule . proxy.php [L]
+</IfModule>
+
+# Opcional: se o Go usar outra porta, descomente e ajuste (tem de bater com PORT no .env de minha-api)
+# <IfModule mod_setenvif.c>
+# SetEnv INTELLISEARCH_BACKEND http://127.0.0.1:3041
+# </IfModule>

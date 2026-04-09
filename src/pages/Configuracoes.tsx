@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Link2, Webhook, Save, KeyRound, Camera, Trash2, Building2 } from "lucide-react";
+import { Link2, Webhook, Save, KeyRound, Camera, Trash2, Building2, LogOut, Home } from "lucide-react";
 import { useAuth, OWNER_USERNAME } from "@/contexts/AuthContext";
 import { isPlatformOperator } from "@/lib/saasTypes";
 import { BUILTIN_QTRAFFIC_ID } from "@/lib/tenantsStore";
@@ -32,7 +32,8 @@ const initialIntegrations: Integration[] = [
 ];
 
 const Configuracoes = () => {
-  const { user, updateProfile, saveAccountProfile, changePassword } = useAuth();
+  const { user, updateProfile, saveAccountProfile, changePassword, logout } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get("tab") === "conta" ? "conta" : "integracoes";
 
@@ -345,9 +346,29 @@ const Configuracoes = () => {
                   className="bg-secondary/50 border-border/50"
                 />
               </div>
-              <Button type="button" variant="secondary" onClick={handleChangePassword}>
-                Atualizar senha
-              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <Button type="button" variant="secondary" onClick={handleChangePassword}>
+                  Atualizar senha
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => {
+                    logout();
+                    navigate("/login", { replace: true });
+                  }}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sair
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className="sm:ml-0" asChild>
+                  <Link to="/dashboard" className="gap-2">
+                    <Home className="h-4 w-4" />
+                    Início
+                  </Link>
+                </Button>
+              </div>
             </div>
           </Card>
         </TabsContent>

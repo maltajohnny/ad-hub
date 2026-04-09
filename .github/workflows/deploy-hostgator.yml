@@ -14,6 +14,9 @@
 #   Exemplos: `public_html/`  |  `ad-hub.digital/`  |  `public_html/ad-hub.digital/`  |  `./`
 # (depende da conta FTP: raiz da conta vs pasta já fixada ao domínio)
 #
+# IntelliSearch: opcional `VITE_INTELLISEARCH_API_URL` se a API for noutro domínio.
+# No ad-hub.digital o `dist/` inclui `api/intellisearch/proxy.php` (PHP → 127.0.0.1:PORT do minha-api).
+#
 # Vários destinos: duplica o step "Deploy via FTP" com outro `local-dir` + `server-dir`, ou um job extra.
 
 name: Deploy para HostGator (FTP)
@@ -47,6 +50,8 @@ jobs:
         run: npm ci
 
       - name: Build (Vite)
+        env:
+          VITE_INTELLISEARCH_API_URL: ${{ vars.VITE_INTELLISEARCH_API_URL }}
         run: npm run build
 
       # Front (Vite): pasta = Document Root do domínio (no teu caso: public_html/)

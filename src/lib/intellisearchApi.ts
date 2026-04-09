@@ -39,12 +39,27 @@ export type BusinessAnalysis = {
   source: string;
 };
 
-/** Base opcional (ex.: outro domínio). Vazio = mesmo host (`/api/...`). Sem barra final. */
-const apiPrefix = (import.meta.env.VITE_INTELLISEARCH_API_URL ?? "").trim().replace(/\/$/, "");
+/**
+ * Base da API IntelliSearch (sem barra final).
+ * 1) `VITE_INTELLISEARCH_API_URL` no build (outro domínio / CDN).
+ * 2) Produção `ad-hub.digital` / `www.ad-hub.digital` sem env: mesmo origin (`/api/...`) — o deploy inclui
+ *    `public/api/intellisearch/proxy.php` + `.htaccess` que encaminha para o Go em 127.0.0.1 (PORT do .env em minha-api).
+ */
+function getIntelliSearchApiPrefix(): string {
+  const fromEnv = (import.meta.env.VITE_INTELLISEARCH_API_URL ?? "").trim().replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  if (!import.meta.env.PROD || typeof window === "undefined") return "";
+  const h = window.location.hostname;
+  if (h === "ad-hub.digital" || h === "www.ad-hub.digital") {
+    return "";
+  }
+  return "";
+}
 
 function buildApiUrl(pathWithQuery: string): string {
-  if (!apiPrefix) return pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`;
-  return `${apiPrefix}${pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`}`;
+  const prefix = getIntelliSearchApiPrefix();
+  if (!prefix) return pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`;
+  return `${prefix}${pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`}`;
 }
 
 export async function fetchBusinessAnalysis(query: string): Promise<BusinessAnalysis> {
@@ -67,9 +82,16 @@ export async function fetchBusinessAnalysis(query: string): Promise<BusinessAnal
   } catch {
     const html = trimmed.startsWith("<!") || trimmed.toLowerCase().includes("<html");
     const preview = trimmed.replace(/\s+/g, " ").slice(0, 140);
+    const prefix = getIntelliSearchApiPrefix();
+    const pingUrl = `${prefix || `${typeof window !== "undefined" ? window.location.origin : ""}`}/api/intellisearch/ping`;
+    const prodHint = html
+      ? prefix
+        ? " Confirme o URL de ping abaixo (JSON). Verifique SSL e se o binário Go está a correr."
+        : " Faça deploy do `dist/` com `api/intellisearch/proxy.php`, `.htaccess` nessa pasta e `.htaccess` na raiz; mantenha o Go em ~/apps/minha-api a correr (PORT predef. no proxy: 3042 — alinhe com o seu .env)."
+      : "";
     throw new Error(
       html
-        ? `Resposta inválida (HTTP ${res.status}): o servidor devolveu HTML em vez de JSON. Teste no browser: /api/intellisearch/ping (deve devolver JSON com ok:true).`
+        ? `Resposta inválida (HTTP ${res.status}): o servidor devolveu HTML em vez de JSON. Teste no browser: ${pingUrl} (JSON com ok:true).${prodHint}`
         : `Resposta inválida (HTTP ${res.status}): ${preview}${trimmed.length > 140 ? "…" : ""}`,
     );
   }

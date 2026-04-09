@@ -1,7 +1,15 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
 import { IntelliSearchNewBadge } from "@/components/IntelliSearchNewBadge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type NavLeaf = { to: string; label: string };
 type NavGroup = { title: string; items: NavLeaf[] };
@@ -56,12 +64,38 @@ const GROUPS: NavGroup[] = [
   },
 ];
 
+const FLAT_ITEMS = GROUPS.flatMap((g) => g.items.map((item) => ({ ...item, group: g.title })));
+
 export default function IntelliSearchLayout() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const path = location.pathname;
+  const selectValue = FLAT_ITEMS.some((i) => i.to === path) ? path : "/intelli-search/health/complete";
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 lg:flex-row lg:gap-4 lg:items-start">
+      <div className="shrink-0 space-y-2 lg:hidden">
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-xs text-muted-foreground">Vista do IntelliSearch</Label>
+          <IntelliSearchNewBadge className="scale-90 shrink-0" />
+        </div>
+        <Select value={selectValue} onValueChange={(to) => navigate(to)}>
+          <SelectTrigger className="w-full bg-card/40 border-border/50">
+            <SelectValue placeholder="Análise completa" />
+          </SelectTrigger>
+          <SelectContent className="z-[200] max-h-[min(70vh,420px)]" position="popper">
+            {FLAT_ITEMS.map((item) => (
+              <SelectItem key={item.to} value={item.to} className="whitespace-normal">
+                {item.group}: {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <nav
         aria-label="IntelliSearch"
-        className="shrink-0 lg:w-[200px] lg:min-w-[180px] lg:max-w-[220px] space-y-5 rounded-xl border border-border/50 bg-card/30 p-3"
+        className="hidden shrink-0 lg:flex lg:w-[200px] lg:min-w-[180px] lg:max-w-[220px] flex-col space-y-5 rounded-xl border border-border/50 bg-card/30 p-3"
       >
         <div className="flex items-start justify-between gap-2 border-b border-border/40 pb-3">
           <div>
