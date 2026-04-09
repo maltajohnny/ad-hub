@@ -5,8 +5,9 @@
 #   FTP_USER     — utilizador FTP (muitas vezes o mesmo do cPanel, ex.: johnn315)
 #   FTP_PASSWORD — palavra-passe da conta FTP
 #
-# Se o deploy falhar com "path not found", no cPanel confira o caminho real no File Manager:
-# às vezes o FTP usa caminho relativo à pasta inicial (ex.: só `ad-hub.digital` em vez do caminho absoluto).
+# IMPORTANTE — server-dir deve ser RELATIVO à pasta inicial do utilizador FTP (ex.: `ad-hub.digital/`).
+# Não uses caminho absoluto tipo `/home3/...`: o servidor cria pastas `home3/johnn315/...` *dentro*
+# do teu diretório e o site fica no sítio errado (build escondido na subpasta `home3`).
 
 name: Deploy para HostGator (FTP)
 
@@ -48,5 +49,5 @@ jobs:
           username: ${{ secrets.FTP_USER }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
-          server-dir: /home3/johnn315/ad-hub.digital/
+          server-dir: ad-hub.digital/
           dangerous-clean-slate: false
