@@ -1,0 +1,8 @@
+<?php
+/**
+ * No servidor: copie para backend.local.php (mesma pasta que proxy.php).
+ * Não commite backend.local.php no Git.
+ *
+ * Use se o Go estiver noutra porta ou URL interna que o PHP consiga alcançar.
+ */
+return 'http://127.0.0.1:3042';
