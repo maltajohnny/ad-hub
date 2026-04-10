@@ -247,6 +247,10 @@ func AdHubCreateUser(c *fiber.Ctx) error {
 	if key == "" || body.Password == "" || body.User == nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Dados em falta"})
 	}
+	email, _ := body.User["email"].(string)
+	if strings.TrimSpace(email) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "E-mail é obrigatório"})
+	}
 	if _, err := repo.GetByLoginKey(c.Context(), key); err == nil {
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "Login já existe"})
 	} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -262,6 +266,9 @@ func AdHubCreateUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "perfil inválido"})
 	}
 	if err := repo.InsertUser(c.Context(), key, string(hash), userJSON); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "email obrigat") {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "E-mail é obrigatório"})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao criar"})
 	}
 	return c.JSON(fiber.Map{"ok": true})

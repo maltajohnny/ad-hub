@@ -248,6 +248,10 @@ const Usuarios = () => {
       setInitialPasswordError(true);
       return;
     }
+    if (!email.trim()) {
+      toast.error("Informe o e-mail do usuário.");
+      return;
+    }
     if (!platformOp && !scopeTenantId) {
       toast.error("Selecione uma organização no contexto da plataforma para criar utilizadores.");
       return;
