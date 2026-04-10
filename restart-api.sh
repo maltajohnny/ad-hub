@@ -53,7 +53,7 @@ pids_listening_on_tcp_port() {
     while IFS= read -r line; do
       [[ "$line" =~ pid=([0-9]+) ]] || continue
       acc="${acc} ${BASH_REMATCH[1]}"
-    done < <(ss -tlnp 2>/dev/null | grep -E ":${p}([[:space:]]|$)" || true)
+    done < <(ss -ltnp "sport = :${p}" 2>/dev/null || true)
   fi
   if command -v netstat >/dev/null 2>&1; then
     while IFS= read -r line; do
@@ -74,14 +74,19 @@ pids_listening_on_tcp_port() {
 
 tcp_port_in_use() {
   local p="$1"
+  # NÃO usar grep cego em ":PORT" sobre ss -tlnp — no jailshell a linha users:(...,pid=3042,...)
+  # pode coincidir com a porta e manter a porta "ocupada" para sempre.
+  if command -v ss >/dev/null 2>&1; then
+    if ss -ltnH "sport = :${p}" 2>/dev/null | grep -q .; then
+      return 0
+    fi
+  fi
   if command -v lsof >/dev/null 2>&1; then
     lsof -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 && return 0
   fi
-  if command -v ss >/dev/null 2>&1; then
-    ss -tlnp 2>/dev/null | grep -E ":${p}([[:space:]]|$)" >/dev/null 2>&1 && return 0
-  fi
-  if command -v netstat >/dev/null 2>&1; then
-    netstat -tln 2>/dev/null | grep -E ":${p}([[:space:]]|$)" >/dev/null 2>&1 && return 0
+  # Confirmação: ligação TCP real a 127.0.0.1 (se aceitar, há listener).
+  if (true >/dev/tcp/127.0.0.1/"$p") 2>/dev/null; then
+    return 0
   fi
   return 1
 }
@@ -122,7 +127,9 @@ free_port() {
   local p="$1"
   local i pid pids
   # Jailshell/HostGator: lsof/ss muitas vezes não mostram PID; fuser na porta TCP + kills repetidos.
+  # Pode demorar ~30–90s no pior caso — não é travamento.
   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    case "$i" in 1 | 5 | 10 | 15 | 20) log "  porta ${p}: tentativa ${i}/20 (aguarde)..." ;; esac
     if command -v fuser >/dev/null 2>&1; then
       fuser -k "${p}/tcp" 2>/dev/null || true
     fi
@@ -172,7 +179,7 @@ sleep 1
 kill_holders_of_binary
 sleep 1
 
-log "Liberando porta ${PORT} (evita 'address already in use')..."
+log "Liberando porta ${PORT} (pode demorar até ~1–2 min no jailshell; não cancele)..."
 if ! free_port "$PORT"; then
   log "Segunda sequência de libertação da porta ${PORT}..."
   sleep 3
