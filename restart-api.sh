@@ -4,6 +4,9 @@ set -euo pipefail
 # Uso:
 #   ./restart-api.sh            # usa binario "api"
 #   ./restart-api.sh meu-bin    # usa outro nome de binario
+#
+# Emergência (jailshell a insistir que a porta está ocupada): confirme com `ss -tln | grep PORTA`
+# e, se estiver livre, arranque com: SKIP_PORT_CHECK=1 ./restart-api.sh api
 
 BIN_NAME="${1:-api}"
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -84,10 +87,7 @@ tcp_port_in_use() {
   if command -v lsof >/dev/null 2>&1; then
     lsof -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 && return 0
   fi
-  # Confirmação: ligação TCP real a 127.0.0.1 (se aceitar, há listener).
-  if (true >/dev/tcp/127.0.0.1/"$p") 2>/dev/null; then
-    return 0
-  fi
+  # Não usar /dev/tcp aqui: em alguns jailshells dá falso “ocupado” ou comportamento estranho.
   return 1
 }
 
@@ -179,14 +179,37 @@ sleep 1
 kill_holders_of_binary
 sleep 1
 
+# HostGator/jailshell: por vezes o processo continua a escutar sem bater no pgrep anterior — fuser na porta costuma resolver.
+if command -v fuser >/dev/null 2>&1; then
+  log "Libertação extra: fuser -k na porta ${PORT}/tcp..."
+  fuser -k "${PORT}/tcp" 2>/dev/null || true
+  sleep 2
+fi
+if command -v lsof >/dev/null 2>&1; then
+  for pid in $(lsof -t -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true); do
+    [ -n "${pid:-}" ] && kill -9 "$pid" 2>/dev/null || true
+  done
+  sleep 1
+fi
+
 log "Liberando porta ${PORT} (pode demorar até ~1–2 min no jailshell; não cancele)..."
 if ! free_port "$PORT"; then
   log "Segunda sequência de libertação da porta ${PORT}..."
   sleep 3
-  free_port "$PORT" || fail "Porta ${PORT} ainda ocupada. Por SSH: cd ${APP_DIR} && fuser -k ${PORT}/tcp && fuser -k ./${BIN_NAME} && sleep 2 && ./restart-api.sh"
+  if ! free_port "$PORT"; then
+    if [ "${SKIP_PORT_CHECK:-0}" = "1" ]; then
+      log "AVISO: porta ${PORT} não confirmada como livre — SKIP_PORT_CHECK=1, continuo na mesma."
+    else
+      fail "Porta ${PORT} ainda ocupada. Por SSH: cd ${APP_DIR} && fuser -k ${PORT}/tcp && fuser -k ./${BIN_NAME} && sleep 2 && ./restart-api.sh — ou SKIP_PORT_CHECK=1 ./restart-api.sh ${BIN_NAME}"
+    fi
+  fi
 fi
 if tcp_port_in_use "$PORT"; then
-  fail "Porta ${PORT} ainda em uso (verificação final). Não vou iniciar outro processo."
+  if [ "${SKIP_PORT_CHECK:-0}" = "1" ]; then
+    log "AVISO: verificação final indica porta ocupada — SKIP_PORT_CHECK=1, continuo."
+  else
+    fail "Porta ${PORT} ainda em uso (verificação final). Não vou iniciar outro processo."
+  fi
 fi
 
 if pgrep -f "$MATCH_EXPR" >/dev/null 2>&1; then
