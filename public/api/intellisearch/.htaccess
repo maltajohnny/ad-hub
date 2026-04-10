@@ -9,5 +9,5 @@ RewriteRule . proxy.php [L]
 
 # Opcional: se o Go usar outra porta, descomente e ajuste (tem de bater com PORT no .env de minha-api)
 # <IfModule mod_setenvif.c>
-# SetEnv INTELLISEARCH_BACKEND http://127.0.0.1:3041
+# SetEnv INTELLISEARCH_BACKEND http://127.0.0.1:3042
 # </IfModule>

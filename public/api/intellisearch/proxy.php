@@ -5,7 +5,9 @@
  * Ordem de URL tentada:
  * 1) Variável de ambiente INTELLISEARCH_BACKEND (Apache SetEnv no .htaccess)
  * 2) Ficheiro backend.local.php nesta pasta (return 'http://...';) — útil na HostGator
- * 3) http://127.0.0.1:3042 e http://localhost:3042
+ * 3) Loopback 127.0.0.1 / localhost nas portas 3042 e (legado) 3041
+ * 4) IP do servidor ($_SERVER['SERVER_ADDR']) nas mesmas portas — em alguns hostings o PHP (CageFS)
+ *    não alcança 127.0.0.1 mas alcança o IP interno da máquina.
  *
  * Se tudo falhar: na HostGator o PHP por vezes NÃO consegue falar com processos do teu utilizador
  * em 127.0.0.1 (CageFS). Testa por SSH: curl http://127.0.0.1:3042/api/intellisearch/ping
@@ -35,6 +37,13 @@ if (is_readable($localFile)) {
 }
 $candidates[] = 'http://127.0.0.1:3042';
 $candidates[] = 'http://localhost:3042';
+$serverAddr = isset($_SERVER['SERVER_ADDR']) ? (string) $_SERVER['SERVER_ADDR'] : '';
+if ($serverAddr !== '' && filter_var($serverAddr, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+    $candidates[] = 'http://' . $serverAddr . ':3042';
+    $candidates[] = 'http://' . $serverAddr . ':3041';
+}
+$candidates[] = 'http://127.0.0.1:3041';
+$candidates[] = 'http://localhost:3041';
 $candidates = array_values(array_unique($candidates));
 
 if (!function_exists('curl_init')) {

@@ -24,8 +24,8 @@ cd "$APP_DIR"
 [ -f "./${BIN_NAME}" ] || fail "Binario nao encontrado: ${APP_DIR}/${BIN_NAME}"
 chmod +x "./${BIN_NAME}"
 
-# Porta onde a API escuta (deve bater com backend/intellisearch main.go)
-PORT="3041"
+# Porta onde a API escuta (deve bater com main.go e public/api/intellisearch/proxy.php — predef. 3042)
+PORT="3042"
 if [ -f ".env" ]; then
   line="$(grep -E '^[[:space:]]*PORT[[:space:]]*=' .env 2>/dev/null | tail -n 1 || true)"
   if [ -n "${line:-}" ]; then
