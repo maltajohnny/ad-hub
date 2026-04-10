@@ -17,7 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { clientsData } from "@/pages/Clientes";
 import { UsersRound, Trash2, Shield, User, Building2, Eye, EyeOff, Pencil } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, isPlausibleEmail } from "@/lib/utils";
 import { ModuleCheckboxLabel } from "@/components/ModuleCheckboxLabel";
 import { APP_MODULES, type AppModule, isPlatformOperator } from "@/lib/saasTypes";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -225,6 +225,57 @@ const Usuarios = () => {
       );
     }
   }, [permUser, userListForModules]);
+
+  const createCanSubmit = useMemo(() => {
+    const rawLogin = sanitizeLoginInput(username).trim();
+    if (!rawLogin || !isValidLoginUsername(rawLogin)) return false;
+    if (!name.trim()) return false;
+    if (!email.trim() || !isPlausibleEmail(email)) return false;
+    if (!isStrongPassword(password)) return false;
+    if (platformOp) {
+      if (!createOrganizationId) return false;
+    } else if (!scopeTenantId) {
+      return false;
+    }
+    return true;
+  }, [
+    username,
+    name,
+    email,
+    password,
+    platformOp,
+    createOrganizationId,
+    scopeTenantId,
+  ]);
+
+  const editCanSubmit = useMemo(() => {
+    if (!editTarget) return false;
+    if (!editName.trim() || !isPlausibleEmail(editEmail)) return false;
+    const pw = editNewPassword.trim();
+    if (pw && !isStrongPassword(pw)) return false;
+    const owner = isOwner(editTarget.username);
+    if (owner) return true;
+    const rawLogin = sanitizeLoginInput(editUsername).trim();
+    if (!isValidLoginUsername(rawLogin)) return false;
+    const editOrgId = platformOp
+      ? editOrganizationId !== "__none__"
+        ? editOrganizationId
+        : null
+      : (editTarget.organizationId ?? scopeTenantId);
+    const editOrgSlug = editOrgId ? getTenantById(editOrgId)?.slug ?? null : null;
+    const nextLogin = editOrgSlug ? (buildOrgScopedLogin(rawLogin, editOrgSlug) ?? "") : rawLogin;
+    if (normalizeLoginKey(nextLogin) !== normalizeLoginKey(editTarget.username) && !nextLogin) return false;
+    return true;
+  }, [
+    editTarget,
+    editName,
+    editEmail,
+    editNewPassword,
+    editUsername,
+    editOrganizationId,
+    platformOp,
+    scopeTenantId,
+  ]);
 
   const handleInitialPasswordBlur = () => {
     const p = password.trim();
@@ -486,7 +537,12 @@ const Usuarios = () => {
             </div>
           </>
         )}
-        <Button type="button" className="mt-4 gradient-brand text-primary-foreground" onClick={handleCreate}>
+        <Button
+          type="button"
+          className="mt-4 gradient-brand text-primary-foreground"
+          disabled={!createCanSubmit}
+          onClick={handleCreate}
+        >
           Criar usuário
         </Button>
       </Card>
@@ -951,7 +1007,12 @@ const Usuarios = () => {
             <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>
               Cancelar
             </Button>
-            <Button type="button" className="gradient-brand text-primary-foreground" onClick={() => void saveEdit()}>
+            <Button
+              type="button"
+              className="gradient-brand text-primary-foreground"
+              disabled={!editCanSubmit}
+              onClick={() => void saveEdit()}
+            >
               Guardar
             </Button>
           </DialogFooter>

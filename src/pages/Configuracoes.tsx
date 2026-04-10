@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -16,7 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { sanitizeLoginInput } from "@/lib/loginUsername";
+import { isValidLoginUsername, sanitizeLoginInput } from "@/lib/loginUsername";
+import { isPlausibleEmail } from "@/lib/utils";
 import { isStrongPassword, STRONG_PASSWORD_HINT } from "@/lib/passwordPolicy";
 import { toast } from "sonner";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
@@ -115,6 +116,20 @@ const Configuracoes = () => {
     }
     toast.success("Vínculo com a organização atualizado.");
   };
+
+  const profileCanSave = useMemo(() => {
+    if (!user) return false;
+    if (!name.trim() || !isPlausibleEmail(email)) return false;
+    const loginSan = sanitizeLoginInput(loginField).trim();
+    if (!isValidLoginUsername(loginSan)) return false;
+    return true;
+  }, [user, name, email, loginField]);
+
+  const passwordCanSubmit = useMemo(() => {
+    if (!currentPw.trim() || !newPw.trim() || !confirmPw.trim()) return false;
+    if (newPw !== confirmPw) return false;
+    return isStrongPassword(newPw);
+  }, [currentPw, newPw, confirmPw]);
 
   const handleChangePassword = async () => {
     if (newPw !== confirmPw) {
@@ -273,7 +288,11 @@ const Configuracoes = () => {
               </div>
             </div>
 
-            <Button onClick={handleSaveProfile} className="mt-6 gradient-brand text-primary-foreground font-semibold hover:opacity-90">
+            <Button
+              onClick={handleSaveProfile}
+              disabled={!profileCanSave}
+              className="mt-6 gradient-brand text-primary-foreground font-semibold hover:opacity-90"
+            >
               <Save size={16} className="mr-2" />
               Salvar dados
             </Button>
@@ -347,7 +366,12 @@ const Configuracoes = () => {
                 />
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                <Button type="button" variant="secondary" onClick={handleChangePassword}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!passwordCanSubmit}
+                  onClick={handleChangePassword}
+                >
                   Atualizar senha
                 </Button>
                 <Button

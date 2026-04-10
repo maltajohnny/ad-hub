@@ -134,6 +134,8 @@ export function ClientesRegisterModal({ open, onOpenChange, orgId, actorUsername
     setStep("oauth");
   };
 
+  const aliasOk = alias.trim().length >= 2;
+
   const handleOAuthSuccess = () => {
     oauthCompletedRef.current = true;
     onLinked?.();
@@ -183,6 +185,8 @@ export function ClientesRegisterModal({ open, onOpenChange, orgId, actorUsername
                     key={p.id}
                     type="button"
                     className={`h-10 w-full font-medium ${p.className}`}
+                    disabled={!aliasOk}
+                    title={!aliasOk ? "Indique um alias com pelo menos 2 caracteres" : undefined}
                     onClick={() => onChoosePlatform(p.id)}
                   >
                     {p.short}

@@ -121,7 +121,7 @@ function AppLayoutMain({
         <div
           className={cn(
             "flex min-h-0 flex-1 flex-col pb-[env(safe-area-inset-bottom,0px)] [scrollbar-gutter:stable]",
-            isBoard ? "overflow-hidden" : "overflow-auto",
+            isBoard ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden overscroll-y-contain",
           )}
         >
           <div
@@ -263,7 +263,14 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   }, [path]);
 
   return (
-    <div className="flex min-h-[100dvh] min-h-[100svh] w-full max-w-full overflow-x-hidden bg-background">
+    <div
+      className={cn(
+        "flex w-full max-w-full overflow-x-hidden bg-background",
+        /* Mobile: altura mínima da página; desktop: altura fixa à viewport — scroll só no conteúdo central */
+        "min-h-[100dvh] min-h-[100svh]",
+        "lg:h-[100dvh] lg:max-h-[100dvh] lg:min-h-0 lg:overflow-hidden",
+      )}
+    >
       {user?.mustChangePassword ? <FirstAccessPasswordModal /> : null}
       {user && !user.mustChangePassword ? <SlackReportScheduler /> : null}
       {/* Overlay mobile: fecha a gaveta com fade; em lg+ não renderiza */}
@@ -275,7 +282,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           onClick={() => setMobileNavOpen(false)}
         />
       ) : null}
-      {/* Mobile: gaveta fixa; desktop: barra lateral sticky com largura variável */}
+      {/* Mobile: gaveta fixa; desktop: coluna lateral fixa (scroll só no painel principal) */}
       <aside
         className={cn(
           "flex h-[100dvh] max-h-[100dvh] shrink-0 flex-col border-r border-border/40 pt-[env(safe-area-inset-top,0px)]",
@@ -285,7 +292,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           "transition-[width,transform] duration-300 ease-out",
           "max-lg:fixed max-lg:left-0 max-lg:z-[100] max-lg:w-[min(17.5rem,calc(100vw-1rem))] max-lg:pl-[env(safe-area-inset-left,0px)]",
           mobileNavOpen ? "max-lg:translate-x-0" : "max-lg:pointer-events-none max-lg:-translate-x-full",
-          "lg:relative lg:sticky lg:top-0 lg:z-10 lg:translate-x-0 lg:pointer-events-auto",
+          "lg:relative lg:z-10 lg:translate-x-0 lg:pointer-events-auto lg:h-full lg:min-h-0 lg:shrink-0",
           isLg ? (collapsed ? "w-20" : "w-64") : "w-64",
         )}
       >
@@ -629,7 +636,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
       </aside>
 
       <AppLayoutMain
-        className="isolate min-w-0 flex-1"
+        className="isolate min-h-0 min-w-0 flex-1"
         onOpenMobileNav={() => setMobileNavOpen(true)}
         tightMainPaddingMobile={path.startsWith("/clientes") || path === "/dashboard"}
       >

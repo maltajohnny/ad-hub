@@ -97,6 +97,8 @@ const Login = () => {
   };
 
   const showLogoSrc = brand.logo ?? adHubFallback;
+  const canSubmitLogin =
+    !invalidTenant && username.trim().length > 0 && password.trim().length > 0;
 
   return (
     <div className="relative flex min-h-screen min-h-[100dvh] w-full max-w-[100vw] flex-col items-center justify-center overflow-x-hidden overflow-y-auto bg-background">
@@ -223,7 +225,7 @@ const Login = () => {
           <Button
             type="submit"
             className="min-h-12 w-full gradient-brand text-base font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-            disabled={invalidTenant}
+            disabled={!canSubmitLogin}
           >
             <LogIn size={16} className="mr-2" />
             Entrar

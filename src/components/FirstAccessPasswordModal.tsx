@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Dialog,
@@ -70,6 +70,27 @@ export const FirstAccessPasswordModal = () => {
       setConfirmPasswordError(false);
     }
   };
+
+  const canSubmit = useMemo(() => {
+    const cur = currentPassword.trim();
+    const neu = newPassword.trim();
+    const conf = confirmPassword.trim();
+    return (
+      cur.length > 0 &&
+      isStrongPassword(neu) &&
+      neu === conf &&
+      !newPasswordError &&
+      !confirmPasswordError &&
+      !submitting
+    );
+  }, [
+    currentPassword,
+    newPassword,
+    confirmPassword,
+    newPasswordError,
+    confirmPasswordError,
+    submitting,
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,7 +225,7 @@ export const FirstAccessPasswordModal = () => {
             )}
           </div>
           <DialogFooter>
-            <Button type="submit" className="w-full gradient-brand text-primary-foreground" disabled={submitting}>
+            <Button type="submit" className="w-full gradient-brand text-primary-foreground" disabled={!canSubmit}>
               {submitting ? "A guardar…" : "Confirmar e continuar"}
             </Button>
           </DialogFooter>
