@@ -1421,9 +1421,11 @@ const Clientes = () => {
     }
   }, [orgMediaState, expandedMediaId, setSearchParams]);
 
+  // Usa a lista já filtrada/visível para abrir modal; evita bloquear operadores da plataforma
+  // que podem ver o card mas `canUserSeeClient()` retorna false para a carteira Norter.
   const selectedDemo =
-    expandedId !== null && canUserSeeClient(expandedId)
-      ? clientsData.find((c) => c.id === expandedId)
+    expandedId !== null
+      ? visibleClients.find((c) => c.id === expandedId)
       : undefined;
   const selectedMediaClient =
     expandedMediaId && orgMediaState
