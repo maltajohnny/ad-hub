@@ -72,7 +72,7 @@ const Login = () => {
       return;
     }
     const userKey = normalizeUsernameForLoginAttempt(username);
-    const { user: logged, accountDisabled } = login(userKey, password);
+    const { user: logged, accountDisabled } = login(userKey, password.trim());
     if (accountDisabled) {
       setError("Esta conta foi desativada. Peça a um administrador para reativá-la.");
       return;
@@ -170,7 +170,8 @@ const Login = () => {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Utilizador ou utilizador.organização"
-              autoComplete="off"
+              autoComplete="username"
+              autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
               className="bg-secondary/50 border-border/50 focus:border-primary"
@@ -195,7 +196,10 @@ const Login = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Digite sua senha"
-                autoComplete="off"
+                autoComplete="current-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 className="bg-secondary/50 border-border/50 focus:border-primary pr-10"
                 disabled={invalidTenant}
                 onKeyDown={(e) => {
