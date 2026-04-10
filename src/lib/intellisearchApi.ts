@@ -44,8 +44,15 @@ export type BusinessAnalysis = {
  * 1) `VITE_INTELLISEARCH_API_URL` no build (outro domínio / CDN).
  * 2) Produção `ad-hub.digital` / `www.ad-hub.digital` sem env: mesmo origin (`/api/...`) — o deploy inclui
  *    `public/api/intellisearch/proxy.php` + `.htaccess` que encaminha para o Go em 127.0.0.1 (PORT do .env em minha-api).
+ *
+ * Em **desenvolvimento** (`npm run dev`) ignora-se sempre `VITE_INTELLISEARCH_API_URL` para que os pedidos
+ * usem o mesmo origin e o proxy do Vite (`→ :3041`). Caso contrário, com o URL de produção no `.env`,
+ * o browser chamava o PHP remoto e aparecia «proxy: API Go inacessível» mesmo com a API local a correr.
  */
 function getIntelliSearchApiPrefix(): string {
+  if (import.meta.env.DEV) {
+    return "";
+  }
   const fromEnv = (import.meta.env.VITE_INTELLISEARCH_API_URL ?? "").trim().replace(/\/$/, "");
   if (fromEnv) return fromEnv;
   if (!import.meta.env.PROD || typeof window === "undefined") return "";
@@ -73,7 +80,7 @@ export async function fetchBusinessAnalysis(query: string): Promise<BusinessAnal
   const trimmed = text.trim();
   if (!trimmed) {
     throw new Error(
-      "Resposta vazia do servidor. Em desenvolvimento, inicie a API (npm run intellisearch-api) na porta 3042 para o proxy funcionar.",
+      "Resposta vazia do servidor. Em desenvolvimento, inicie a API (npm run intellisearch-api) na porta 3041 para o proxy funcionar.",
     );
   }
   let parsed: unknown;
@@ -87,7 +94,7 @@ export async function fetchBusinessAnalysis(query: string): Promise<BusinessAnal
     const prodHint = html
       ? prefix
         ? " Confirme o URL de ping abaixo (JSON). Verifique SSL e se o binário Go está a correr."
-        : " Faça deploy do `dist/` com `api/intellisearch/proxy.php`, `.htaccess` nessa pasta e `.htaccess` na raiz; mantenha o Go em ~/apps/minha-api a correr (PORT predef. no proxy: 3042 — alinhe com o seu .env)."
+        : " Faça deploy do `dist/` com `api/intellisearch/proxy.php`, `.htaccess` nessa pasta e `.htaccess` na raiz; mantenha o Go em ~/apps/minha-api a correr (PORT predef. no proxy: 3041 — alinhe com o seu .env)."
       : "";
     throw new Error(
       html

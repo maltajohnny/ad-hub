@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "preintellisearch-api": "kill-port 3042",
-    "intellisearch-api": "npx env-cmd -f .env -- sh -c 'cd backend/intellisearch && PORT=3042 exec go run .'",
+    "preintellisearch-api": "kill-port 3041",
+    "intellisearch-api": "npx env-cmd -f .env -- sh -c 'cd backend/intellisearch && PORT=3041 exec go run .'",
     "dev:intellisearch": "concurrently -k -n web,api -c cyan,magenta \"npm run dev\" \"npm run intellisearch-api\"",
+    "dev:with-api": "npm run dev:intellisearch",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",

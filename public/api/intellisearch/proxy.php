@@ -5,12 +5,12 @@
  * Ordem de URL tentada:
  * 1) Variável de ambiente INTELLISEARCH_BACKEND (Apache SetEnv no .htaccess)
  * 2) Ficheiro backend.local.php nesta pasta (return 'http://...';) — útil na HostGator
- * 3) Loopback 127.0.0.1 / localhost nas portas 3042 e (legado) 3041
+ * 3) Loopback 127.0.0.1 / localhost nas portas 3041 e (legado) 3042
  * 4) IP do servidor ($_SERVER['SERVER_ADDR']) nas mesmas portas — em alguns hostings o PHP (CageFS)
  *    não alcança 127.0.0.1 mas alcança o IP interno da máquina.
  *
  * Se tudo falhar: na HostGator o PHP por vezes NÃO consegue falar com processos do teu utilizador
- * em 127.0.0.1 (CageFS). Testa por SSH: curl http://127.0.0.1:3042/api/intellisearch/ping
+ * em 127.0.0.1 (CageFS). Testa por SSH: curl http://127.0.0.1:3041/api/intellisearch/ping
  * Se aí funcionar mas o site não, pergunta ao suporte ou usa app Node/cPanel a expor a porta em HTTPS.
  */
 declare(strict_types=1);
@@ -35,15 +35,15 @@ if (is_readable($localFile)) {
         $candidates[] = rtrim($override, '/');
     }
 }
-$candidates[] = 'http://127.0.0.1:3042';
-$candidates[] = 'http://localhost:3042';
-$serverAddr = isset($_SERVER['SERVER_ADDR']) ? (string) $_SERVER['SERVER_ADDR'] : '';
-if ($serverAddr !== '' && filter_var($serverAddr, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-    $candidates[] = 'http://' . $serverAddr . ':3042';
-    $candidates[] = 'http://' . $serverAddr . ':3041';
-}
 $candidates[] = 'http://127.0.0.1:3041';
 $candidates[] = 'http://localhost:3041';
+$serverAddr = isset($_SERVER['SERVER_ADDR']) ? (string) $_SERVER['SERVER_ADDR'] : '';
+if ($serverAddr !== '' && filter_var($serverAddr, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+    $candidates[] = 'http://' . $serverAddr . ':3041';
+    $candidates[] = 'http://' . $serverAddr . ':3042';
+}
+$candidates[] = 'http://127.0.0.1:3042';
+$candidates[] = 'http://localhost:3042';
 $candidates = array_values(array_unique($candidates));
 
 if (!function_exists('curl_init')) {
@@ -84,5 +84,5 @@ header('Content-Type: application/json; charset=utf-8');
 echo json_encode([
     'error' => 'proxy: API Go inacessível. Tentado: ' . implode(', ', $candidates),
     'detail' => $lastErr,
-    'hint' => 'SSH: cd ~/apps/minha-api && ./restart-api.sh && curl -sS http://127.0.0.1:3042/api/intellisearch/ping — se aqui OK mas o site falha, o PHP do hosting pode estar isolado do processo Go (CageFS). Soluções: expor a API por subdomínio/proxy no cPanel ou alojar a API noutro serviço e definir VITE_INTELLISEARCH_API_URL no build.',
+    'hint' => 'SSH: cd ~/apps/minha-api && ./restart-api.sh && curl -sS http://127.0.0.1:3041/api/intellisearch/ping — se aqui OK mas o site falha, o PHP do hosting pode estar isolado do processo Go (CageFS). Soluções: expor a API por subdomínio/proxy no cPanel ou alojar a API noutro serviço e definir VITE_INTELLISEARCH_API_URL no build.',
 ], JSON_UNESCAPED_UNICODE);

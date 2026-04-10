@@ -5,4 +5,4 @@
  *
  * Use se o Go estiver noutra porta ou URL interna que o PHP consiga alcançar.
  */
-return 'http://127.0.0.1:3042';
+return 'http://127.0.0.1:3041';

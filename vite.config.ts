@@ -5,7 +5,7 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { slackWebhookRelayPlugin } from "./vite-plugin-slack-webhook-relay";
 
-/** Se a API Go não estiver na porta 3042, o proxy devolvia corpo vazio → o cliente falhava ao fazer parse do JSON. */
+/** Se a API Go não estiver na porta 3041, o proxy devolvia corpo vazio → o cliente falhava ao fazer parse do JSON. */
 function intellisearchProxyOnError(err: Error, _req: IncomingMessage, res: ServerResponse | undefined) {
   console.error("[vite proxy /api/intellisearch]", err.message);
   if (!res || res.writableEnded) return;
@@ -14,7 +14,7 @@ function intellisearchProxyOnError(err: Error, _req: IncomingMessage, res: Serve
     res.end(
       JSON.stringify({
         error:
-          "API IntelliSearch offline. Noutro terminal (raiz do projeto): npm run intellisearch-api (porta 3042). Defina SERPAPI_KEY no ambiente.",
+          "API IntelliSearch offline. Noutro terminal (raiz do projeto): npm run intellisearch-api (porta 3041). Defina SERPAPI_KEY no ambiente.",
       }),
     );
   } catch {
@@ -23,10 +23,34 @@ function intellisearchProxyOnError(err: Error, _req: IncomingMessage, res: Serve
 }
 
 const intellisearchProxy = {
-  target: "http://127.0.0.1:3042",
+  target: "http://127.0.0.1:3041",
   changeOrigin: true,
   configure: (proxy: { on: (ev: string, fn: (...args: unknown[]) => void) => void }) => {
     proxy.on("error", intellisearchProxyOnError as (...args: unknown[]) => void);
+  },
+};
+
+function adPlatformProxyOnError(err: Error, _req: IncomingMessage, res: ServerResponse | undefined) {
+  console.error("[vite proxy /api/ad-platform]", err.message);
+  if (!res || res.writableEnded) return;
+  try {
+    res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(
+      JSON.stringify({
+        error:
+          "API AD-Hub (OAuth Meta/TikTok) offline. Na raiz: npm run intellisearch-api (porta 3041). Defina META_APP_SECRET / TIKTOK_APP_SECRET no .env.",
+      }),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+const adPlatformProxy = {
+  target: "http://127.0.0.1:3041",
+  changeOrigin: true,
+  configure: (proxy: { on: (ev: string, fn: (...args: unknown[]) => void) => void }) => {
+    proxy.on("error", adPlatformProxyOnError as (...args: unknown[]) => void);
   },
 };
 
@@ -41,14 +65,16 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
-    /** Backend Go (SerpAPI) em `backend/intellisearch` — `npm run intellisearch-api` na porta 3042. */
+    /** Backend Go (SerpAPI) em `backend/intellisearch` — `npm run intellisearch-api` na porta 3041. */
     proxy: {
       "/api/intellisearch": intellisearchProxy,
+      "/api/ad-platform": adPlatformProxy,
     },
   },
   preview: {
     proxy: {
       "/api/intellisearch": intellisearchProxy,
+      "/api/ad-platform": adPlatformProxy,
     },
   },
   resolve: {

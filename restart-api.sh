@@ -24,8 +24,8 @@ cd "$APP_DIR"
 [ -f "./${BIN_NAME}" ] || fail "Binario nao encontrado: ${APP_DIR}/${BIN_NAME}"
 chmod +x "./${BIN_NAME}"
 
-# Porta onde a API escuta (deve bater com main.go e public/api/intellisearch/proxy.php — predef. 3042)
-PORT="3042"
+# Porta onde a API escuta (deve bater com main.go e public/api/intellisearch/proxy.php — predef. 3041)
+PORT="3041"
 if [ -f ".env" ]; then
   line="$(grep -E '^[[:space:]]*PORT[[:space:]]*=' .env 2>/dev/null | tail -n 1 || true)"
   if [ -n "${line:-}" ]; then
@@ -74,7 +74,7 @@ pids_listening_on_tcp_port() {
 
 tcp_port_in_use() {
   local p="$1"
-  # NÃO usar grep cego em ":PORT" sobre ss -tlnp — no jailshell a linha users:(...,pid=3042,...)
+  # NÃO usar grep cego em ":PORT" sobre ss -tlnp — no jailshell a linha users:(...,pid=IGUAL_À_PORTA,...)
   # pode coincidir com a porta e manter a porta "ocupada" para sempre.
   if command -v ss >/dev/null 2>&1; then
     if ss -ltnH "sport = :${p}" 2>/dev/null | grep -q .; then

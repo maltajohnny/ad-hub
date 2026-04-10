@@ -19,12 +19,12 @@ cd '${REMOTE_DIR}'
 pkill -9 -f 'apps/minha-api/api' 2>/dev/null || true
 if command -v fuser >/dev/null 2>&1; then
   fuser -k "${REMOTE_DIR}/api" 2>/dev/null || true
-  fuser -k 3042/tcp 2>/dev/null || true
   fuser -k 3041/tcp 2>/dev/null || true
+  fuser -k 3042/tcp 2>/dev/null || true
 fi
 sleep 2
 ./restart-api.sh
-echo '--- ping 3042 ---'
-curl -sS -m 15 http://127.0.0.1:3042/api/intellisearch/ping || echo '(curl 3042 falhou)'
+echo '--- ping 3041 ---'
+curl -sS -m 15 http://127.0.0.1:3041/api/intellisearch/ping || echo '(curl 3041 falhou)'
 echo
 EOF
