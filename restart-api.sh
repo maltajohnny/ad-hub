@@ -121,12 +121,11 @@ kill_holders_of_binary() {
 free_port() {
   local p="$1"
   local i pid pids
-  # Jailshell/HostGator: muitas vezes lsof/ss não mostram o PID; fuser na porta TCP costuma libertar na mesma.
-  if command -v fuser >/dev/null 2>&1; then
-    fuser -k "${p}/tcp" 2>/dev/null || true
-    sleep 2
-  fi
-  for i in 1 2 3 4 5 6 7 8; do
+  # Jailshell/HostGator: lsof/ss muitas vezes não mostram PID; fuser na porta TCP + kills repetidos.
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if command -v fuser >/dev/null 2>&1; then
+      fuser -k "${p}/tcp" 2>/dev/null || true
+    fi
     kill_matching_exe_in_proc
     kill_holders_of_binary
     pids="$(pids_listening_on_tcp_port "$p" || true)"
@@ -134,22 +133,13 @@ free_port() {
       [ -z "${pid:-}" ] && continue
       kill -9 "$pid" 2>/dev/null || true
     done
-    if command -v fuser >/dev/null 2>&1; then
-      fuser -k "${p}/tcp" 2>/dev/null || true
-    fi
     sleep 1
     if ! tcp_port_in_use "$p"; then
       return 0
     fi
   done
-  kill_matching_exe_in_proc
-  kill_holders_of_binary
-  sleep 2
-  if tcp_port_in_use "$p"; then
-    log "AVISO: porta ${p} ainda parece ocupada; tente no SSH: fuser -k ${APP_DIR}/${BIN_NAME} 2>/dev/null; lsof -iTCP:${p} -sTCP:LISTEN"
-  else
-    return 0
-  fi
+  log "AVISO: porta ${p} ainda ocupada após 20 tentativas; SSH: fuser -k ${p}/tcp; fuser -k ${APP_DIR}/${BIN_NAME}"
+  return 1
 }
 
 log "Parando processo anterior (se existir)..."
@@ -183,7 +173,14 @@ kill_holders_of_binary
 sleep 1
 
 log "Liberando porta ${PORT} (evita 'address already in use')..."
-free_port "$PORT"
+if ! free_port "$PORT"; then
+  log "Segunda sequência de libertação da porta ${PORT}..."
+  sleep 3
+  free_port "$PORT" || fail "Porta ${PORT} ainda ocupada. Por SSH: cd ${APP_DIR} && fuser -k ${PORT}/tcp && fuser -k ./${BIN_NAME} && sleep 2 && ./restart-api.sh"
+fi
+if tcp_port_in_use "$PORT"; then
+  fail "Porta ${PORT} ainda em uso (verificação final). Não vou iniciar outro processo."
+fi
 
 if pgrep -f "$MATCH_EXPR" >/dev/null 2>&1; then
   fail "Nao foi possivel parar o processo antigo."
