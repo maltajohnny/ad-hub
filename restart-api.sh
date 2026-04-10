@@ -121,6 +121,11 @@ kill_holders_of_binary() {
 free_port() {
   local p="$1"
   local i pid pids
+  # Jailshell/HostGator: muitas vezes lsof/ss não mostram o PID; fuser na porta TCP costuma libertar na mesma.
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -k "${p}/tcp" 2>/dev/null || true
+    sleep 2
+  fi
   for i in 1 2 3 4 5 6 7 8; do
     kill_matching_exe_in_proc
     kill_holders_of_binary
