@@ -20,6 +20,7 @@ import {
   adHubLogin,
   adHubPatchUser,
   getAdHubToken,
+  isServerAuthLive,
   setAdHubToken,
   useServerAuth,
 } from "@/lib/adhubAuthApi";
@@ -400,18 +401,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     void adHubAuthPing().then((p) => setServerAuthPing(p ?? null));
   }, []);
 
-  const refreshRegistryFromServer = useCallback(async () => {
-    if (!serverAuth) return;
-    const tok = getAdHubToken();
-    if (!tok) return;
-    const ent = await adHubFetchRegistry(tok);
-    if (!ent) return;
-    const next: Record<string, RegistryEntry> = {};
-    for (const [k, v] of Object.entries(ent)) {
-      next[k] = { password: SERVER_MANAGED_PASSWORD, user: v.user };
-    }
-    syncRegistry(next);
-  }, [serverAuth, syncRegistry]);
+  /** Atualiza ping ao voltar ao separador e de minuto a minuto (deploy / .env podem ficar prontos depois). */
+  useEffect(() => {
+    const refresh = () => {
+      void adHubAuthPing().then((p) => setServerAuthPing(p ?? null));
+    };
+    const id = window.setInterval(refresh, 60_000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+
+  const refreshRegistryFromServer = useCallback(
+    async (opts?: { force?: boolean }) => {
+      if (!opts?.force && !serverAuth) return;
+      const tok = getAdHubToken();
+      if (!tok) return;
+      const ent = await adHubFetchRegistry(tok);
+      if (!ent) return;
+      const next: Record<string, RegistryEntry> = {};
+      for (const [k, v] of Object.entries(ent)) {
+        next[k] = { password: SERVER_MANAGED_PASSWORD, user: v.user };
+      }
+      syncRegistry(next);
+    },
+    [serverAuth, syncRegistry],
+  );
 
   useEffect(() => {
     if (!serverAuth) return;
@@ -795,12 +815,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
           : { mustChangePassword: false as const }),
       };
-      if (serverAuth) {
+
+      const ping = await adHubAuthPing();
+      setServerAuthPing(ping ?? null);
+      const live = isServerAuthLive(ping ?? null);
+
+      if (live) {
         const tok = getAdHubToken();
-        if (!tok) return { ok: false, error: "Sessão sem token — inicie sessão novamente." };
+        if (!tok) {
+          return {
+            ok: false,
+            error:
+              "O servidor de contas está ativo, mas esta sessão não tem token do servidor. Termine sessão e inicie novamente (com a mesma palavra-passe) para gravar na base de dados.",
+          };
+        }
         const created = await adHubCreateUser(tok, u, input.password, newUser);
         if (!created.ok) return { ok: false, error: created.error ?? "Não foi possível criar utilizador no servidor." };
-        await refreshRegistryFromServer();
+        await refreshRegistryFromServer({ force: true });
         return { ok: true };
       }
       const nextReg = {
@@ -810,7 +841,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       syncRegistry(nextReg);
       return { ok: true, savedLocalOnly: true };
     },
-    [user, registry, syncRegistry, serverAuth, refreshRegistryFromServer],
+    [user, registry, syncRegistry, refreshRegistryFromServer],
   );
 
   const setBoardSettingsPermission = useCallback(

@@ -38,8 +38,13 @@ export async function adHubAuthPing(): Promise<{ ok: boolean; db: boolean; jwt_r
   }
 }
 
-export function useServerAuth(ping: { db: boolean; jwt_ready: boolean } | null): boolean {
+/** Resposta válida do ping com MySQL ligado e JWT configurado no servidor. */
+export function isServerAuthLive(ping: { db: boolean; jwt_ready: boolean } | null | undefined): boolean {
   return Boolean(ping?.db && ping?.jwt_ready);
+}
+
+export function useServerAuth(ping: { db: boolean; jwt_ready: boolean } | null): boolean {
+  return isServerAuthLive(ping);
 }
 
 export async function adHubLogin(username: string, password: string): Promise<{ token: string; user: User } | null> {

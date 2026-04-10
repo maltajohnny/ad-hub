@@ -21,11 +21,30 @@ func isPlatformOperatorLogin(loginKey string) bool {
 	return k == "admin" || k == "qtrafficadmin"
 }
 
+// Nome da base no MYSQL_DSN (ex.: johnn315_db-adhub-prd) para confirmar no DBeaver que é a mesma.
+func mysqlDatabaseNameFromDSN() string {
+	dsn := strings.TrimSpace(os.Getenv("MYSQL_DSN"))
+	if dsn == "" {
+		return ""
+	}
+	if idx := strings.Index(dsn, ")/"); idx >= 0 {
+		rest := dsn[idx+2:]
+		if j := strings.Index(rest, "?"); j >= 0 {
+			rest = rest[:j]
+		}
+		return strings.TrimSpace(rest)
+	}
+	return ""
+}
+
 // AdHubPing GET /api/ad-hub/auth/ping
 func AdHubPing(c *fiber.Ctx) error {
 	out := fiber.Map{"ok": true, "service": "ad-hub-auth"}
 	if db.DB != nil {
 		out["db"] = true
+		if name := mysqlDatabaseNameFromDSN(); name != "" {
+			out["database"] = name
+		}
 	} else {
 		out["db"] = false
 	}
