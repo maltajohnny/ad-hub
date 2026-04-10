@@ -95,8 +95,8 @@ const Usuarios = () => {
   const userListForModules = platformOp ? usersOnlyForModules : usersOnly;
 
   const [username, setUsername] = useState("");
-  /** Só para operador da plataforma: organização do novo utilizador (`__none__` = login sem sufixo). */
-  const [createOrganizationId, setCreateOrganizationId] = useState<string>("__none__");
+  /** Só para operador da plataforma: organização obrigatória do novo utilizador. */
+  const [createOrganizationId, setCreateOrganizationId] = useState<string>(() => listTenants()[0]?.id ?? "");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -127,11 +127,7 @@ const Usuarios = () => {
   const [showEditPw, setShowEditPw] = useState(false);
   /** `__none__` = sem organização (conta plataforma) */
   const [editOrganizationId, setEditOrganizationId] = useState<string>("__none__");
-  const createOrgId = platformOp
-    ? createOrganizationId !== "__none__"
-      ? createOrganizationId
-      : null
-    : scopeTenantId;
+  const createOrgId = platformOp ? createOrganizationId || null : scopeTenantId;
   const createOrgSlug = createOrgId ? getTenantById(createOrgId)?.slug ?? null : null;
 
   const stripOrgSuffix = (login: string) => {
@@ -244,12 +240,28 @@ const Usuarios = () => {
   };
 
   const handleCreate = async () => {
+    if (!username.trim()) {
+      toast.error("Informe o nome de utilizador.");
+      return;
+    }
+    if (!name.trim()) {
+      toast.error("Informe o nome exibido do usuário.");
+      return;
+    }
+    if (!password.trim()) {
+      toast.error("Informe a senha inicial.");
+      return;
+    }
     if (!isStrongPassword(password)) {
       setInitialPasswordError(true);
       return;
     }
     if (!email.trim()) {
       toast.error("Informe o e-mail do usuário.");
+      return;
+    }
+    if (platformOp && createOrganizationId === "__none__") {
+      toast.error("Selecione a organização do novo utilizador.");
       return;
     }
     if (!platformOp && !scopeTenantId) {
@@ -267,11 +279,7 @@ const Usuarios = () => {
       canDeleteBoardCards: isAdminRole ? undefined : grantDeleteBoardCards,
       allowedModules:
         !isAdminRole && mods.length < APP_MODULES.length ? mods : undefined,
-      scopeTenantId: platformOp
-        ? createOrganizationId !== "__none__"
-          ? createOrganizationId
-          : null
-        : scopeTenantId,
+      scopeTenantId: platformOp ? createOrganizationId || null : scopeTenantId,
     });
     if (!res.ok) {
       toast.error(res.error || "Não foi possível criar o usuário.");
@@ -331,13 +339,14 @@ const Usuarios = () => {
         <div className="grid sm:grid-cols-2 gap-3">
           {platformOp && (
             <div className="space-y-1.5 sm:col-span-2">
-              <label className="text-xs text-muted-foreground">Organização do novo utilizador</label>
+              <label className="text-xs text-muted-foreground">
+                Organização do novo utilizador <span className="text-destructive">*</span>
+              </label>
               <Select value={createOrganizationId} onValueChange={setCreateOrganizationId}>
                 <SelectTrigger className="h-10 bg-secondary/50 border-border/50">
                   <SelectValue placeholder="Organização" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">Nenhuma (login global, sem .organização)</SelectItem>
                   {listTenants().map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.displayName}
@@ -349,11 +358,8 @@ const Usuarios = () => {
           )}
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">
-              {platformOp && createOrganizationId !== "__none__"
-                ? "Nome de utilizador (sem sufixo)"
-                : platformOp
-                  ? "Login"
-                  : "Nome de utilizador"}
+              {platformOp ? "Nome de utilizador (sem sufixo)" : "Nome de utilizador"}{" "}
+              <span className="text-destructive">*</span>
             </label>
             <Input
               value={username}
@@ -370,14 +376,12 @@ const Usuarios = () => {
                   {buildOrgScopedLogin(username, createOrgSlug) ?? "…"}
                 </span>
               </p>
-            ) : platformOp ? (
-              <p className="text-[11px] text-muted-foreground">
-                Sem organização selecionada: o login fica exatamente como digitado.
-              </p>
             ) : null}
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Senha inicial</label>
+            <label className="text-xs text-muted-foreground">
+              Senha inicial <span className="text-destructive">*</span>
+            </label>
             <div className="relative">
               <Input
                 type={showInitialPassword ? "text" : "password"}
@@ -413,11 +417,15 @@ const Usuarios = () => {
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Nome exibido</label>
+            <label className="text-xs text-muted-foreground">
+              Nome exibido <span className="text-destructive">*</span>
+            </label>
             <Input value={name} onChange={(e) => setName(e.target.value)} className="bg-secondary/50 border-border/50 h-10" />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">E-mail</label>
+            <label className="text-xs text-muted-foreground">
+              E-mail <span className="text-destructive">*</span>
+            </label>
             <Input
               type="email"
               value={email}
