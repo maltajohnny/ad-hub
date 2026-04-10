@@ -1,4 +1,4 @@
-import { clientsData } from "@/pages/Clientes";
+import { clientsData } from "@/data/clientsCatalog";
 
 const STORAGE_V1 = "norter_media_management_v1";
 const STORAGE_V2 = "norter_media_management_v2";
@@ -123,6 +123,8 @@ export type MediaClient = {
   id: string;
   name: string;
   email: string;
+  /** Cadastro feito pelo módulo Clientes (OAuth / alias). */
+  registrationSource?: "clientes";
   platformIds: MediaPlatformId[];
   platformConnections: Partial<Record<MediaPlatformId, MediaClientPlatformConnection>>;
   /** Permissões concedidas pelo cliente (API / Business Manager). */
@@ -133,6 +135,8 @@ export type MediaClient = {
   selectedAdAccountIdsByPlatform?: Partial<Record<MediaPlatformId, string[]>>;
   /** Última sincronização de investimento, ROI e CPA. */
   performanceMetrics?: ClientPerformanceMetrics;
+  /** `api` = valores vindos da Graph / TikTok API (não recalcular a partir de campanhas locais). */
+  performanceMetricsSource?: "campaigns" | "api";
   createdAt: string;
 };
 
@@ -508,7 +512,10 @@ export function getOrgMediaState(orgId: string): OrgMediaState {
       ...existing,
       mediaClients: existing.mediaClients.map((c) => ({
         ...c,
-        performanceMetrics: c.performanceMetrics ?? computeMetricsFromCampaigns(existing, c.id),
+        performanceMetrics:
+          c.performanceMetricsSource === "api" && c.performanceMetrics
+            ? c.performanceMetrics
+            : (c.performanceMetrics ?? computeMetricsFromCampaigns(existing, c.id)),
         managedAdAccountsByPlatform: c.managedAdAccountsByPlatform ?? {},
         selectedAdAccountIdsByPlatform: c.selectedAdAccountIdsByPlatform ?? {},
       })),
@@ -529,6 +536,10 @@ export function saveOrgMediaState(state: OrgMediaState): void {
 /** Recalcula investimento, ROI e CPA a partir das campanhas sincronizadas (substituível por resposta da API). */
 export function syncClientPerformanceMetrics(orgId: string, mediaClientId: string): OrgMediaState {
   const state = getOrgMediaState(orgId);
+  const client = state.mediaClients.find((x) => x.id === mediaClientId);
+  if (client?.performanceMetricsSource === "api") {
+    return state;
+  }
   const metrics = computeMetricsFromCampaigns(state, mediaClientId);
   const mediaClients = state.mediaClients.map((c) =>
     c.id === mediaClientId ? { ...c, performanceMetrics: metrics } : c,
@@ -564,6 +575,7 @@ export function appendAudit(orgId: string, actor: string, action: string, detail
 export function addMediaClient(
   orgId: string,
   input: Pick<MediaClient, "name" | "email" | "platformIds">,
+  options?: { registrationSource?: MediaClient["registrationSource"] },
 ): OrgMediaState {
   const state = getOrgMediaState(orgId);
   const apiAccessByPlatform: Partial<Record<MediaPlatformId, boolean>> = {};
@@ -576,6 +588,7 @@ export function addMediaClient(
     id: crypto.randomUUID(),
     name: input.name.trim(),
     email: input.email.trim(),
+    registrationSource: options?.registrationSource,
     platformIds: input.platformIds,
     platformConnections,
     apiAccessByPlatform,
@@ -586,6 +599,17 @@ export function addMediaClient(
   const next = { ...state, mediaClients: [...state.mediaClients, client] };
   saveOrgMediaState(next);
   return syncClientPerformanceMetrics(orgId, client.id);
+}
+
+/** Remove cliente de mídia e referências em campanhas/criativos (ex.: cancelar cadastro OAuth em curso). */
+export function removeMediaClient(orgId: string, mediaClientId: string): OrgMediaState {
+  const state = getOrgMediaState(orgId);
+  const mediaClients = state.mediaClients.filter((c) => c.id !== mediaClientId);
+  const campaigns = state.campaigns.filter((c) => c.mediaClientId !== mediaClientId);
+  const creatives = state.creatives.filter((c) => c.mediaClientId !== mediaClientId);
+  const next = { ...state, mediaClients, campaigns, creatives, updatedAt: nowIso() };
+  saveOrgMediaState(next);
+  return next;
 }
 
 export function setMediaClientApiAccess(
@@ -642,6 +666,7 @@ export function authorizeClientPlatformViaApp(
   orgId: string,
   mediaClientId: string,
   platformId: MediaPlatformId,
+  options?: { deferAccountSelection?: boolean },
 ): OrgMediaState {
   setMediaClientConnectionStatus(orgId, mediaClientId, platformId, "syncing");
   const labelByPlatform: Record<MediaPlatformId, string> = {
@@ -659,7 +684,9 @@ export function authorizeClientPlatformViaApp(
     lastError: undefined,
   });
   setPlatformIntegrationConnected(orgId, platformId, true);
-  mergeManagedAdAccountsAfterOAuth(orgId, mediaClientId, platformId);
+  mergeManagedAdAccountsAfterOAuth(orgId, mediaClientId, platformId, {
+    selectAllNew: !options?.deferAccountSelection,
+  });
   return syncClientPerformanceMetrics(orgId, mediaClientId);
 }
 
@@ -667,6 +694,7 @@ function mergeManagedAdAccountsAfterOAuth(
   orgId: string,
   mediaClientId: string,
   platformId: MediaPlatformId,
+  opts?: { selectAllNew?: boolean },
 ): OrgMediaState {
   const state = getOrgMediaState(orgId);
   const client = state.mediaClients.find((c) => c.id === mediaClientId);
@@ -681,7 +709,14 @@ function mergeManagedAdAccountsAfterOAuth(
     if (!merged.some((m) => m.externalId === d.externalId)) merged.push(d);
   }
   const existingSel = client.selectedAdAccountIdsByPlatform?.[platformId];
-  const nextSelected = existingSel?.length ? existingSel : discovered.map((d) => d.externalId);
+  const selectAll = opts?.selectAllNew !== false;
+  const nextSelected = selectAll
+    ? existingSel?.length
+      ? existingSel
+      : discovered.map((d) => d.externalId)
+    : existingSel?.length
+      ? existingSel
+      : [];
   const mediaClients = state.mediaClients.map((c) => {
     if (c.id !== mediaClientId) return c;
     return {
@@ -717,6 +752,78 @@ export function setSelectedAdAccountsForPlatform(
   const next = { ...state, mediaClients, updatedAt: nowIso() };
   saveOrgMediaState(next);
   return syncClientPerformanceMetrics(orgId, mediaClientId);
+}
+
+/**
+ * Ligação real pós-OAuth: contas descobertas na API, seleção do gestor e KPIs agregados (Graph / TikTok via backend).
+ */
+/** Atualiza só KPIs no cliente (ex.: botão «Atualizar métricas» com dados do servidor). */
+export function updateClientApiPerformanceMetrics(
+  orgId: string,
+  mediaClientId: string,
+  metrics: ClientPerformanceMetrics,
+): OrgMediaState {
+  const state = getOrgMediaState(orgId);
+  const mediaClients = state.mediaClients.map((c) =>
+    c.id === mediaClientId
+      ? { ...c, performanceMetrics: metrics, performanceMetricsSource: "api" as const }
+      : c,
+  );
+  const next = { ...state, mediaClients, updatedAt: nowIso() };
+  saveOrgMediaState(next);
+  return next;
+}
+
+export function applyExternalPlatformLink(
+  orgId: string,
+  mediaClientId: string,
+  platformId: MediaPlatformId,
+  input: {
+    accounts: ManagedAdAccountRef[];
+    selectedExternalIds: string[];
+    metrics: ClientPerformanceMetrics;
+    connectionLabel?: string;
+  },
+): OrgMediaState {
+  const state = getOrgMediaState(orgId);
+  const labelByPlatform: Record<MediaPlatformId, string> = {
+    "meta-ads": "Meta Ads (API)",
+    "instagram-ads": "Instagram Ads (API)",
+    "google-ads": "Google Ads (API)",
+    "tiktok-ads": "TikTok Ads (API)",
+  };
+  const primaryId = input.selectedExternalIds[0];
+  const mediaClients = state.mediaClients.map((c) => {
+    if (c.id !== mediaClientId) return c;
+    const prevConn = c.platformConnections[platformId] ?? defaultPlatformConnection(platformId);
+    return {
+      ...c,
+      managedAdAccountsByPlatform: { ...c.managedAdAccountsByPlatform, [platformId]: input.accounts },
+      selectedAdAccountIdsByPlatform: { ...c.selectedAdAccountIdsByPlatform, [platformId]: input.selectedExternalIds },
+      platformConnections: {
+        ...c.platformConnections,
+        [platformId]: {
+          ...prevConn,
+          platformId,
+          status: "connected" as MediaConnectionStatus,
+          provider: "oauth-official",
+          externalAccountLabel: input.connectionLabel ?? labelByPlatform[platformId],
+          externalAccountId: primaryId,
+          connectedAt: prevConn.connectedAt ?? nowIso(),
+          lastSyncAt: nowIso(),
+          updatedAt: nowIso(),
+          lastError: undefined,
+        },
+      },
+      apiAccessByPlatform: { ...c.apiAccessByPlatform, [platformId]: true },
+      performanceMetrics: input.metrics,
+      performanceMetricsSource: "api" as const,
+    };
+  });
+  const next = { ...state, mediaClients, updatedAt: nowIso() };
+  saveOrgMediaState(next);
+  setPlatformIntegrationConnected(orgId, platformId, true);
+  return getOrgMediaState(orgId);
 }
 
 export function upsertManager(orgId: string, manager: MediaManager): OrgMediaState {

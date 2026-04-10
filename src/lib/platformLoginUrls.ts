@@ -2,6 +2,16 @@ import type { MediaPlatformId } from "@/lib/mediaManagementStore";
 
 const FB_API_VERSION = "v21.0";
 
+/** App Meta registada no `.env` do front (`VITE_META_APP_ID`). */
+export function isMetaOAuthConfigured(): boolean {
+  return Boolean(import.meta.env.VITE_META_APP_ID?.trim());
+}
+
+/** App TikTok registada no `.env` do front (`VITE_TIKTOK_APP_ID`). */
+export function isTikTokOAuthConfigured(): boolean {
+  return Boolean(import.meta.env.VITE_TIKTOK_APP_ID?.trim());
+}
+
 /** Estado opaco para o redirect OAuth (em produção, assinar no servidor). */
 export function encodeOAuthState(payload: { orgId: string; mediaClientId: string | null; platformId: MediaPlatformId }): string {
   return btoa(
@@ -81,6 +91,29 @@ export function getConfiguredRedirectUri(): string {
   if (explicit) return explicit;
   if (typeof window !== "undefined") {
     return `${window.location.origin}/gestao-midias`;
+  }
+  return "";
+}
+
+/** Redirect OAuth ao voltar para a lista de Clientes (registe o mesmo URI na consola de cada rede). */
+export function getClientesOAuthRedirectUri(): string {
+  const explicit = import.meta.env.VITE_CLIENTES_OAUTH_REDIRECT_URI?.trim();
+  if (explicit) return explicit;
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/clientes`;
+  }
+  return "";
+}
+
+/**
+ * Redirect OAuth para fluxo em popup (a janela principal da plataforma não navega).
+ * Registe este URI exato na Meta e na TikTok (ex.: https://seu-dominio/oauth/popup-callback).
+ */
+export function getOAuthPopupRedirectUri(): string {
+  const explicit = import.meta.env.VITE_OAUTH_POPUP_REDIRECT_URI?.trim();
+  if (explicit) return explicit;
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/oauth/popup-callback`;
   }
   return "";
 }

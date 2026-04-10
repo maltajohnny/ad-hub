@@ -20,6 +20,7 @@ import IaRoi from "@/pages/IaRoi";
 import Configuracoes from "@/pages/Configuracoes";
 import Usuarios from "@/pages/Usuarios";
 import NotFound from "./pages/NotFound";
+import OAuthPopupCallback from "@/pages/OAuthPopupCallback";
 import Landing from "@/pages/Landing";
 import Organizacoes from "@/pages/Organizacoes";
 import IntelliSearchLayout from "@/pages/IntelliSearch";
@@ -151,6 +152,7 @@ const App = () => (
                     <Route path="/landing" element={<Navigate to="/" replace />} />
                     <Route path="/login" element={<LoginRoute />} />
                     <Route path="/t/:tenantSlug/login" element={<LoginRoute />} />
+                    <Route path="/oauth/popup-callback" element={<OAuthPopupCallback />} />
 
                     <Route element={<ProtectedLayout />}>
                       <Route path="/dashboard" element={<Dashboard />} />

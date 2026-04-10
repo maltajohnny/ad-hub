@@ -1,4 +1,5 @@
-import { clientsData, getClientDetail, type Client } from "@/pages/Clientes";
+import { clientsData, type Client } from "@/data/clientsCatalog";
+import { getClientDetail } from "@/lib/clientDemoDetail";
 import {
   loadClientIntegration,
   markScheduleSentForDay,

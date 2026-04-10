@@ -27,6 +27,14 @@ interface ImportMetaEnv {
   readonly VITE_META_APP_ID?: string;
   /** Opcional: override do redirect OAuth (predef.: origin + /gestao-midias). */
   readonly VITE_PLATFORM_OAUTH_REDIRECT_URI?: string;
+  /** Redirect OAuth específico do módulo Clientes (predef.: origin + /clientes). */
+  readonly VITE_CLIENTES_OAUTH_REDIRECT_URI?: string;
+  /** Redirect OAuth para popup (predef.: origin + /oauth/popup-callback). Meta/TikTok não permitem login dentro de iframe. */
+  readonly VITE_OAUTH_POPUP_REDIRECT_URI?: string;
+  /** Base da API com rotas /api/ad-platform (vazio = mesmo origin + proxy Vite). */
+  readonly VITE_ADHUB_API_URL?: string;
+  /** Igual a ADHUB_INTERNAL_API_KEY no servidor quando proteger rotas /api/ad-platform/persist/*. */
+  readonly VITE_ADHUB_INTERNAL_API_KEY?: string;
   readonly VITE_TIKTOK_APP_ID?: string;
   readonly VITE_GOOGLE_OAUTH_CLIENT_ID?: string;
   /**

@@ -1,13 +1,31 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTheme } from "next-themes";
+import { clientsData, type Client } from "@/data/clientsCatalog";
+export type { Client } from "@/data/clientsCatalog";
+export { clientsData };
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTenant } from "@/contexts/TenantContext";
+import { ClientesRegisterModal } from "@/components/ClientesRegisterModal";
+import {
+  authorizeClientPlatformViaApp,
+  appendAudit,
+  getOrgMediaState,
+  MEDIA_PLATFORMS,
+  setSelectedAdAccountsForPlatform,
+  updateClientApiPerformanceMetrics,
+  type MediaClient,
+  type MediaPlatformId,
+} from "@/lib/mediaManagementStore";
+import { decodeOAuthState } from "@/lib/platformLoginUrls";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -45,6 +63,8 @@ import {
   ChevronDown,
   ListChecks,
   XCircle,
+  UserPlus,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { buildTrafficPerformanceReport, sendManualReport } from "@/services/slackReportService";
@@ -78,6 +98,11 @@ import {
   Cell,
   Legend,
 } from "recharts";
+import type { AiDecision } from "@/lib/clientDemoDetail";
+import { refreshPersistedClientMetrics } from "@/services/adPlatformApi";
+
+export type { ClientDetail, RoiTableRow, AiDecision } from "@/lib/clientDemoDetail";
+export { getClientDetail } from "@/lib/clientDemoDetail";
 
 type SortKey = "cpa_desc" | "cpa_asc" | "name_asc";
 
@@ -87,31 +112,6 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "name_asc", label: "Nome (A–Z)" },
 ];
 
-export type Client = {
-  id: number;
-  name: string;
-  segment: string;
-  email: string;
-  cnpj: string;
-  spend: string;
-  spendNumeric: number;
-  roi: string;
-  status: "Ativo" | "Pausado";
-  platforms: string[];
-  budgetLabel: string;
-  leads: number;
-  conversions: number;
-  leadsChangePct: number;
-  convChangePct: number;
-  impressions: number;
-  clicks: number;
-  cpa: number;
-  cpc: number;
-  cpm: number;
-  ctr: number;
-  aiInsight: string;
-};
-
 const CH_META = "#3B82F6";
 const CH_GOOGLE = "#10B981";
 const CH_INSTA = "#DB2777";
@@ -119,18 +119,65 @@ const CH_INSTA = "#DB2777";
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-type AiDecision = {
-  at: string;
-  title: string;
-  from: string;
-  to: string;
-  amountLabel: string;
-  reason: string;
-  /** Gerada ao enviar instrução no painel (vs. entradas simuladas em getClientDetail). */
-  fromInstruction?: boolean;
-  /** autônomo = aplicado ao enviar; supervisionado = após o gestor aprovar. */
-  instructionMode?: "autonomous" | "supervised";
-};
+function findLinkedMediaForDemo(demo: Client, mediaClients: MediaClient[]): MediaClient | undefined {
+  return mediaClients.find((m) => m.name === demo.name && m.email === demo.email);
+}
+
+function syntheticClientFromMedia(mc: MediaClient): Client {
+  const m = mc.performanceMetrics;
+  const spend = m?.totalSpend ?? 0;
+  const labels = (mc.platformIds ?? []).map(
+    (pid) => MEDIA_PLATFORMS.find((p) => p.id === pid)?.label ?? pid,
+  );
+  return {
+    id: -1,
+    name: mc.name,
+    segment: mc.registrationSource === "clientes" ? "Cadastro OAuth" : "Gestão de mídias",
+    email: mc.email,
+    cnpj: "—",
+    spend: brl(spend),
+    spendNumeric: spend,
+    roi: m && Number.isFinite(m.roi) ? `${Math.max(0, m.roi).toFixed(1)}x` : "—",
+    status: "Ativo",
+    platforms: labels.length ? labels : ["—"],
+    budgetLabel: "—",
+    leads: 0,
+    conversions: 0,
+    leadsChangePct: 0,
+    convChangePct: 0,
+    impressions: 0,
+    clicks: 0,
+    cpa: m?.cpa ?? 0,
+    cpc: 0,
+    cpm: 0,
+    ctr: 0,
+    aiInsight: "Cliente ligado via módulo de cadastro / gestão de mídias. Métricas agregadas das campanhas sincronizadas.",
+  };
+}
+
+const CONNECTION_DOT_PLATFORMS: { id: MediaPlatformId; label: string }[] = [
+  { id: "meta-ads", label: "Facebook / Meta" },
+  { id: "instagram-ads", label: "Instagram" },
+  { id: "tiktok-ads", label: "TikTok" },
+  { id: "google-ads", label: "Google Ads" },
+];
+
+function platformConnectionDot(
+  linked: MediaClient | undefined,
+  platformId: MediaPlatformId,
+): { ok: boolean; label: string } {
+  const pids = linked?.platformIds;
+  if (!pids?.includes(platformId)) {
+    return { ok: false, label: "Plataforma não associada a este cliente" };
+  }
+  const conns = linked?.platformConnections ?? {};
+  const st = conns[platformId]?.status ?? "not-connected";
+  const ok = st === "connected" || st === "syncing";
+  return {
+    ok,
+    label: ok ? "Ligado" : st === "expired" ? "Sessão expirada" : st === "error" ? "Erro" : "Desligado",
+  };
+}
 
 /** Instrução em modo supervisionado aguardando aprovação (por cliente). */
 export type SupervisedPendingItem = {
@@ -139,106 +186,6 @@ export type SupervisedPendingItem = {
   result: CampaignOptimizationResult;
   createdAt: string;
 };
-
-export type RoiTableRow = {
-  channel: "Meta Ads" | "Google Ads" | "Instagram Ads";
-  invested: number;
-  leads: number;
-  conversions: number;
-  revenue: number;
-  cpl: number;
-  roiMult: number;
-};
-
-export type ClientDetail = {
-  decisions: AiDecision[];
-  performance: { month: string; meta: number; google: number; instagram: number }[];
-  budgetCurrent: { meta: number; google: number; instagram: number };
-  budgetRecommended: { meta: number; google: number; instagram: number };
-  roiRows: RoiTableRow[];
-};
-
-export function getClientDetail(c: Client): ClientDetail {
-  const k = c.id * 7;
-  const performance = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"].map((month, i) => ({
-    month,
-    meta: 45 + (k % 20) + i * 8,
-    google: 38 + (k % 15) + i * 7,
-    instagram: 32 + (k % 18) + i * 6,
-  }));
-
-  const decisions: AiDecision[] = [
-    {
-      at: "2026-04-03 09:15",
-      title: `Redistribuição de verba do Instagram para Google Ads`,
-      from: "Instagram Ads",
-      to: "Google Ads",
-      amountLabel: "R$ 2.000",
-      reason: `${c.name.split(" ")[0]}: Instagram Ads apresenta CPL 2× acima da média do mix. Google Search mantém CPA estável — realocação sugere melhor uso de verba.`,
-    },
-    {
-      at: "2026-04-01 14:22",
-      title: "Ajuste de lance em campanhas de conversão Meta",
-      from: "Meta Ads",
-      to: "Meta Ads",
-      amountLabel: "—",
-      reason: "CPA em leque de remarketing acima do alvo; redução de 8% no lance máximo até estabilizar frequência.",
-    },
-    {
-      at: "2026-03-28 11:40",
-      title: "Pausa temporária em criativo com CTR abaixo da média",
-      from: "Meta Ads",
-      to: "—",
-      amountLabel: "—",
-      reason: "CTR 40% abaixo do conjunto de anúncios vencedores; pausa evita gasto em impressões de baixa qualidade.",
-    },
-  ];
-
-  const t = c.spendNumeric / 1000;
-  const roiRows: RoiTableRow[] = [
-    {
-      channel: "Meta Ads",
-      invested: Math.round(t * 420),
-      leads: Math.round(c.leads * 0.42),
-      conversions: Math.round(c.conversions * 0.45),
-      revenue: Math.round(t * 1800),
-      cpl: c.cpa * 0.92,
-      roiMult: 3.2 + (k % 10) / 10,
-    },
-    {
-      channel: "Google Ads",
-      invested: Math.round(t * 380),
-      leads: Math.round(c.leads * 0.35),
-      conversions: Math.round(c.conversions * 0.38),
-      revenue: Math.round(t * 1650),
-      cpl: c.cpa * 0.88,
-      roiMult: 3.6 + (k % 8) / 10,
-    },
-    {
-      channel: "Instagram Ads",
-      invested: Math.round(t * 200),
-      leads: Math.round(c.leads * 0.23),
-      conversions: Math.round(c.conversions * 0.17),
-      revenue: Math.round(t * 890),
-      cpl: c.cpa * 1.15,
-      roiMult: 2.8 + (k % 12) / 10,
-    },
-  ];
-
-  const budgetCurrent = {
-    meta: 38 + (k % 8),
-    google: 35 + (k % 10),
-    instagram: 100 - (38 + (k % 8)) - (35 + (k % 10)),
-  };
-  const budgetRecommended = {
-    meta: Math.min(45, budgetCurrent.meta + 4),
-    google: Math.min(48, budgetCurrent.google + 6),
-    instagram: 100,
-  };
-  budgetRecommended.instagram = 100 - budgetRecommended.meta - budgetRecommended.google;
-
-  return { decisions, performance, budgetCurrent, budgetRecommended, roiRows };
-}
 
 function formatDecisionAtNow(): string {
   const d = new Date();
@@ -323,209 +270,6 @@ const PROCESS_STEPS = [
   { n: "06", title: "Execução & Monitoramento", desc: "Alterações aplicadas e acompanhamento contínuo.", icon: CircleCheck, active: false, border: "border-border", iconBg: "text-muted-foreground", badge: null },
 ];
 
-export const clientsData: Client[] = [
-  {
-    id: 1,
-    name: "Tech Solutions",
-    segment: "SaaS",
-    email: "contato@techflow.com.br",
-    cnpj: "12.345.678/0001-90",
-    spend: "R$ 18.500",
-    spendNumeric: 18500,
-    roi: "4.2x",
-    status: "Ativo",
-    platforms: ["Meta", "Google"],
-    budgetLabel: "R$ 20.000/mês",
-    leads: 420,
-    conversions: 352,
-    leadsChangePct: 5.2,
-    convChangePct: -2.1,
-    impressions: 890000,
-    clicks: 12200,
-    cpa: 52.6,
-    cpc: 1.52,
-    cpm: 20.8,
-    ctr: 1.37,
-    aiInsight:
-      "CPL em Meta Ads subiu 12% na última semana; Google Search mantém melhor CPA. Sugestão: realocar 10% do orçamento de Display para Search de marca.",
-  },
-  {
-    id: 2,
-    name: "Bella Cosméticos",
-    segment: "Beleza & Estética",
-    email: "marketing@bellacosmeticos.com.br",
-    cnpj: "45.678.901/0001-23",
-    spend: "R$ 12.300",
-    spendNumeric: 12300,
-    roi: "3.8x",
-    status: "Ativo",
-    platforms: ["Instagram", "Meta"],
-    budgetLabel: "R$ 25.000/mês",
-    leads: 685,
-    conversions: 278,
-    leadsChangePct: 8.2,
-    convChangePct: -3.2,
-    impressions: 2100000,
-    clicks: 98000,
-    cpa: 44.2,
-    cpc: 0.13,
-    cpm: 5.86,
-    ctr: 4.67,
-    aiInsight:
-      "Instagram apresenta CPL 2× acima da média do mix; Reels convertem melhor que Feed. Priorizar criativos de vídeo e testar orçamento em campanhas de conversão no Meta.",
-  },
-  {
-    id: 3,
-    name: "AutoPrime Veículos",
-    segment: "Automotivo",
-    email: "ads@autoprime.com.br",
-    cnpj: "33.222.111/0001-44",
-    spend: "R$ 25.000",
-    spendNumeric: 25000,
-    roi: "2.9x",
-    status: "Ativo",
-    platforms: ["Google", "Meta"],
-    budgetLabel: "R$ 30.000/mês",
-    leads: 310,
-    conversions: 198,
-    leadsChangePct: -1.4,
-    convChangePct: 4.5,
-    impressions: 1200000,
-    clicks: 18500,
-    cpa: 63.1,
-    cpc: 1.35,
-    cpm: 20.83,
-    ctr: 1.54,
-    aiInsight:
-      "CPA elevado em campanhas de remarketing no Google; audiências estão amplas demais. Refinar exclusões e reduzir lances em palavras genéricas.",
-  },
-  {
-    id: 4,
-    name: "FitLife Solutions",
-    segment: "Fitness",
-    email: "growth@fitlife.com.br",
-    cnpj: "11.222.333/0001-55",
-    spend: "R$ 5.800",
-    spendNumeric: 5800,
-    roi: "5.1x",
-    status: "Ativo",
-    platforms: ["Instagram"],
-    budgetLabel: "R$ 8.000/mês",
-    leads: 290,
-    conversions: 142,
-    leadsChangePct: 12.0,
-    convChangePct: 6.1,
-    impressions: 450000,
-    clicks: 11200,
-    cpa: 40.8,
-    cpc: 0.52,
-    cpm: 12.89,
-    ctr: 2.49,
-    aiInsight:
-      "Performance estável; CTR acima da média do setor. Oportunidade de escalar orçamento em anúncios de carrossel com prova social.",
-  },
-  {
-    id: 5,
-    name: "Gourmet Express",
-    segment: "Food Delivery",
-    email: "parceiros@gourmetexpress.com.br",
-    cnpj: "98.765.432/0001-10",
-    spend: "R$ 8.200",
-    spendNumeric: 8200,
-    roi: "3.5x",
-    status: "Pausado",
-    platforms: ["Meta", "Instagram"],
-    budgetLabel: "R$ 10.000/mês",
-    leads: 180,
-    conversions: 95,
-    leadsChangePct: -4.0,
-    convChangePct: -8.0,
-    impressions: 620000,
-    clicks: 7400,
-    cpa: 86.3,
-    cpc: 1.11,
-    cpm: 13.23,
-    ctr: 1.19,
-    aiInsight:
-      "Campanhas pausadas com CPA histórico alto em horários de pico. Ao retomar, limitar entrega a raio menor e horários com melhor histórico de pedidos.",
-  },
-  {
-    id: 6,
-    name: "EduSmart Cursos",
-    segment: "Educação",
-    email: "media@edusmart.com.br",
-    cnpj: "55.444.333/0001-66",
-    spend: "R$ 15.700",
-    spendNumeric: 15700,
-    roi: "4.6x",
-    status: "Ativo",
-    platforms: ["Google", "Meta", "Instagram"],
-    budgetLabel: "R$ 18.000/mês",
-    leads: 512,
-    conversions: 401,
-    leadsChangePct: 3.1,
-    convChangePct: 1.8,
-    impressions: 1500000,
-    clicks: 42000,
-    cpa: 39.2,
-    cpc: 0.37,
-    cpm: 10.47,
-    ctr: 2.8,
-    aiInsight:
-      "Mix equilibrado entre canais; YouTube no Google puxa volume com CPA aceitável. Testar anúncios de resposta no Meta para leads quentes.",
-  },
-  {
-    id: 7,
-    name: "Habitat Imóveis",
-    segment: "Imobiliário",
-    email: "digital@habitatimoveis.com.br",
-    cnpj: "22.333.444/0001-77",
-    spend: "R$ 22.400",
-    spendNumeric: 22400,
-    roi: "2.7x",
-    status: "Ativo",
-    platforms: ["Google", "Meta"],
-    budgetLabel: "R$ 28.000/mês",
-    leads: 198,
-    conversions: 112,
-    leadsChangePct: -2.0,
-    convChangePct: -5.5,
-    impressions: 980000,
-    clicks: 8800,
-    cpa: 200.0,
-    cpc: 2.55,
-    cpm: 22.86,
-    ctr: 0.9,
-    aiInsight:
-      "CPA muito alto vs. ticket médio do lead. Revisar qualificação de formulário e excluir palavras de aluguel nas campanhas de compra.",
-  },
-  {
-    id: 8,
-    name: "PetHappy Store",
-    segment: "Pet Shop",
-    email: "loja@pethappy.com.br",
-    cnpj: "77.888.999/0001-88",
-    spend: "R$ 6.900",
-    spendNumeric: 6900,
-    roi: "4.0x",
-    status: "Ativo",
-    platforms: ["Instagram", "Meta"],
-    budgetLabel: "R$ 9.500/mês",
-    leads: 340,
-    conversions: 205,
-    leadsChangePct: 6.5,
-    convChangePct: 4.2,
-    impressions: 720000,
-    clicks: 15100,
-    cpa: 33.7,
-    cpc: 0.46,
-    cpm: 9.58,
-    ctr: 2.1,
-    aiInsight:
-      "Instagram com melhor ROAS no catálogo; considerar Advantage+ Shopping com orçamento mínimo estável por 14 dias para o algoritmo aprender.",
-  },
-];
-
 function MetricHint({ label, hint }: { label: string; hint: string }) {
   return (
     <Tooltip>
@@ -552,6 +296,7 @@ function ClientExpandedPanel({
   supervisedPendingApprovals,
   onSupervisedPendingChange,
   embeddedInModal = false,
+  showSettingsButton = true,
 }: {
   client: Client;
   onOpenSettings: () => void;
@@ -561,6 +306,7 @@ function ClientExpandedPanel({
   ) => void;
   /** Quando true, omite cabeçalho duplicado (título vem do Dialog) e usa wrapper sem Card. */
   embeddedInModal?: boolean;
+  showSettingsButton?: boolean;
 }) {
   const detail = useMemo(() => getClientDetail(client), [client.id]);
   const [aiMode, setAiMode] = useState<"autonomous" | "supervised">("autonomous");
@@ -747,19 +493,21 @@ function ClientExpandedPanel({
             embeddedInModal ? "w-full justify-start sm:justify-end" : "mt-2 sm:mt-0",
           )}
         >
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 border-border/60"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenSettings();
-            }}
-          >
-            <Settings className="h-3.5 w-3.5" />
-            Settings
-          </Button>
+          {showSettingsButton ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 border-border/60"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenSettings();
+              }}
+            >
+              <Settings className="h-3.5 w-3.5" />
+              Settings
+            </Button>
+          ) : null}
           <Button
             type="button"
             size="sm"
@@ -1457,15 +1205,17 @@ function ClientExpandedPanel({
 
 const Clientes = () => {
   const { user, canUserSeeClient } = useAuth();
+  const { tenant } = useTenant();
   const [searchParams, setSearchParams] = useSearchParams();
   const [filterName, setFilterName] = useState("");
   const [filterEmail, setFilterEmail] = useState("");
   const [filterCnpj, setFilterCnpj] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("cpa_desc");
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedMediaId, setExpandedMediaId] = useState<string | null>(null);
   const [settingsClientId, setSettingsClientId] = useState<number | null>(null);
-  /** Aprovações supervisionadas pendentes por cliente (persistem ao recolher o card). */
-  const [pendingByClientId, setPendingByClientId] = useState<Record<number, SupervisedPendingItem[]>>({});
+  /** Pendentes por chave `demo-{id}` ou `media-{uuid}`. */
+  const [pendingByDetailKey, setPendingByDetailKey] = useState<Record<string, SupervisedPendingItem[]>>({});
   /** Busca única no mobile (nome, e-mail ou CNPJ). */
   const [filterQuick, setFilterQuick] = useState("");
   /** Filtros avançados no mobile: estado local (evita saltos de largura do Collapsible Radix). */
@@ -1474,6 +1224,20 @@ const Clientes = () => {
   const [isLg, setIsLg] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches,
   );
+  const [mediaTick, setMediaTick] = useState(0);
+  const [metricsRefreshingId, setMetricsRefreshingId] = useState<string | null>(null);
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [accountPickerOpen, setAccountPickerOpen] = useState(false);
+  const [accountPickerContext, setAccountPickerContext] = useState<{
+    mediaClientId: string;
+    platformId: MediaPlatformId;
+    aliasName: string;
+  } | null>(null);
+  const [accountPickerSelectedIds, setAccountPickerSelectedIds] = useState<string[]>([]);
+
+  const orgId = user?.organizationId ?? tenant?.id ?? null;
+
+  const orgMediaState = useMemo(() => (orgId ? getOrgMediaState(orgId) : null), [orgId, mediaTick]);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
@@ -1483,6 +1247,13 @@ const Clientes = () => {
   }, []);
 
   useEffect(() => {
+    const exM = searchParams.get("expandMedia");
+    if (exM) {
+      setExpandedMediaId(exM);
+      setExpandedId(null);
+      return;
+    }
+    setExpandedMediaId(null);
     const ex = searchParams.get("expand");
     if (!ex) {
       setExpandedId(null);
@@ -1500,6 +1271,70 @@ const Clientes = () => {
     }
     setExpandedId(id);
   }, [searchParams, canUserSeeClient, setSearchParams]);
+
+  /** OAuth redirect de volta a /clientes — troca de código (em produção no servidor) e escolha de conta. */
+  useEffect(() => {
+    const code = searchParams.get("code");
+    const stateParam = searchParams.get("state");
+    const err = searchParams.get("error");
+    const errDesc = searchParams.get("error_description");
+
+    const clearParams = () => {
+      const next = new URLSearchParams(searchParams);
+      next.delete("code");
+      next.delete("state");
+      next.delete("error");
+      next.delete("error_description");
+      next.delete("error_reason");
+      setSearchParams(next, { replace: true });
+    };
+
+    if (err) {
+      toast.error(errDesc ?? err ?? "Autorização cancelada ou falhou.");
+      clearParams();
+      return;
+    }
+
+    if (!code || !stateParam || !orgId) return;
+
+    const decoded = decodeOAuthState(stateParam);
+    if (!decoded || decoded.orgId !== orgId || !decoded.mediaClientId) {
+      clearParams();
+      return;
+    }
+
+    authorizeClientPlatformViaApp(orgId, decoded.mediaClientId, decoded.platformId, {
+      deferAccountSelection: true,
+    });
+    appendAudit(
+      orgId,
+      user?.username ?? "—",
+      "Clientes — OAuth concluído",
+      `${decoded.platformId} · cliente ${decoded.mediaClientId}`,
+    );
+
+    const st = getOrgMediaState(orgId);
+    const mc = st.mediaClients.find((c) => c.id === decoded.mediaClientId);
+    const accounts = mc?.managedAdAccountsByPlatform?.[decoded.platformId] ?? [];
+
+    setMediaTick((t) => t + 1);
+    clearParams();
+
+    if (accounts.length > 1) {
+      setAccountPickerContext({
+        mediaClientId: decoded.mediaClientId,
+        platformId: decoded.platformId,
+        aliasName: mc?.name ?? "Cliente",
+      });
+      setAccountPickerSelectedIds([accounts[0]!.externalId]);
+      setAccountPickerOpen(true);
+    } else {
+      toast.success(
+        "Cliente ligado à plataforma. Em produção o backend troca o código por tokens e mantém a sessão.",
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- callback OAuth na query
+  }, [searchParams, orgId, setSearchParams, user?.username]);
 
   const filtered = useMemo(() => {
     const n = (s: string) => s.replace(/\D/g, "");
@@ -1535,6 +1370,28 @@ const Clientes = () => {
     });
   }, [isLg, filterQuick, filterName, filterEmail, filterCnpj, sortBy]);
 
+  const filteredCadastroClients = useMemo(() => {
+    if (!orgMediaState) return [];
+    let list = orgMediaState.mediaClients.filter((c) => c.registrationSource === "clientes");
+    if (!isLg && filterQuick.trim()) {
+      const q = filterQuick.trim().toLowerCase();
+      list = list.filter((c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q));
+    } else {
+      const qName = filterName.trim().toLowerCase();
+      const qEmail = filterEmail.trim().toLowerCase();
+      if (qName) list = list.filter((c) => c.name.toLowerCase().includes(qName));
+      if (qEmail) list = list.filter((c) => c.email.toLowerCase().includes(qEmail));
+    }
+    return [...list].sort((a, b) => {
+      switch (sortBy) {
+        case "name_asc":
+          return a.name.localeCompare(b.name, "pt-BR");
+        default:
+          return a.name.localeCompare(b.name, "pt-BR");
+      }
+    });
+  }, [orgMediaState, isLg, filterQuick, filterName, filterEmail, sortBy]);
+
   const visibleClients = useMemo(() => {
     if (user?.role === "admin") return filtered;
     return filtered.filter((c) => canUserSeeClient(c.id));
@@ -1550,49 +1407,138 @@ const Clientes = () => {
     }
   }, [visibleClients, expandedId, setSearchParams]);
 
-  const selected =
+  useEffect(() => {
+    if (
+      expandedMediaId !== null &&
+      orgMediaState &&
+      !orgMediaState.mediaClients.some((c) => c.id === expandedMediaId)
+    ) {
+      setExpandedMediaId(null);
+      setSearchParams((p) => {
+        p.delete("expandMedia");
+        return p;
+      });
+    }
+  }, [orgMediaState, expandedMediaId, setSearchParams]);
+
+  const selectedDemo =
     expandedId !== null && canUserSeeClient(expandedId)
       ? clientsData.find((c) => c.id === expandedId)
       : undefined;
+  const selectedMediaClient =
+    expandedMediaId && orgMediaState
+      ? orgMediaState.mediaClients.find((c) => c.id === expandedMediaId)
+      : undefined;
+  const selectedPanelClient =
+    selectedDemo ?? (selectedMediaClient ? syntheticClientFromMedia(selectedMediaClient) : undefined);
+
+  const detailKey = selectedMediaClient
+    ? `media-${selectedMediaClient.id}`
+    : selectedDemo
+      ? `demo-${selectedDemo.id}`
+      : "";
 
   const toggleCard = (id: number) => {
     setExpandedId((prev) => {
       const next = prev === id ? null : id;
-      if (next === null) {
-        setSearchParams((p) => {
+      setSearchParams((p) => {
+        if (next === null) {
           p.delete("expand");
-          return p;
-        });
-      } else {
-        setSearchParams((p) => {
+        } else {
           p.set("expand", String(next));
-          return p;
-        });
-      }
+          p.delete("expandMedia");
+        }
+        return p;
+      });
+      if (next !== null) setExpandedMediaId(null);
+      return next;
+    });
+  };
+
+  const toggleMediaCard = (mediaId: string) => {
+    setExpandedMediaId((prev) => {
+      const next = prev === mediaId ? null : mediaId;
+      setSearchParams((p) => {
+        if (next === null) {
+          p.delete("expandMedia");
+        } else {
+          p.set("expandMedia", next);
+          p.delete("expand");
+        }
+        return p;
+      });
+      if (next !== null) setExpandedId(null);
       return next;
     });
   };
 
   const closeClientDetail = useCallback(() => {
     setExpandedId(null);
+    setExpandedMediaId(null);
     setSearchParams((p) => {
       p.delete("expand");
+      p.delete("expandMedia");
       return p;
     });
   }, [setSearchParams]);
 
+  const handleRefreshCadastroMetricsFromServer = useCallback(
+    async (e: React.MouseEvent, mc: MediaClient) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!orgId) return;
+      setMetricsRefreshingId(mc.id);
+      try {
+        const m = await refreshPersistedClientMetrics(orgId, mc.id);
+        updateClientApiPerformanceMetrics(orgId, mc.id, {
+          totalSpend: m.total_spend,
+          roi: m.roi,
+          cpa: m.cpa,
+          currency: m.currency,
+          syncedAt: m.synced_at,
+        });
+        setMediaTick((t) => t + 1);
+        appendAudit(orgId, user?.username ?? "—", "Clientes — métricas (servidor)", mc.name);
+        toast.success("Métricas atualizadas a partir da API / base de dados.");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const low = msg.toLowerCase();
+        if (low.includes("não configurada") || low.includes("503") || low.includes("mysql")) {
+          toast.message("Configure MYSQL_DSN na API e execute a migração SQL para persistir tokens.");
+        } else if (low.includes("nenhum token") || low.includes("404") || low.includes("não persistido")) {
+          toast.message("Sem tokens na base para este cliente. Faça OAuth com MySQL ativo.");
+        } else {
+          toast.error(msg.length > 160 ? `${msg.slice(0, 157)}…` : msg);
+        }
+      } finally {
+        setMetricsRefreshingId(null);
+      }
+    },
+    [orgId, user?.username],
+  );
+
   return (
     <div className="min-w-0 w-full max-w-full space-y-5 animate-fade-in">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-display font-bold">Clientes</h1>
           <p className="text-muted-foreground text-sm mt-1">
             {user?.role === "admin"
-              ? `${visibleClients.length} de ${clientsData.length} clientes`
-              : `${visibleClients.length} cliente(s) atribuído(s) a você`}
-            {sortBy === "cpa_desc" && user?.role === "admin" && " · CPA mais alto primeiro"}
+              ? `${visibleClients.length + filteredCadastroClients.length} cliente(s) visíveis (${clientsData.length} demo + cadastros OAuth)`
+              : `${visibleClients.length + filteredCadastroClients.length} cliente(s) atribuído(s) / cadastrados`}
+            {sortBy === "cpa_desc" && user?.role === "admin" && " · CPA mais alto primeiro (lista demo)"}
           </p>
         </div>
+        {orgId ? (
+          <Button
+            type="button"
+            className="shrink-0 gap-2 w-full sm:w-auto"
+            onClick={() => setRegisterOpen(true)}
+          >
+            <UserPlus className="h-4 w-4" />
+            Cadastrar cliente
+          </Button>
+        ) : null}
       </div>
 
       <Card className="glass-card min-w-0 w-full max-w-full overflow-x-hidden border-border/60 p-2.5 sm:p-5">
@@ -1805,7 +1751,7 @@ const Clientes = () => {
         </div>
       </Card>
 
-      {user?.role !== "admin" && visibleClients.length === 0 && (
+      {user?.role !== "admin" && visibleClients.length === 0 && filteredCadastroClients.length === 0 && (
         <Card className="glass-card p-6 text-center text-muted-foreground text-sm">
           Nenhum cliente atribuído à sua conta. Peça a um administrador para vincular clientes ao seu usuário em{" "}
           <span className="text-foreground font-medium">Usuários</span>.
@@ -1815,10 +1761,11 @@ const Clientes = () => {
       <div className="grid min-w-0 w-full max-w-full grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-4 xl:grid-cols-4">
         {visibleClients.map((client) => {
           const open = expandedId === client.id;
-          const pendingApprovalCount = pendingByClientId[client.id]?.length ?? 0;
+          const pendingApprovalCount = pendingByDetailKey[`demo-${client.id}`]?.length ?? 0;
+          const linked = orgMediaState ? findLinkedMediaForDemo(client, orgMediaState.mediaClients) : undefined;
           return (
             <Card
-              key={client.id}
+              key={`demo-${client.id}`}
               role="button"
               tabIndex={0}
               onClick={() => toggleCard(client.id)}
@@ -1829,7 +1776,7 @@ const Clientes = () => {
                 }
               }}
               className={cn(
-                "glass-card min-w-0 max-w-full p-3 hover:glow-primary transition-all cursor-pointer group text-left sm:p-5",
+                "relative glass-card min-w-0 max-w-full p-3 hover:glow-primary transition-all cursor-pointer group text-left sm:p-5",
                 open && "ring-2 ring-primary/50 glow-primary",
               )}
             >
@@ -1857,6 +1804,28 @@ const Clientes = () => {
                 >
                   {client.status}
                 </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 mb-2" title="Ligação OAuth por plataforma (Gestão de Mídias)">
+                {CONNECTION_DOT_PLATFORMS.map(({ id: pid, label: plab }) => {
+                  const { ok, label } = platformConnectionDot(linked, pid);
+                  return (
+                    <Tooltip key={pid}>
+                      <TooltipTrigger asChild>
+                        <span
+                          className={cn(
+                            "h-2.5 w-2.5 rounded-full shrink-0 border border-background/80",
+                            ok ? "bg-success" : "bg-destructive",
+                          )}
+                          aria-label={`${plab}: ${label}`}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs max-w-[220px]">
+                        <span className="font-medium">{plab}</span> — {label}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
               </div>
 
               <div className="space-y-2 mb-3">
@@ -1919,50 +1888,198 @@ const Clientes = () => {
             </Card>
           );
         })}
+
+        {filteredCadastroClients.map((mc) => {
+          const open = expandedMediaId === mc.id;
+          const pendingApprovalCount = pendingByDetailKey[`media-${mc.id}`]?.length ?? 0;
+          const spendVal = mc.performanceMetrics?.totalSpend ?? 0;
+          const roiVal =
+            mc.performanceMetrics && Number.isFinite(mc.performanceMetrics.roi)
+              ? `${Math.max(0, mc.performanceMetrics.roi).toFixed(1)}x`
+              : "—";
+          return (
+            <Card
+              key={mc.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => toggleMediaCard(mc.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleMediaCard(mc.id);
+                }
+              }}
+              className={cn(
+                "relative glass-card min-w-0 max-w-full p-3 hover:glow-primary transition-all cursor-pointer group text-left sm:p-5 ring-1 ring-primary/15",
+                open && "ring-2 ring-primary/50 glow-primary",
+              )}
+            >
+              <div className="absolute top-3 right-3 z-10">
+                <FavoriteButton
+                  id={`client-media:${mc.id}`}
+                  kind="client"
+                  title={mc.name}
+                  path={`/clientes?expandMedia=${mc.id}`}
+                  subtitle="Cadastro OAuth"
+                  size="sm"
+                />
+              </div>
+              <div className="flex items-start justify-between mb-3 pr-8 gap-2">
+                <div className="min-w-0">
+                  <h3 className="font-display font-semibold text-sm group-hover:gradient-brand-text transition-colors">
+                    {mc.name}
+                  </h3>
+                  <span className="text-xs text-muted-foreground">Alias · OAuth</span>
+                </div>
+                <Badge variant="outline" className="text-[9px] shrink-0 border-primary/40">
+                  Cadastro
+                </Badge>
+              </div>
+
+              <div className="flex items-center gap-1.5 mb-2">
+                {CONNECTION_DOT_PLATFORMS.map(({ id: pid, label: plab }) => {
+                  const { ok, label } = platformConnectionDot(mc, pid);
+                  return (
+                    <Tooltip key={pid}>
+                      <TooltipTrigger asChild>
+                        <span
+                          className={cn(
+                            "h-2.5 w-2.5 rounded-full shrink-0 border border-background/80",
+                            ok ? "bg-success" : "bg-destructive",
+                          )}
+                          aria-label={`${plab}: ${label}`}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs max-w-[220px]">
+                        <span className="font-medium">{plab}</span> — {label}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-2 mb-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <DollarSign size={14} className="text-primary shrink-0" />
+                  <span className="text-muted-foreground">Investimento (sync):</span>
+                  <span className="font-medium ml-auto tabular-nums">{brl(spendVal)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <TrendingUp size={14} className="text-success shrink-0" />
+                  <span className="text-muted-foreground">ROI (est.):</span>
+                  <span className="font-medium ml-auto">{roiVal}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-sm pt-0.5">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Target size={14} className="text-destructive/90 shrink-0" />
+                    CPA (est.):
+                  </span>
+                  <span className="font-semibold text-destructive/90 tabular-nums">
+                    {brl(mc.performanceMetrics?.cpa ?? 0)}
+                  </span>
+                </div>
+                {orgId &&
+                  mc.platformIds.some(
+                    (pid) =>
+                      mc.platformConnections[pid]?.status === "connected" ||
+                      mc.platformConnections[pid]?.status === "syncing",
+                  ) && (
+                    <div className="pt-1">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 w-full gap-2 text-xs border border-border/60"
+                        disabled={metricsRefreshingId === mc.id}
+                        onClick={(e) => void handleRefreshCadastroMetricsFromServer(e, mc)}
+                      >
+                        {metricsRefreshingId === mc.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                        Atualizar métricas (servidor)
+                      </Button>
+                    </div>
+                  )}
+                {pendingApprovalCount > 0 && (
+                  <div className="flex items-center justify-between gap-2 text-sm pt-0.5">
+                    <span className="text-muted-foreground flex items-center gap-1.5 min-w-0">
+                      <ListChecks size={14} className="text-amber-500 shrink-0" />
+                      <span className="truncate">Aprovações pendentes:</span>
+                    </span>
+                    <span className="shrink-0 flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-amber-950 shadow-sm tabular-nums">
+                      {pendingApprovalCount}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-1.5 flex-wrap">
+                {mc.platformIds.map((pid) => (
+                  <span
+                    key={pid}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground"
+                  >
+                    {MEDIA_PLATFORMS.find((p) => p.id === pid)?.label ?? pid}
+                  </span>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-3 pt-2 border-t border-border/40">
+                Cadastrado neste módulo · ligue contas em Gestão de Mídias ou aqui (OAuth)
+              </p>
+            </Card>
+          );
+        })}
       </div>
 
       <Dialog
-        open={Boolean(selected)}
+        open={Boolean(selectedPanelClient)}
         onOpenChange={(open) => {
           if (!open) closeClientDetail();
         }}
       >
         <DialogContent
-          key={selected?.id}
+          key={`${selectedDemo?.id ?? ""}-${selectedMediaClient?.id ?? ""}`}
           className="flex max-h-[min(92dvh,56rem)] w-[calc(100vw-1.25rem)] max-w-[min(96vw,72rem)] flex-col gap-0 overflow-hidden border-border/60 p-0 sm:max-h-[min(90dvh,56rem)]"
         >
-          {selected && (
+          {selectedPanelClient && (
             <>
               <DialogHeader className="shrink-0 space-y-1.5 border-b border-border/60 px-4 py-3 pr-14 text-left">
-                <DialogTitle className="font-display text-lg leading-snug sm:text-xl">{selected.name}</DialogTitle>
+                <DialogTitle className="font-display text-lg leading-snug sm:text-xl">
+                  {selectedPanelClient.name}
+                </DialogTitle>
                 <DialogDescription asChild>
                   <div className="text-left text-xs leading-relaxed text-muted-foreground sm:text-sm">
                     <p>
-                      {selected.segment} · Budget: {selected.budgetLabel}
+                      {selectedPanelClient.segment} · Budget: {selectedPanelClient.budgetLabel}
                     </p>
                     <p className="mt-0.5">
-                      {selected.email} · CNPJ {selected.cnpj}
+                      {selectedPanelClient.email} · CNPJ {selectedPanelClient.cnpj}
                     </p>
                   </div>
                 </DialogDescription>
               </DialogHeader>
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-4">
                 <ClientExpandedPanel
-                  key={selected.id}
-                  client={selected}
+                  key={detailKey}
+                  client={selectedPanelClient}
                   embeddedInModal
-                  onOpenSettings={() => setSettingsClientId(selected.id)}
-                  supervisedPendingApprovals={pendingByClientId[selected.id] ?? []}
+                  showSettingsButton={Boolean(selectedDemo)}
+                  onOpenSettings={() => {
+                    if (selectedDemo) setSettingsClientId(selectedDemo.id);
+                  }}
+                  supervisedPendingApprovals={detailKey ? pendingByDetailKey[detailKey] ?? [] : []}
                   onSupervisedPendingChange={(updater) => {
-                    setPendingByClientId((m) => {
-                      const id = selected.id;
-                      const prev = m[id] ?? [];
+                    if (!detailKey) return;
+                    setPendingByDetailKey((m) => {
+                      const prev = m[detailKey] ?? [];
                       const next = typeof updater === "function" ? updater(prev) : updater;
                       if (next.length === 0) {
-                        const { [id]: _, ...rest } = m;
+                        const { [detailKey]: _, ...rest } = m;
                         return rest;
                       }
-                      return { ...m, [id]: next };
+                      return { ...m, [detailKey]: next };
                     });
                   }}
                 />
@@ -1976,6 +2093,95 @@ const Clientes = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={accountPickerOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setAccountPickerOpen(false);
+            setAccountPickerContext(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md border-border/60">
+          <DialogHeader>
+            <DialogTitle className="font-display">Qual conta associar ao alias?</DialogTitle>
+            <DialogDescription className="text-left text-sm">
+              O mesmo login pode gerir várias contas de anúncios. Selecione a(s) que correspondem a{" "}
+              <strong>{accountPickerContext?.aliasName}</strong> nesta plataforma.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {accountPickerContext &&
+              orgId &&
+              (getOrgMediaState(orgId).mediaClients.find((c) => c.id === accountPickerContext.mediaClientId)?.managedAdAccountsByPlatform?.[
+                accountPickerContext.platformId
+              ] ?? []
+              ).map((acc) => (
+                <label
+                  key={acc.externalId}
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/60 p-3 hover:bg-muted/40"
+                >
+                  <Checkbox
+                    checked={accountPickerSelectedIds.includes(acc.externalId)}
+                    onCheckedChange={(c) => {
+                      const on = c === true;
+                      setAccountPickerSelectedIds((prev) => {
+                        if (on) return [...new Set([...prev, acc.externalId])];
+                        return prev.filter((x) => x !== acc.externalId);
+                      });
+                    }}
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{acc.name}</span>
+                    <span className="block text-[11px] text-muted-foreground font-mono truncate">{acc.externalId}</span>
+                  </span>
+                </label>
+              ))}
+          </div>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setAccountPickerOpen(false);
+                setAccountPickerContext(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={!orgId || !accountPickerContext || accountPickerSelectedIds.length === 0}
+              onClick={() => {
+                if (!orgId || !accountPickerContext) return;
+                setSelectedAdAccountsForPlatform(
+                  orgId,
+                  accountPickerContext.mediaClientId,
+                  accountPickerContext.platformId,
+                  accountPickerSelectedIds,
+                );
+                setMediaTick((t) => t + 1);
+                setAccountPickerOpen(false);
+                setAccountPickerContext(null);
+                toast.success("Conta(s) associadas ao alias.");
+              }}
+            >
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {orgId && user ? (
+        <ClientesRegisterModal
+          open={registerOpen}
+          onOpenChange={setRegisterOpen}
+          orgId={orgId}
+          actorUsername={user.username}
+          onLinked={() => setMediaTick((t) => t + 1)}
+        />
+      ) : null}
 
       <ClientSettingsModal
         clientId={settingsClientId}
