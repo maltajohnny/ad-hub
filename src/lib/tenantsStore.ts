@@ -32,7 +32,9 @@ function migrateTenantModules(mods: AppModule[]): AppModule[] {
 }
 
 function withTenantDefaults(t: TenantRecord): TenantRecord {
-  if (t.slug === "qtraffic") {
+  const isBuiltInAdHub =
+    t.id === BUILTIN_QTRAFFIC_ID || t.slug === "qtraffic" || t.slug === "adhub";
+  if (isBuiltInAdHub) {
     const legacyName =
       t.displayName === "Orbix" ||
       t.displayName === "ORBIX" ||
@@ -47,6 +49,7 @@ function withTenantDefaults(t: TenantRecord): TenantRecord {
           : rawTitle;
     return {
       ...t,
+      slug: "adhub",
       displayName: legacyName ? "AD-HUB" : t.displayName,
       browserTabTitle: title ?? "AD-HUB — Move faster · Grow smarter",
     };
@@ -91,12 +94,12 @@ function ensureBuiltInTenants(list: TenantRecord[]): { list: TenantRecord[]; cha
     ];
     changed = true;
   }
-  if (!out.some((t) => t.slug === "qtraffic")) {
+  if (!out.some((t) => t.slug === "adhub")) {
     out = [
       ...out,
       withTenantDefaults({
         id: BUILTIN_QTRAFFIC_ID,
-        slug: "qtraffic",
+        slug: "adhub",
         displayName: "AD-HUB",
         logoDataUrl: null,
         enabledModules: [],

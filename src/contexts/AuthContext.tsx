@@ -819,9 +819,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const ping = await adHubAuthPing();
       setServerAuthPing(ping ?? null);
       const live = isServerAuthLive(ping ?? null);
+      const tok = getAdHubToken();
+      const shouldUseServer = live || serverAuth || Boolean(tok);
 
-      if (live) {
-        const tok = getAdHubToken();
+      if (shouldUseServer) {
         if (!tok) {
           return {
             ok: false,
@@ -841,7 +842,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       syncRegistry(nextReg);
       return { ok: true, savedLocalOnly: true };
     },
-    [user, registry, syncRegistry, refreshRegistryFromServer],
+    [user, registry, syncRegistry, refreshRegistryFromServer, serverAuth],
   );
 
   const setBoardSettingsPermission = useCallback(
