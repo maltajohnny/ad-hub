@@ -526,7 +526,7 @@ function SortableKanbanCard({
   /** Abre fluxo de exclusão com confirmação (só se o utilizador tiver permissão). */
   onRequestDelete?: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
     disabled: filterActive,
   });
@@ -537,7 +537,8 @@ function SortableKanbanCard({
 
   const currentColumnTitle = columns.find((c) => c.id === card.columnId)?.title ?? "—";
 
-  const hasTags = card.tags.length > 0;
+  const tags = card.tags ?? [];
+  const hasTags = tags.length > 0;
   const hasParent = Boolean(parent);
   const showMetaSection = hasTags || hasParent;
 
@@ -546,10 +547,8 @@ function SortableKanbanCard({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      {...listeners}
       className={cn(
         "touch-none rounded-lg outline-none",
-        filterActive ? "cursor-default" : "cursor-grab active:cursor-grabbing",
         isDragging && "z-50 opacity-0 pointer-events-none",
       )}
     >
@@ -560,13 +559,20 @@ function SortableKanbanCard({
         )}
       >
         <div className="flex gap-2 items-start p-3 pl-2.5">
-          <span
-            className="mt-0.5 shrink-0 text-muted-foreground/45 pointer-events-none"
-            aria-hidden
-            title=""
+          <button
+            type="button"
+            ref={setActivatorNodeRef}
+            {...listeners}
+            disabled={filterActive}
+            className={cn(
+              "mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground/45 transition-colors",
+              "hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              filterActive ? "cursor-default opacity-40" : "cursor-grab active:cursor-grabbing",
+            )}
+            aria-label={`Arrastar card #${card.workItemNumber}`}
           >
-            <GripVertical size={16} />
-          </span>
+            <GripVertical size={16} aria-hidden />
+          </button>
           <div className={cn("min-w-0 flex-1 space-y-2.5 pb-0 relative", onRequestDelete && "pr-8")}>
             {onRequestDelete && (
               <button
@@ -585,7 +591,6 @@ function SortableKanbanCard({
             <button
               type="button"
               onClick={onOpenDetail}
-              onPointerDown={blockDragStart}
               className="group block w-full min-w-0 text-left"
             >
               <p className="text-sm leading-snug text-foreground [text-wrap:pretty]">
@@ -653,7 +658,7 @@ function SortableKanbanCard({
           <div className="w-full border-t border-solid border-border/60">
             {hasTags && (
               <div className="flex flex-wrap gap-1.5 px-3 py-2.5">
-                {card.tags.map((t) => (
+                {tags.map((t) => (
                   <span
                     key={t}
                     className="rounded-full border border-border/55 bg-muted/35 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
@@ -806,6 +811,10 @@ const Board = () => {
 
   const [detailCardId, setDetailCardId] = useState<string | null>(null);
   const detailCard = detailCardId ? cardById(detailCardId) : undefined;
+
+  useEffect(() => {
+    if (detailCardId && !detailCard) setDetailCardId(null);
+  }, [detailCardId, detailCard]);
 
   const [detailEditField, setDetailEditField] = useState<DetailEditField>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -995,7 +1004,7 @@ const Board = () => {
 
   const allTags = useMemo(() => {
     const s = new Set<string>();
-    state.cards.forEach((c) => c.tags.forEach((t) => s.add(t)));
+    state.cards.forEach((c) => (c.tags ?? []).forEach((t) => s.add(t)));
     return [...s].sort((a, b) => a.localeCompare(b));
   }, [state.cards]);
 
@@ -1019,10 +1028,11 @@ const Board = () => {
         if (assigneeFilter !== "__unassigned" && card.assigneeUsername !== assigneeFilter) return false;
       }
       if (tagFilter.length) {
+        const cardTags = card.tags ?? [];
         if (tagFilterMode === "and") {
-          if (!tagFilter.every((t) => card.tags.includes(t))) return false;
+          if (!tagFilter.every((t) => cardTags.includes(t))) return false;
         } else {
-          if (!tagFilter.some((t) => card.tags.includes(t))) return false;
+          if (!tagFilter.some((t) => cardTags.includes(t))) return false;
         }
       }
       return true;
@@ -1537,11 +1547,12 @@ const Board = () => {
       setNewTagDraft("");
       setTagAddOpen(false);
       if (!t) return;
-      if (detailCard.tags.includes(t)) {
+      const existing = detailCard.tags ?? [];
+      if (existing.includes(t)) {
         toast.message("Esta tag já existe.");
         return;
       }
-      updateCardTags(detailCardId, [...detailCard.tags, t]);
+      updateCardTags(detailCardId, [...existing, t]);
       toast.success("Tag adicionada.");
     },
     [detailCardId, detailCard, updateCardTags],
@@ -1552,7 +1563,7 @@ const Board = () => {
       if (!detailCardId || !detailCard) return;
       updateCardTags(
         detailCardId,
-        detailCard.tags.filter((x) => x !== tag),
+        (detailCard.tags ?? []).filter((x) => x !== tag),
       );
     },
     [detailCardId, detailCard, updateCardTags],
@@ -2102,10 +2113,10 @@ const Board = () => {
                   <span className="text-xl font-bold tabular-nums text-primary">#{detailCard.workItemNumber}</span>
                   <span
                     className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 text-xs font-medium text-foreground"
-                    title={TYPE_SINGULAR[detailCard.type]}
+                    title={TYPE_SINGULAR[detailCard.type] ?? detailCard.type}
                   >
                     <BoardTypeFilterIcon type={detailCard.type} />
-                    {TYPE_SINGULAR[detailCard.type]}
+                    {TYPE_SINGULAR[detailCard.type] ?? detailCard.type}
                   </span>
                 </div>
                 <DialogTitle className="sr-only">
@@ -2198,7 +2209,7 @@ const Board = () => {
 
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
                       <span className="sr-only">Tags</span>
-                      {detailCard.tags.map((tag) => (
+                      {(detailCard.tags ?? []).map((tag) => (
                         <Badge
                           key={tag}
                           variant="secondary"

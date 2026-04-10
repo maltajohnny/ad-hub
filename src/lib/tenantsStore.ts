@@ -35,11 +35,14 @@ function withTenantDefaults(t: TenantRecord): TenantRecord {
   const isBuiltInAdHub =
     t.id === BUILTIN_QTRAFFIC_ID || t.slug === "qtraffic" || t.slug === "adhub";
   if (isBuiltInAdHub) {
+    const dn = t.displayName.trim();
+    const dnLower = dn.toLowerCase();
+    /** Nomes antigos da org principal (Orbix → Qtraffic → AD-HUB); dados em localStorage podem ainda dizer "Qtraffic". */
     const legacyName =
-      t.displayName === "Orbix" ||
-      t.displayName === "ORBIX" ||
-      t.displayName === "AD-Hub" ||
-      t.displayName === "AD-HUB";
+      dnLower === "orbix" ||
+      dnLower === "ad-hub" ||
+      dnLower === "qtraffic" ||
+      dn === "AD-HUB";
     const rawTitle = t.browserTabTitle;
     const title =
       rawTitle?.startsWith("AD-Hub —")

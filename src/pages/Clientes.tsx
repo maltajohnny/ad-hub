@@ -98,7 +98,7 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import type { AiDecision } from "@/lib/clientDemoDetail";
+import { getClientDetail, type AiDecision } from "@/lib/clientDemoDetail";
 import { refreshPersistedClientMetrics } from "@/services/adPlatformApi";
 
 export type { ClientDetail, RoiTableRow, AiDecision } from "@/lib/clientDemoDetail";
@@ -1246,32 +1246,6 @@ const Clientes = () => {
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  useEffect(() => {
-    const exM = searchParams.get("expandMedia");
-    if (exM) {
-      setExpandedMediaId(exM);
-      setExpandedId(null);
-      return;
-    }
-    setExpandedMediaId(null);
-    const ex = searchParams.get("expand");
-    if (!ex) {
-      setExpandedId(null);
-      return;
-    }
-    const id = parseInt(ex, 10);
-    if (Number.isNaN(id)) return;
-    if (!canUserSeeClient(id)) {
-      setExpandedId(null);
-      setSearchParams((p) => {
-        p.delete("expand");
-        return p;
-      });
-      return;
-    }
-    setExpandedId(id);
-  }, [searchParams, canUserSeeClient, setSearchParams]);
-
   /** OAuth redirect de volta a /clientes — troca de código (em produção no servidor) e escolha de conta. */
   useEffect(() => {
     const code = searchParams.get("code");
@@ -1396,6 +1370,34 @@ const Clientes = () => {
     if (user?.role === "admin") return filtered;
     return filtered.filter((c) => canUserSeeClient(c.id));
   }, [filtered, user?.role, canUserSeeClient]);
+
+  /** Sincroniza `?expand=` / `?expandMedia=` com o estado. Tem de usar `visibleClients`, não só `canUserSeeClient`:
+   * administradores e operadores da plataforma veem a grelha demo mas `canUserSeeClient` pode ser sempre false. */
+  useEffect(() => {
+    const exM = searchParams.get("expandMedia");
+    if (exM) {
+      setExpandedMediaId(exM);
+      setExpandedId(null);
+      return;
+    }
+    setExpandedMediaId(null);
+    const ex = searchParams.get("expand");
+    if (!ex) {
+      setExpandedId(null);
+      return;
+    }
+    const id = parseInt(ex, 10);
+    if (Number.isNaN(id)) return;
+    if (!visibleClients.some((c) => c.id === id)) {
+      setExpandedId(null);
+      setSearchParams((p) => {
+        p.delete("expand");
+        return p;
+      });
+      return;
+    }
+    setExpandedId(id);
+  }, [searchParams, visibleClients, setSearchParams]);
 
   useEffect(() => {
     if (expandedId !== null && !visibleClients.some((c) => c.id === expandedId)) {

@@ -13,7 +13,13 @@ SSH_KEY="${SSH_KEY:-$HOME/.ssh/ssh_access}"
 # Só esta identidade (+ sem agent) evita "Too many authentication failures".
 # Por defeito NÃO usamos BatchMode: se entrares com palavra-passe no ssh, o script também pode pedir na mesma sessão.
 # Para CI/automação só com chave: SSH_BATCH=1 ./deploy-hostgator.sh
-SSH_OPTS=( -o IdentitiesOnly=yes -o PubkeyAuthentication=yes -i "$SSH_KEY" )
+SSH_OPTS=(
+  -F /dev/null
+  -o IdentityAgent=none
+  -o IdentitiesOnly=yes
+  -o PubkeyAuthentication=yes
+  -i "$SSH_KEY"
+)
 if [[ "${SSH_BATCH:-0}" == "1" ]]; then
   SSH_OPTS+=( -o BatchMode=yes -o PreferredAuthentications=publickey )
 fi

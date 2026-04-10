@@ -117,6 +117,8 @@ function migrateLegacyIfNeeded(clientId: number): KanbanState | null {
       }
       return {
         ...c,
+        type: coerceWorkItemType(k.type),
+        tags: coerceTags(k.tags),
         workItemNumber: k.workItemNumber ?? 20001 + i,
         description: k.description ?? "",
         acceptanceCriteria: k.acceptanceCriteria ?? "",
@@ -175,6 +177,8 @@ function load(clientId: number): KanbanState {
       }
       return {
         ...c,
+        type: coerceWorkItemType(k.type),
+        tags: coerceTags(k.tags),
         workItemNumber: k.workItemNumber ?? 20001 + i,
         description: k.description ?? "",
         acceptanceCriteria: k.acceptanceCriteria ?? "",
@@ -206,6 +210,18 @@ function nextWorkItemNumber(clientId: number, cards: KanbanCard[]): number {
 
 function uid() {
   return `k_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+const WORK_ITEM_TYPES: readonly WorkItemType[] = ["epic", "feature", "user_story", "task"];
+
+function coerceWorkItemType(value: unknown): WorkItemType {
+  return WORK_ITEM_TYPES.includes(value as WorkItemType) ? (value as WorkItemType) : "task";
+}
+
+/** JSON antigo ou corrompido pode vir sem `tags` — evita crash ao abrir o card (`.map` / `.includes`). */
+function coerceTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((t): t is string => typeof t === "string");
 }
 
 function normalizeOrders(cards: KanbanCard[]): KanbanCard[] {
