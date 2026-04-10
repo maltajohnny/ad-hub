@@ -19,6 +19,7 @@ dist-ssr
 
 # Override opcional no servidor (URL interna do Go para proxy PHP IntelliSearch)
 public/api/intellisearch/backend.local.php
+public/api/ad-hub/backend.local.php
 
 # Editor directories and files
 .vscode/*

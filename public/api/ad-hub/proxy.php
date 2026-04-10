@@ -14,16 +14,17 @@ if (strpos($uri, '/api/ad-hub') !== 0) {
 }
 
 $candidates = [];
-$envB = getenv('ADHUB_GO_BACKEND');
-if (is_string($envB) && $envB !== '') {
-    $candidates[] = rtrim($envB, '/');
-}
+// 1) backend.local.php primeiro (HostGator: porta fixa sem depender de env no cPanel)
 $localFile = __DIR__ . '/backend.local.php';
 if (is_readable($localFile)) {
     $override = include $localFile;
     if (is_string($override) && $override !== '') {
         $candidates[] = rtrim($override, '/');
     }
+}
+$envB = getenv('ADHUB_GO_BACKEND');
+if (is_string($envB) && $envB !== '') {
+    $candidates[] = rtrim($envB, '/');
 }
 $candidates[] = 'http://127.0.0.1:3041';
 $candidates[] = 'http://localhost:3041';
