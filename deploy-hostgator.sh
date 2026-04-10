@@ -10,6 +10,14 @@ set -euo pipefail
 
 # ===== Config =====
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/ssh_access}"
+# Evita "Too many authentication failures": só esta chave, sem ssh-agent a oferecer mais identidades.
+SSH_OPTS=( -o IdentitiesOnly=yes )
+ssh_deploy() {
+  env -u SSH_AUTH_SOCK -u SSH_AGENT_PID ssh "${SSH_OPTS[@]}" -i "$SSH_KEY" "$@"
+}
+scp_deploy() {
+  env -u SSH_AUTH_SOCK -u SSH_AGENT_PID scp "${SSH_OPTS[@]}" -i "$SSH_KEY" "$@"
+}
 SSH_USER="${SSH_USER:-johnn315}"
 SSH_HOST="${SSH_HOST:-162.241.2.132}"
 REMOTE_DIR="${REMOTE_DIR:-/home3/johnn315/apps/minha-api}"
@@ -61,12 +69,12 @@ log "PASSO 2/6 - Aplicando permissao de execucao no binario..."
 chmod +x "$LOCAL_BIN"
 
 log "PASSO 3/6 - Enviando binario e script de restart para o servidor..."
-ssh -i "$SSH_KEY" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${REMOTE_DIR}'"
-scp -i "$SSH_KEY" "$LOCAL_BIN" "${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/${BIN_NAME}.new"
-scp -i "$SSH_KEY" "$LOCAL_RESTART_SCRIPT" "${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/restart-api.sh.new"
+ssh_deploy "${SSH_USER}@${SSH_HOST}" "mkdir -p '${REMOTE_DIR}'"
+scp_deploy "$LOCAL_BIN" "${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/${BIN_NAME}.new"
+scp_deploy "$LOCAL_RESTART_SCRIPT" "${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/restart-api.sh.new"
 
 log "PASSO 4/6 - Conectando via SSH para publicar versao..."
-ssh -i "$SSH_KEY" "${SSH_USER}@${SSH_HOST}" "set -euo pipefail; \
+ssh_deploy "${SSH_USER}@${SSH_HOST}" "set -euo pipefail; \
   mkdir -p '${REMOTE_DIR}'; \
   cd '${REMOTE_DIR}'; \
   chmod +x '${BIN_NAME}.new' 'restart-api.sh.new'; \
@@ -76,12 +84,12 @@ ssh -i "$SSH_KEY" "${SSH_USER}@${SSH_HOST}" "set -euo pipefail; \
   chmod +x '${BIN_NAME}' 'restart-api.sh'"
 
 log "PASSO 5/6 - Reiniciando API remotamente..."
-ssh -i "$SSH_KEY" "${SSH_USER}@${SSH_HOST}" "set -euo pipefail; \
+ssh_deploy "${SSH_USER}@${SSH_HOST}" "set -euo pipefail; \
   cd '${REMOTE_DIR}'; \
   ./restart-api.sh '${BIN_NAME}'"
 
 log "PASSO 6/6 - Verificando status remoto..."
-ssh -i "$SSH_KEY" "${SSH_USER}@${SSH_HOST}" "set -euo pipefail; \
+ssh_deploy "${SSH_USER}@${SSH_HOST}" "set -euo pipefail; \
   cd '${REMOTE_DIR}'; \
   pgrep -af './${BIN_NAME}' || true; \
   echo '--- Ultimas linhas de app.log ---'; \
