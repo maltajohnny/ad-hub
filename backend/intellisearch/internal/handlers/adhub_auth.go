@@ -48,6 +48,14 @@ func AdHubPing(c *fiber.Ctx) error {
 	} else {
 		out["db"] = false
 	}
+	// Diagnóstico sem expor o DSN: se está definido mas db=false, a ligação falhou (credenciais/host) — ver app.log ao arrancar.
+	dsnSet := strings.TrimSpace(os.Getenv("MYSQL_DSN")) != ""
+	out["mysql_dsn_set"] = dsnSet
+	if !dsnSet {
+		out["hint"] = "Defina MYSQL_DSN no .env ao lado do binário (ex.: ~/apps/minha-api/.env) e reinicie a API."
+	} else if db.DB == nil {
+		out["hint"] = "MYSQL_DSN está definido mas a ligação MySQL falhou — confira user/senha/host no DSN, encoding de caracteres na senha e o log ao arrancar (app.log)."
+	}
 	out["jwt_ready"] = strings.TrimSpace(os.Getenv("ADHUB_JWT_SECRET")) != ""
 	return c.JSON(out)
 }
