@@ -54,6 +54,11 @@ const adPlatformProxy = {
   },
 };
 
+const adHubAuthProxy = {
+  target: "http://127.0.0.1:3041",
+  changeOrigin: true,
+};
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   /** Expõe `VITE_*`, `SLACK_*`, `OPENAI_*` e `GEMINI_*` ao cliente (ex.: chaves no `.env`). */
@@ -69,12 +74,14 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       "/api/intellisearch": intellisearchProxy,
       "/api/ad-platform": adPlatformProxy,
+      "/api/ad-hub": adHubAuthProxy,
     },
   },
   preview: {
     proxy: {
       "/api/intellisearch": intellisearchProxy,
       "/api/ad-platform": adPlatformProxy,
+      "/api/ad-hub": adHubAuthProxy,
     },
   },
   resolve: {

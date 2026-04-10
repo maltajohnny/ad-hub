@@ -10,13 +10,18 @@ set -euo pipefail
 
 # ===== Config =====
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/ssh_access}"
-# Evita "Too many authentication failures": só esta chave, sem ssh-agent a oferecer mais identidades.
-SSH_OPTS=( -o IdentitiesOnly=yes )
+# Só esta identidade (+ sem agent) evita "Too many authentication failures".
+# Por defeito NÃO usamos BatchMode: se entrares com palavra-passe no ssh, o script também pode pedir na mesma sessão.
+# Para CI/automação só com chave: SSH_BATCH=1 ./deploy-hostgator.sh
+SSH_OPTS=( -o IdentitiesOnly=yes -o PubkeyAuthentication=yes -i "$SSH_KEY" )
+if [[ "${SSH_BATCH:-0}" == "1" ]]; then
+  SSH_OPTS+=( -o BatchMode=yes -o PreferredAuthentications=publickey )
+fi
 ssh_deploy() {
-  env -u SSH_AUTH_SOCK -u SSH_AGENT_PID ssh "${SSH_OPTS[@]}" -i "$SSH_KEY" "$@"
+  env -u SSH_AUTH_SOCK -u SSH_AGENT_PID ssh "${SSH_OPTS[@]}" "$@"
 }
 scp_deploy() {
-  env -u SSH_AUTH_SOCK -u SSH_AGENT_PID scp "${SSH_OPTS[@]}" -i "$SSH_KEY" "$@"
+  env -u SSH_AUTH_SOCK -u SSH_AGENT_PID scp "${SSH_OPTS[@]}" "$@"
 }
 SSH_USER="${SSH_USER:-johnn315}"
 SSH_HOST="${SSH_HOST:-162.241.2.132}"

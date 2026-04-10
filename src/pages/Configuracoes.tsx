@@ -116,7 +116,7 @@ const Configuracoes = () => {
     toast.success("Vínculo com a organização atualizado.");
   };
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     if (newPw !== confirmPw) {
       toast.error("A nova senha e a confirmação não coincidem.");
       return;
@@ -125,7 +125,7 @@ const Configuracoes = () => {
       toast.error(STRONG_PASSWORD_HINT);
       return;
     }
-    const ok = changePassword(currentPw, newPw);
+    const ok = await changePassword(currentPw, newPw);
     if (!ok) {
       toast.error("Senha atual incorreta ou dados inválidos.");
       return;

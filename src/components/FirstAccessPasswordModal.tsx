@@ -71,7 +71,7 @@ export const FirstAccessPasswordModal = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
       setConfirmPasswordError(true);
@@ -82,7 +82,7 @@ export const FirstAccessPasswordModal = () => {
       return;
     }
     setSubmitting(true);
-    const res = completeFirstPasswordChange(currentPassword, newPassword);
+    const res = await completeFirstPasswordChange(currentPassword, newPassword);
     setSubmitting(false);
     if (!res.ok) {
       toast.error(res.error || "Não foi possível alterar a senha.");

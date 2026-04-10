@@ -10,37 +10,22 @@ import {
   migrateOrgScopedLoginToNewSlug,
   parseOrgScopedLogin,
 } from "@/lib/orgScopedLogin";
+import {
+  SERVER_MANAGED_PASSWORD,
+  adHubAuthPing,
+  adHubChangePassword,
+  adHubCreateUser,
+  adHubDeleteUser,
+  adHubFetchRegistry,
+  adHubLogin,
+  adHubPatchUser,
+  getAdHubToken,
+  setAdHubToken,
+  useServerAuth,
+} from "@/lib/adhubAuthApi";
+import type { User } from "@/types/user";
 
-export interface User {
-  role: "admin" | "user";
-  username: string;
-  name: string;
-  email: string;
-  phone: string;
-  document: string;
-  /** Foto de perfil (data URL). `null` ou ausente = avatar padrão */
-  avatarDataUrl?: string | null;
-  /** Pode abrir Settings do Board (colunas). Admins sempre podem. */
-  canManageBoard?: boolean;
-  /** Pode excluir cards no Board. Admins sempre podem. */
-  canDeleteBoardCards?: boolean;
-  /** Conta criada por admin: obriga troca de senha no primeiro acesso. */
-  mustChangePassword?: boolean;
-  /** Módulos do menu visíveis (só perfil user). `undefined` = todos. */
-  allowedModules?: AppModule[] | null;
-  /** Conta desativada por admin — não pode iniciar sessão até ser reativada. */
-  disabled?: boolean;
-  /**
-   * Id da organização (tenant) a que esta conta pertence quando criada por um admin de organização.
-   * Ausente = conta ao nível da plataforma (visível só a operadores como owner/qtrafficadmin).
-   */
-  organizationId?: string;
-  /**
-   * Criado por admin de organização — não aparece na lista de utilizadores dos operadores da plataforma.
-   * Contas geridas pelo owner (vínculo manual) mantêm este campo ausente/falso.
-   */
-  hideFromPlatformList?: boolean;
-}
+export type { User } from "@/types/user";
 
 /** Quem pode gerir colunas e settings do Kanban (admin ou permissão explícita). */
 export function canManageKanbanBoard(u: User | null | undefined): boolean {
@@ -309,7 +294,11 @@ function persistRegistry(next: Record<string, RegistryEntry>) {
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string, password: string) => { user: User | null; accountDisabled?: boolean };
+  /** Com MySQL+JWT no servidor, valida na BD; caso contrário registo local. */
+  login: (
+    username: string,
+    password: string,
+  ) => Promise<{ user: User | null; accountDisabled?: boolean }>;
   logout: () => void;
   updateProfile: (data: Partial<Omit<User, "username">>) => void;
   /** Nome exibido, contactos e login (exceto o owner `admin`, cujo login não pode mudar). */
@@ -319,9 +308,12 @@ interface AuthContextType {
     phone: string;
     document: string;
   }, loginRaw: string) => { ok: boolean; error?: string; loginChanged?: boolean };
-  changePassword: (currentPassword: string, newPassword: string) => boolean;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   /** Primeiro acesso: valida senha atual e define nova senha (remove `mustChangePassword`). */
-  completeFirstPasswordChange: (currentPassword: string, newPassword: string) => { ok: boolean; error?: string };
+  completeFirstPasswordChange: (
+    currentPassword: string,
+    newPassword: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
   /** Somente admins */
   listUsers: () => User[];
   createUser: (input: {
@@ -335,13 +327,13 @@ interface AuthContextType {
     allowedModules?: AppModule[] | null;
     /** Para admin de organização: id do tenant. Operadores da plataforma passam `null`. */
     scopeTenantId: string | null;
-  }) => { ok: boolean; error?: string };
+  }) => Promise<{ ok: boolean; error?: string; savedLocalOnly?: boolean }>;
   setUserAllowedModules: (
     username: string,
     modules: AppModule[] | null,
     scopeTenantId: string | null,
   ) => { ok: boolean; error?: string };
-  deleteUser: (username: string, scopeTenantId: string | null) => { ok: boolean; error?: string };
+  deleteUser: (username: string, scopeTenantId: string | null) => Promise<{ ok: boolean; error?: string }>;
   /** Admin: editar dados de qualquer conta (exceto rebaixar o owner). */
   updateUserByAdmin: (
     username: string,
@@ -358,7 +350,7 @@ interface AuthContextType {
       organizationId?: string | null;
     },
     scopeTenantId: string | null,
-  ) => { ok: boolean; error?: string };
+  ) => Promise<{ ok: boolean; error?: string }>;
   /** Somente admin: concede/revoga permissão de Settings do Board (usuários não-admin). */
   setBoardSettingsPermission: (username: string, allowed: boolean, scopeTenantId: string | null) => {
     ok: boolean;
@@ -401,6 +393,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     persistRegistry(next);
   }, []);
 
+  const [serverAuthPing, setServerAuthPing] = useState<{ db: boolean; jwt_ready: boolean } | null>(null);
+  const serverAuth = useServerAuth(serverAuthPing);
+
+  useEffect(() => {
+    void adHubAuthPing().then((p) => setServerAuthPing(p ?? null));
+  }, []);
+
+  const refreshRegistryFromServer = useCallback(async () => {
+    if (!serverAuth) return;
+    const tok = getAdHubToken();
+    if (!tok) return;
+    const ent = await adHubFetchRegistry(tok);
+    if (!ent) return;
+    const next: Record<string, RegistryEntry> = {};
+    for (const [k, v] of Object.entries(ent)) {
+      next[k] = { password: SERVER_MANAGED_PASSWORD, user: v.user };
+    }
+    syncRegistry(next);
+  }, [serverAuth, syncRegistry]);
+
+  useEffect(() => {
+    if (!serverAuth) return;
+    const tok = getAdHubToken();
+    if (!tok) return;
+    void refreshRegistryFromServer();
+  }, [serverAuth, refreshRegistryFromServer]);
+
   useEffect(() => {
     if (user) sessionStorage.setItem("norter_user", JSON.stringify(user));
     else sessionStorage.removeItem("norter_user");
@@ -421,9 +440,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [registry]);
 
   const login = useCallback(
-    (username: string, password: string): { user: User | null; accountDisabled?: boolean } => {
+    async (
+      username: string,
+      password: string,
+    ): Promise<{ user: User | null; accountDisabled?: boolean }> => {
       const key = normalizeLoginKey(username);
+      if (serverAuth) {
+        const r = await adHubLogin(key, password);
+        if (r) {
+          setAdHubToken(r.token);
+          const ent = await adHubFetchRegistry(r.token);
+          if (ent) {
+            const next: Record<string, RegistryEntry> = {};
+            for (const [k, v] of Object.entries(ent)) {
+              next[k] = { password: SERVER_MANAGED_PASSWORD, user: v.user };
+            }
+            syncRegistry(next);
+          } else {
+            setRegistry((prev) => {
+              const next = { ...prev, [key]: { password: SERVER_MANAGED_PASSWORD, user: r.user } };
+              persistRegistry(next);
+              return next;
+            });
+          }
+          setUser(r.user);
+          return { user: r.user };
+        }
+        return { user: null };
+      }
       const entry = registry[key];
+      if (entry?.password === SERVER_MANAGED_PASSWORD) {
+        return { user: null };
+      }
       if (!entry || entry.password !== password) {
         return { user: null };
       }
@@ -434,10 +482,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(u);
       return { user: u };
     },
-    [registry],
+    [registry, serverAuth, syncRegistry],
   );
 
-  const logout = () => setUser(null);
+  const logout = () => {
+    setAdHubToken(null);
+    setUser(null);
+  };
 
   const updateProfile = useCallback(
     (data: Partial<Omit<User, "username">>) => {
@@ -554,11 +605,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const changePassword = useCallback(
-    (currentPassword: string, newPassword: string) => {
+    async (currentPassword: string, newPassword: string): Promise<boolean> => {
       if (!user) return false;
+      if (!isStrongPassword(newPassword)) return false;
+      const key = normalizeLoginKey(user.username);
+      if (serverAuth) {
+        const ok = await adHubChangePassword(key, currentPassword, newPassword);
+        if (!ok) return false;
+        const entry = registry[key];
+        if (entry) {
+          syncRegistry({
+            ...registry,
+            [key]: {
+              ...entry,
+              password: SERVER_MANAGED_PASSWORD,
+              user: { ...entry.user, mustChangePassword: false },
+            },
+          });
+        }
+        setUser((prev) => (prev ? { ...prev, mustChangePassword: false } : prev));
+        await refreshRegistryFromServer();
+        return true;
+      }
       const entry = registry[user.username];
       if (!entry || entry.password !== currentPassword) return false;
-      if (!isStrongPassword(newPassword)) return false;
       const nextReg = {
         ...registry,
         [user.username]: {
@@ -571,22 +641,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser((prev) => (prev ? { ...prev, mustChangePassword: false } : prev));
       return true;
     },
-    [user, registry, syncRegistry],
+    [user, registry, syncRegistry, serverAuth, refreshRegistryFromServer],
   );
 
   const completeFirstPasswordChange = useCallback(
-    (currentPassword: string, newPassword: string): { ok: boolean; error?: string } => {
+    async (currentPassword: string, newPassword: string): Promise<{ ok: boolean; error?: string }> => {
       if (!user) return { ok: false, error: "Sessão inválida." };
       if (!user.mustChangePassword) return { ok: false, error: "Não é necessário alterar a senha agora." };
-      const entry = registry[user.username];
-      if (!entry || entry.password !== currentPassword) {
-        return { ok: false, error: "Senha atual incorreta." };
-      }
       if (!isStrongPassword(newPassword)) {
         return {
           ok: false,
           error: "A nova senha deve ter no mínimo 6 caracteres, com maiúscula, minúscula e caractere especial.",
         };
+      }
+      const key = normalizeLoginKey(user.username);
+      if (serverAuth) {
+        const ok = await adHubChangePassword(key, currentPassword, newPassword);
+        if (!ok) return { ok: false, error: "Senha atual incorreta." };
+        setUser({ ...user, mustChangePassword: false });
+        await refreshRegistryFromServer();
+        return { ok: true };
+      }
+      const entry = registry[user.username];
+      if (!entry || entry.password !== currentPassword) {
+        return { ok: false, error: "Senha atual incorreta." };
       }
       const nextReg = {
         ...registry,
@@ -600,7 +678,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser({ ...user, mustChangePassword: false });
       return { ok: true };
     },
-    [user, registry, syncRegistry],
+    [user, registry, syncRegistry, serverAuth, refreshRegistryFromServer],
   );
 
   const listUsers = useCallback((): User[] => {
@@ -636,7 +714,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const createUser = useCallback(
-    (input: {
+    async (input: {
       username: string;
       password: string;
       name: string;
@@ -646,7 +724,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       canDeleteBoardCards?: boolean;
       allowedModules?: AppModule[] | null;
       scopeTenantId: string | null;
-    }): { ok: boolean; error?: string } => {
+    }): Promise<{ ok: boolean; error?: string; savedLocalOnly?: boolean }> => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
       let orgId: string | undefined;
       if (isPlatformOperator(user.username)) {
@@ -717,14 +795,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
           : { mustChangePassword: false as const }),
       };
+      if (serverAuth) {
+        const tok = getAdHubToken();
+        if (!tok) return { ok: false, error: "Sessão sem token — inicie sessão novamente." };
+        const created = await adHubCreateUser(tok, u, input.password, newUser);
+        if (!created.ok) return { ok: false, error: created.error ?? "Não foi possível criar utilizador no servidor." };
+        await refreshRegistryFromServer();
+        return { ok: true };
+      }
       const nextReg = {
         ...registry,
         [u]: { password: input.password, user: newUser },
       };
       syncRegistry(nextReg);
-      return { ok: true };
+      return { ok: true, savedLocalOnly: true };
     },
-    [user, registry, syncRegistry],
+    [user, registry, syncRegistry, serverAuth, refreshRegistryFromServer],
   );
 
   const setBoardSettingsPermission = useCallback(
@@ -782,7 +868,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const updateUserByAdmin = useCallback(
-    (
+    async (
       username: string,
       patch: {
         newUsername?: string;
@@ -796,7 +882,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         organizationId?: string | null;
       },
       scopeTenantId: string | null,
-    ): { ok: boolean; error?: string } => {
+    ): Promise<{ ok: boolean; error?: string }> => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
       const key = normalizeLoginKey(username);
       const entry = registry[key];
@@ -860,6 +946,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             mergedPwd = patch.newPassword.trim();
           }
           mig.nextReg[newKey] = { ...base, password: mergedPwd, user: mergedUser };
+
+          if (serverAuth && getAdHubToken()) {
+            return {
+              ok: false,
+              error:
+                "Migração em massa de organização não está disponível enquanto as contas estão na base de dados. Contacte um operador.",
+            };
+          }
 
           for (const { from, to } of mig.renames) {
             if (from !== to) migrateStoredUsernameInLocalStorage(from, to);
@@ -988,6 +1082,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         nextPassword = patch.newPassword.trim();
       }
 
+      if (serverAuth) {
+        const tok = getAdHubToken();
+        if (!tok) return { ok: false, error: "Sessão sem token." };
+        if (nextKey !== key) {
+          return {
+            ok: false,
+            error:
+              "Alterar o login (nome de utilizador) com autenticação no servidor ainda não é suportado. Contacte um operador da plataforma.",
+          };
+        }
+        const patchPayload: { user: Partial<User>; newPassword?: string } = { user: { ...nextUser } };
+        if (patch.newPassword !== undefined && patch.newPassword.trim() !== "") {
+          patchPayload.newPassword = patch.newPassword.trim();
+        }
+        const ok = await adHubPatchUser(tok, key, patchPayload);
+        if (!ok) return { ok: false, error: "Não foi possível gravar as alterações no servidor." };
+        await refreshRegistryFromServer();
+        return { ok: true };
+      }
+
       let nextReg: Record<string, RegistryEntry> = { ...registry };
       if (nextKey !== key) {
         delete nextReg[key];
@@ -1015,11 +1129,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       return { ok: true };
     },
-    [user, registry, syncRegistry],
+    [user, registry, syncRegistry, serverAuth, refreshRegistryFromServer],
   );
 
   const deleteUser = useCallback(
-    (username: string, scopeTenantId: string | null): { ok: boolean; error?: string } => {
+    async (username: string, scopeTenantId: string | null): Promise<{ ok: boolean; error?: string }> => {
       if (!user || user.role !== "admin") return { ok: false, error: "Sem permissão." };
       const key = normalizeLoginKey(username);
       if (key === OWNER_USERNAME) return { ok: false, error: "A conta Administrador (owner) não pode ser excluída." };
@@ -1028,9 +1142,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!actorCanManageTargetUser(user, entry.user, scopeTenantId)) {
         return { ok: false, error: "Sem permissão para excluir este utilizador." };
       }
-      const rest = { ...registry };
-      delete rest[key];
-      syncRegistry(rest);
+      if (serverAuth) {
+        const tok = getAdHubToken();
+        if (!tok) return { ok: false, error: "Sessão sem token." };
+        const ok = await adHubDeleteUser(tok, key);
+        if (!ok) return { ok: false, error: "Não foi possível remover no servidor." };
+        await refreshRegistryFromServer();
+      } else {
+        const rest = { ...registry };
+        delete rest[key];
+        syncRegistry(rest);
+      }
       setClientAssignments((prev) => {
         const next = { ...prev };
         for (const cid of Object.keys(next)) {
@@ -1045,7 +1167,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       return { ok: true };
     },
-    [user, registry, syncRegistry],
+    [user, registry, syncRegistry, serverAuth, refreshRegistryFromServer],
   );
 
   const assignClientToUser = useCallback(

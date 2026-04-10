@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 
+	"norter/intellisearch/internal/adhubseed"
 	"norter/intellisearch/internal/config"
 	"norter/intellisearch/internal/db"
 	"norter/intellisearch/internal/handlers"
@@ -18,6 +20,8 @@ func main() {
 
 	if err := db.Init(); err != nil {
 		log.Printf("MySQL (OAuth persist): %v — API a correr sem base para tokens", err)
+	} else if err := adhubseed.SeedDefaultsIfEmpty(context.Background()); err != nil {
+		log.Printf("adhub seed utilizadores: %v", err)
 	}
 
 	port := os.Getenv("PORT")
@@ -31,7 +35,7 @@ func main() {
 
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
-		AllowMethods: "GET,POST,OPTIONS",
+		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 		AllowHeaders: "Origin,Content-Type,Accept,Authorization,Access-Token,X-AdHub-Internal-Key",
 	}))
 
@@ -57,10 +61,19 @@ func main() {
 	persist.Post("/metrics/refresh", handlers.PersistMetricsRefresh)
 	persist.Post("/metrics/refresh-client", handlers.PersistMetricsRefreshClient)
 
+	hub := app.Group("/api/ad-hub/auth")
+	hub.Get("/ping", handlers.AdHubPing)
+	hub.Post("/login", handlers.AdHubLogin)
+	hub.Post("/password", handlers.AdHubChangePassword)
+	hub.Get("/registry", handlers.AdHubRegistry)
+	hub.Post("/users", handlers.AdHubCreateUser)
+	hub.Patch("/users/:login", handlers.AdHubPatchUser)
+	hub.Delete("/users/:login", handlers.AdHubDeleteUser)
+
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"ok": true, "service": "intellisearch"})
 	})
 
-	log.Printf("API a ouvir em :%s — /api/intellisearch/* e /api/ad-platform/* (OAuth Meta/TikTok)", port)
+	log.Printf("API a ouvir em :%s — /api/intellisearch/*, /api/ad-platform/*, /api/ad-hub/auth/*", port)
 	log.Fatal(app.Listen(":" + port))
 }

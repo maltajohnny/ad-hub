@@ -155,7 +155,7 @@ const Usuarios = () => {
     setShowEditPw(false);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editTarget) return;
     if (editNewPassword.trim() && !isStrongPassword(editNewPassword.trim())) {
       toast.error("A nova senha deve cumprir a política de senha forte.");
@@ -181,7 +181,7 @@ const Usuarios = () => {
       }
     }
     const loginChanged = !owner && normalizeLoginKey(nextLogin) !== normalizeLoginKey(editTarget.username);
-    const res = updateUserByAdmin(
+    const res = await updateUserByAdmin(
       editTarget.username,
       {
         ...(loginChanged ? { newUsername: nextLogin } : {}),
@@ -243,7 +243,7 @@ const Usuarios = () => {
     }
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!isStrongPassword(password)) {
       setInitialPasswordError(true);
       return;
@@ -253,7 +253,7 @@ const Usuarios = () => {
       return;
     }
     const mods = APP_MODULES.filter((m) => modCreate[m]);
-    const res = createUser({
+    const res = await createUser({
       username,
       password,
       name,
@@ -273,9 +273,17 @@ const Usuarios = () => {
       toast.error(res.error || "Não foi possível criar o usuário.");
       return;
     }
-    toast.success(
-      isAdminRole ? "Administrador criado." : "Usuário criado. No primeiro acesso será pedida uma nova senha.",
-    );
+    if (res.savedLocalOnly) {
+      toast.warning("Utilizador guardado só neste navegador", {
+        description:
+          "O servidor de contas (MySQL + API) não está ativo para esta sessão, por isso nada foi gravado na base de dados. Confirme /api/ad-hub/auth/ping (db e jwt_ready), o processo Go e a tabela users (001_adhub_core.sql).",
+        duration: 12_000,
+      });
+    } else {
+      toast.success(
+        isAdminRole ? "Administrador criado." : "Usuário criado. No primeiro acesso será pedida uma nova senha.",
+      );
+    }
     setUsername("");
     setPassword("");
     setInitialPasswordError(false);
@@ -287,8 +295,8 @@ const Usuarios = () => {
     setModCreate(Object.fromEntries(APP_MODULES.map((m) => [m, true])) as Record<AppModule, boolean>);
   };
 
-  const handleDelete = (uname: string) => {
-    const res = deleteUser(uname, platformOp ? null : scopeTenantId);
+  const handleDelete = async (uname: string) => {
+    const res = await deleteUser(uname, platformOp ? null : scopeTenantId);
     if (!res.ok) {
       toast.error(res.error || "Não foi possível excluir.");
       return;
@@ -733,13 +741,15 @@ const Usuarios = () => {
                         id={`account-active-${u.username.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
                         checked={!u.disabled}
                         onCheckedChange={(active) => {
-                          const res = updateUserByAdmin(
-                            u.username,
-                            { disabled: !active },
-                            platformOp ? null : scopeTenantId,
-                          );
-                          if (!res.ok) toast.error(res.error ?? "Erro");
-                          else toast.success(active ? "Conta reativada." : "Conta desativada.");
+                          void (async () => {
+                            const res = await updateUserByAdmin(
+                              u.username,
+                              { disabled: !active },
+                              platformOp ? null : scopeTenantId,
+                            );
+                            if (!res.ok) toast.error(res.error ?? "Erro");
+                            else toast.success(active ? "Conta reativada." : "Conta desativada.");
+                          })();
                         }}
                       />
                       <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">Ativa</span>

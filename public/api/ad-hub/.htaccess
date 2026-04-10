@@ -1,0 +1,7 @@
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /api/ad-hub/
+RewriteRule ^proxy\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule . proxy.php [L]
+</IfModule>

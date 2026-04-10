@@ -64,7 +64,7 @@ const Login = () => {
     applyDocumentBranding(t);
   }, [invalidTenant, location.pathname, tenantSlug, username]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (invalidTenant) {
@@ -72,7 +72,7 @@ const Login = () => {
       return;
     }
     const userKey = normalizeUsernameForLoginAttempt(username);
-    const { user: logged, accountDisabled } = login(userKey, password.trim());
+    const { user: logged, accountDisabled } = await login(userKey, password.trim());
     if (accountDisabled) {
       setError("Esta conta foi desativada. Peça a um administrador para reativá-la.");
       return;

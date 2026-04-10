@@ -1,0 +1,97 @@
+<?php
+/**
+ * Proxy /api/ad-hub/* → API Go (auth utilizadores MySQL).
+ * Mesma lógica de candidatos que api/intellisearch/proxy.php (PORT 3041).
+ */
+declare(strict_types=1);
+
+$uri = $_SERVER['REQUEST_URI'] ?? '/';
+if (strpos($uri, '/api/ad-hub') !== 0) {
+    http_response_code(404);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => 'invalid path']);
+    exit;
+}
+
+$candidates = [];
+$envB = getenv('ADHUB_GO_BACKEND');
+if (is_string($envB) && $envB !== '') {
+    $candidates[] = rtrim($envB, '/');
+}
+$localFile = __DIR__ . '/backend.local.php';
+if (is_readable($localFile)) {
+    $override = include $localFile;
+    if (is_string($override) && $override !== '') {
+        $candidates[] = rtrim($override, '/');
+    }
+}
+$candidates[] = 'http://127.0.0.1:3041';
+$candidates[] = 'http://localhost:3041';
+$serverAddr = isset($_SERVER['SERVER_ADDR']) ? (string) $_SERVER['SERVER_ADDR'] : '';
+if ($serverAddr !== '' && filter_var($serverAddr, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+    $candidates[] = 'http://' . $serverAddr . ':3041';
+    $candidates[] = 'http://' . $serverAddr . ':3042';
+}
+$candidates[] = 'http://127.0.0.1:3042';
+$candidates[] = 'http://localhost:3042';
+$candidates = array_values(array_unique($candidates));
+
+if (!function_exists('curl_init')) {
+    http_response_code(500);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => 'PHP cURL não está disponível neste servidor.']);
+    exit;
+}
+
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$rawBody = file_get_contents('php://input');
+$auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+if ($auth === '' && !empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+    $auth = (string) $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+}
+
+$lastErr = '';
+$body = false;
+$code = 0;
+foreach ($candidates as $backend) {
+    $url = $backend . $uri;
+    $ch = curl_init($url);
+    $headers = ['Accept: application/json'];
+    if ($auth !== '') {
+        $headers[] = 'Authorization: ' . $auth;
+    }
+    $ct = $_SERVER['CONTENT_TYPE'] ?? '';
+    if ($ct !== '' && ($method === 'POST' || $method === 'PATCH' || $method === 'PUT')) {
+        $headers[] = 'Content-Type: ' . $ct;
+    }
+    $opts = [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 90,
+        CURLOPT_CONNECTTIMEOUT => 8,
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_CUSTOMREQUEST => $method,
+    ];
+    if ($rawBody !== '' && ($method === 'POST' || $method === 'PATCH' || $method === 'PUT')) {
+        $opts[CURLOPT_POSTFIELDS] = $rawBody;
+    }
+    curl_setopt_array($ch, $opts);
+    $body = curl_exec($ch);
+    $err = curl_error($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($body !== false) {
+        http_response_code($code > 0 ? $code : 502);
+        header('Content-Type: application/json; charset=utf-8');
+        echo $body;
+        exit;
+    }
+    $lastErr = $err !== '' ? $err : 'ligação recusada ou timeout';
+}
+
+http_response_code(502);
+header('Content-Type: application/json; charset=utf-8');
+echo json_encode([
+    'error' => 'proxy: API Go (ad-hub) inacessível. Tentado: ' . implode(', ', $candidates),
+    'detail' => $lastErr,
+], JSON_UNESCAPED_UNICODE);

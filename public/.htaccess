@@ -10,6 +10,10 @@ RewriteRule ^index\.html$ - [L]
 RewriteCond %{REQUEST_URI} ^/api/intellisearch/ [NC]
 RewriteRule ^ - [L]
 
+# Auth AD-Hub → proxy PHP (api/ad-hub/proxy.php)
+RewriteCond %{REQUEST_URI} ^/api/ad-hub/ [NC]
+RewriteRule ^ - [L]
+
 # Scripts PHP em /api/social/ (ex.: HTML perfil Instagram para Social Pulse)
 RewriteCond %{REQUEST_URI} ^/api/social/ [NC]
 RewriteRule ^ - [L]
