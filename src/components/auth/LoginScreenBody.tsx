@@ -188,7 +188,7 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Utilizador ou e-mail"
-              autoComplete="username"
+              autoComplete="section-auth username"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
@@ -213,7 +213,7 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Senha"
-              autoComplete="current-password"
+              autoComplete="section-auth current-password"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
