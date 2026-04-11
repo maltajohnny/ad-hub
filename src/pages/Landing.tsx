@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LoginScreenBody } from "@/components/auth/LoginScreenBody";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ArrowRight,
@@ -94,68 +95,92 @@ export default function Landing() {
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.25),transparent)]" />
         </div>
 
-        <div className="relative mx-auto max-w-6xl px-[max(1rem,env(safe-area-inset-left,0px))] py-12 pr-[max(1rem,env(safe-area-inset-right,0px))] sm:px-6 sm:py-14 lg:py-20 xl:max-w-7xl 2xl:max-w-[90rem]">
-          {showLoginInHero ? (
-            <div className="flex justify-center pb-4 sm:pb-6">
-              <LoginScreenBody variant="landing" formId="login-form-landing" />
-            </div>
-          ) : (
-          <div className="grid items-center gap-10 sm:gap-12 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.2fr)] lg:gap-14 xl:gap-16">
-            <div className="max-w-xl min-w-0 lg:max-w-none">
-              <p className="mb-4 inline-flex max-w-full items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/5 px-3 py-1.5 text-xs font-medium text-cyan-300/95 shadow-sm shadow-cyan-500/10">
-                <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                IA + tráfego pago numa única plataforma
-              </p>
-              <h1 className="font-display text-[1.65rem] font-bold leading-[1.12] tracking-tight text-white min-[400px]:text-3xl sm:text-4xl md:text-5xl lg:text-[3.15rem] lg:leading-[1.1]">
-                AD-HUB —{" "}
-                <span className="bg-gradient-to-r from-cyan-300 via-white to-violet-200 bg-clip-text text-transparent">
-                  Move faster. Grow smarter.
-                </span>
-              </h1>
-              <p className="mt-6 text-base text-slate-400 leading-relaxed sm:text-lg">
-                Centralize campanhas, métricas e decisões com inteligência artificial. A plataforma AD-HUB automatiza análises de
-                tráfego pago e entrega insights precisos de <strong className="text-slate-200 font-semibold">CPA</strong>,{" "}
-                <strong className="text-slate-200 font-semibold">conversões</strong>,{" "}
-                <strong className="text-slate-200 font-semibold">CPM</strong>,{" "}
-                <strong className="text-slate-200 font-semibold">ROI</strong> e o que mais importa para o seu negócio —
-                com agilidade de gestor e menos planilhas.
-              </p>
-              <div className="mt-9 flex flex-wrap gap-3">
-                <Button
-                  type="button"
-                  size="lg"
-                  className="min-h-12 w-full gap-2 gradient-brand px-7 text-primary-foreground shadow-lg shadow-primary/25 sm:w-auto"
-                  onClick={openLoginInHero}
-                >
-                  Aceder à plataforma
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="relative flex flex-col justify-center">
-              <div className="absolute -inset-4 rounded-3xl bg-gradient-to-br from-violet-500/20 via-transparent to-cyan-500/15 blur-2xl" />
-              <div className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-slate-900/40 shadow-2xl shadow-black/50 ring-1 ring-white/5 aspect-[4/3] sm:aspect-[16/11] lg:aspect-[16/10]">
-                <img
-                  src={landingHeroAi}
-                  alt="Gestora de tráfego com assistente de IA a analisar métricas de CPA, ROI e leads"
-                  className="h-full w-full object-cover object-[center_24%]"
-                  loading="eager"
-                  sizes="(min-width: 1024px) min(58vw, 720px), 100vw"
-                />
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#050814] via-transparent to-transparent opacity-90 sm:opacity-70" />
-                <div className="absolute bottom-4 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-auto">
-                  <div className="rounded-xl border border-white/10 bg-black/50 px-4 py-3 backdrop-blur-md max-w-sm">
-                    <p className="text-[11px] font-medium uppercase tracking-widest text-cyan-400/95">Inteligência operacional</p>
-                    <p className="mt-1 text-sm text-slate-200 leading-snug">
-                      Decisões mais rápidas, dados centralizados e IA ao lado do gestor — do insight à execução.
+        <div className="relative mx-auto max-w-6xl px-[max(1rem,env(safe-area-inset-left,0px))] pb-12 pt-8 pr-[max(1rem,env(safe-area-inset-right,0px))] sm:px-6 sm:pb-14 sm:pt-10 lg:pb-20 xl:max-w-7xl 2xl:max-w-[90rem]">
+          {/*
+            Viewport fixo: o painel interior tem 200% da altura; -translate-y-1/2 faz o hero “subir” e revela o login por baixo.
+          */}
+          <div className="relative mx-auto h-[min(34rem,88dvh)] max-h-[44rem] min-h-[22rem] w-full overflow-hidden sm:h-[min(36rem,85dvh)] lg:h-[min(38rem,80dvh)]">
+            <div
+              className={[
+                "flex h-[200%] w-full flex-col transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
+                "motion-reduce:duration-0",
+                showLoginInHero ? "-translate-y-1/2" : "translate-y-0",
+              ].join(" ")}
+            >
+              {/* Painel 1: hero (metade superior do interior = 100% da janela visível) */}
+              <div className="flex h-1/2 min-h-0 flex-col justify-center py-4 sm:py-5">
+                <div className="grid items-center gap-8 sm:gap-10 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.2fr)] lg:gap-14 xl:gap-16">
+                  <div className="max-w-xl min-w-0 lg:max-w-none">
+                    <p className="mb-3 inline-flex max-w-full items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/5 px-3 py-1.5 text-xs font-medium text-cyan-300/95 shadow-sm shadow-cyan-500/10 sm:mb-4">
+                      <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                      IA + tráfego pago numa única plataforma
                     </p>
+                    <h1 className="font-display text-[1.65rem] font-bold leading-[1.12] tracking-tight text-white min-[400px]:text-3xl sm:text-4xl md:text-5xl lg:text-[3.15rem] lg:leading-[1.1]">
+                      AD-HUB —{" "}
+                      <span className="bg-gradient-to-r from-cyan-300 via-white to-violet-200 bg-clip-text text-transparent">
+                        Move faster. Grow smarter.
+                      </span>
+                    </h1>
+                    <p className="mt-4 text-base text-slate-400 leading-relaxed sm:mt-6 sm:text-lg">
+                      Centralize campanhas, métricas e decisões com inteligência artificial. A plataforma AD-HUB automatiza
+                      análises de tráfego pago e entrega insights precisos de{" "}
+                      <strong className="text-slate-200 font-semibold">CPA</strong>,{" "}
+                      <strong className="text-slate-200 font-semibold">conversões</strong>,{" "}
+                      <strong className="text-slate-200 font-semibold">CPM</strong>,{" "}
+                      <strong className="text-slate-200 font-semibold">ROI</strong> e o que mais importa para o seu negócio —
+                      com agilidade de gestor e menos planilhas.
+                    </p>
+                    <div className="mt-6 flex flex-wrap gap-3 sm:mt-8">
+                      <Button
+                        type="button"
+                        size="lg"
+                        className="min-h-12 w-full gap-2 gradient-brand px-7 text-primary-foreground shadow-lg shadow-primary/25 sm:w-auto"
+                        onClick={openLoginInHero}
+                      >
+                        Aceder à plataforma
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="relative flex min-h-0 flex-col justify-center">
+                    <div className="absolute -inset-3 rounded-3xl bg-gradient-to-br from-violet-500/20 via-transparent to-cyan-500/15 blur-2xl sm:-inset-4" />
+                    <div className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-slate-900/40 shadow-2xl shadow-black/50 ring-1 ring-white/5 aspect-[4/3] sm:aspect-[16/11] lg:aspect-[16/10]">
+                      <img
+                        src={landingHeroAi}
+                        alt="Gestora de tráfego com assistente de IA a analisar métricas de CPA, ROI e leads"
+                        className="h-full w-full object-cover object-[center_24%]"
+                        loading="eager"
+                        sizes="(min-width: 1024px) min(58vw, 720px), 100vw"
+                      />
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#050814] via-transparent to-transparent opacity-90 sm:opacity-70" />
+                      <div className="absolute bottom-3 left-3 right-3 sm:bottom-6 sm:left-6 sm:right-auto">
+                        <div className="rounded-xl border border-white/10 bg-black/50 px-4 py-3 backdrop-blur-md max-w-sm">
+                          <p className="text-[11px] font-medium uppercase tracking-widest text-cyan-400/95">
+                            Inteligência operacional
+                          </p>
+                          <p className="mt-1 text-sm text-slate-200 leading-snug">
+                            Decisões mais rápidas, dados centralizados e IA ao lado do gestor — do insight à execução.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
+
+              {/* Painel 2: login (entra de baixo quando o painel desliza) */}
+              <div
+                className={cn(
+                  "flex h-1/2 min-h-0 items-center justify-center px-2 py-4 sm:px-4",
+                  !showLoginInHero && "pointer-events-none select-none",
+                )}
+                aria-hidden={!showLoginInHero}
+              >
+                <LoginScreenBody variant="landing" formId="login-form-landing" />
+              </div>
             </div>
           </div>
-          )}
         </div>
       </section>
 
