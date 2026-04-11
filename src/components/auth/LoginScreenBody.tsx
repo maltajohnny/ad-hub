@@ -127,7 +127,11 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
           <NorterMarkLogo />
         ) : (
           <div className="flex flex-col items-center text-center">
-            <div className="mx-auto flex w-[min(92vw,260px)] justify-center">
+            {/*
+              Mobile (incl. iPhone em paisagem ~932px): sem w-full na img — evita ícones quadrados a esticar à largura do contentor.
+              Tamanho grande só a partir de lg (1024px): abaixo disso md aplicava logo enorme em telemóveis na horizontal.
+            */}
+            <div className="mx-auto flex max-w-[71px] shrink-0 justify-center lg:max-w-[min(92vw,260px)]">
               <img
                 src={showLogoSrc}
                 alt={brand.alt}
@@ -135,10 +139,12 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
                 height={120}
                 decoding="async"
                 fetchPriority="high"
-                className="h-auto w-full max-h-[200px] object-contain mb-1 drop-shadow-lg sm:max-h-[220px]"
+                className="mb-1 h-auto w-auto max-h-[41px] max-w-[71px] object-contain object-center drop-shadow-lg lg:max-h-[200px] lg:max-w-none lg:w-full xl:max-h-[220px]"
               />
             </div>
-            <span className="mt-4 font-display text-base font-semibold tracking-wide text-foreground/90">{brand.name}</span>
+            <span className="mt-3 font-display text-xl font-semibold tracking-wide text-foreground/90 lg:mt-4 lg:text-base">
+              {brand.name}
+            </span>
             {brand.tagline ? (
               <span className="font-display text-[11px] tracking-[0.18em] text-muted-foreground/85 sm:text-xs mt-1.5 uppercase">
                 {brand.tagline}

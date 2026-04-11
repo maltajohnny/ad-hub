@@ -26,7 +26,7 @@ export default function Landing() {
   const [showLoginInHero, setShowLoginInHero] = useState(false);
 
   const openLoginInHero = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    /** Não fazer scroll da janela — evita confundir com “scroll abre o login” e mantém só o clique nos CTAs. */
     setShowLoginInHero(true);
   };
 
@@ -119,7 +119,11 @@ export default function Landing() {
         </div>
       </header>
 
-      <section className="relative overflow-hidden border-b border-white/[0.06]">
+      {/*
+        Evitar overflow-hidden nesta secção: em CSS, overflow-x:hidden pode forçar overflow-y a comportar-se como
+        scroll interno — o utilizador “faz scroll” dentro do bloco da imagem em vez da página inteira.
+      */}
+      <section className="relative border-b border-white/[0.06]">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -left-20 top-0 h-[520px] w-[520px] rounded-full bg-violet-600/20 blur-[120px]" />
           <div className="absolute right-0 bottom-0 h-[400px] w-[400px] rounded-full bg-cyan-500/10 blur-[100px]" />
@@ -266,10 +270,11 @@ export default function Landing() {
       </section>
 
       <footer className="border-t border-white/[0.06] safe-area-x safe-area-b py-10 text-slate-500">
-        <p className="mx-auto max-w-[100vw] px-3 text-center text-[10px] leading-snug sm:text-[11px] lg:text-xs lg:whitespace-nowrap">
-          © {new Date().getFullYear()} AD-HUB — Move faster. Grow smarter. Plataforma de gestão de tráfego pago e
-          inteligência operacional.
-        </p>
+        <div className="mx-auto flex w-full max-w-[100vw] justify-center overflow-x-auto px-3 md:overflow-x-visible">
+          <p className="text-center text-[10px] leading-snug sm:text-[11px] md:text-xs md:whitespace-nowrap lg:text-[0.8125rem]">
+            {`© ${new Date().getFullYear()} AD-HUB — Move faster. Grow smarter. Plataforma de gestão de tráfego pago e inteligência operacional.`}
+          </p>
+        </div>
       </footer>
 
       {typeof document !== "undefined" &&
