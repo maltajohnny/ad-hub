@@ -10,6 +10,9 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        /** CTA marketing / login: gradiente da marca + texto escuro (evita conflito com `bg-primary` do default). */
+        gradientCta:
+          "gradient-brand border-0 text-slate-950 shadow-lg shadow-primary/25 hover:opacity-90 active:opacity-85",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",

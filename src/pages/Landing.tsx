@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LoginScreenBody } from "@/components/auth/LoginScreenBody";
@@ -17,36 +18,37 @@ import {
 import adHubLogo from "@/assets/ad-hub-logo.png";
 import landingHeroAi from "@/assets/landing-hero-ai.png";
 
-/** Altura do viewport do hero/login (duas secções empilhadas = 2× esta altura scrollável). */
-const HERO_LOGIN_VIEWPORT_H =
-  "h-[min(34rem,88dvh)] max-h-[44rem] min-h-[22rem] sm:h-[min(36rem,85dvh)] lg:h-[min(38rem,80dvh)]";
+/** Altura mínima do bloco hero (só marketing — o login não faz parte do scroll da página). */
+const HERO_SECTION_MIN_H =
+  "min-h-[min(34rem,88svh)] sm:min-h-[min(36rem,85svh)] lg:min-h-[min(38rem,80svh)]";
 
 export default function Landing() {
   const [showLoginInHero, setShowLoginInHero] = useState(false);
-  const heroLoginScrollRef = useRef<HTMLDivElement>(null);
-
-  const scrollHeroLoginTo = (which: "hero" | "login") => {
-    const el = heroLoginScrollRef.current;
-    if (!el) return;
-    const y = which === "login" ? el.clientHeight : 0;
-    el.scrollTo({ top: y, behavior: "smooth" });
-  };
 
   const openLoginInHero = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     setShowLoginInHero(true);
   };
 
-  useLayoutEffect(() => {
+  const closeLoginHero = () => setShowLoginInHero(false);
+
+  useEffect(() => {
     if (!showLoginInHero) return;
-    const id = requestAnimationFrame(() => scrollHeroLoginTo("login"));
-    return () => cancelAnimationFrame(id);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [showLoginInHero]);
 
-  const closeLoginHero = () => {
-    scrollHeroLoginTo("hero");
-    window.setTimeout(() => setShowLoginInHero(false), 560);
-  };
+  useEffect(() => {
+    if (!showLoginInHero) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeLoginHero();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showLoginInHero]);
 
   return (
     <div className="min-h-screen min-h-[100dvh] bg-[#050814] text-foreground overflow-x-hidden pb-[env(safe-area-inset-bottom,0px)]">
@@ -104,8 +106,9 @@ export default function Landing() {
                 </Button>
                 <Button
                   type="button"
+                  variant="gradientCta"
                   size="sm"
-                  className="min-h-11 min-w-[2.75rem] gradient-brand px-4 text-primary-foreground shadow-lg shadow-primary/20 sm:min-h-9"
+                  className="min-h-11 min-w-[2.75rem] px-4 sm:min-h-9"
                   onClick={openLoginInHero}
                 >
                   Começar
@@ -124,18 +127,7 @@ export default function Landing() {
         </div>
 
         <div className="relative mx-auto max-w-6xl px-[max(1rem,env(safe-area-inset-left,0px))] pb-12 pt-8 pr-[max(1rem,env(safe-area-inset-right,0px))] sm:px-6 sm:pb-14 sm:pt-10 lg:pb-20 xl:max-w-7xl 2xl:max-w-[90rem]">
-          {/*
-            Scroll vertical no próprio bloco: ao abrir login, faz scroll para baixo (hero “sobe” como num scroll interno).
-          */}
-          <div
-            ref={heroLoginScrollRef}
-            className={cn(
-              HERO_LOGIN_VIEWPORT_H,
-              "relative mx-auto w-full overflow-y-auto overflow-x-hidden scroll-smooth overscroll-y-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden motion-reduce:scroll-auto",
-            )}
-          >
-              {/* Secção 1: hero */}
-              <div className={cn(HERO_LOGIN_VIEWPORT_H, "flex min-h-full flex-col justify-center py-4 sm:py-5")}>
+          <div className={cn(HERO_SECTION_MIN_H, "relative mx-auto flex w-full flex-col justify-center py-4 sm:py-5")}>
                 <div className="grid items-center gap-8 sm:gap-10 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.2fr)] lg:gap-14 xl:gap-16">
                   <div className="max-w-xl min-w-0 lg:max-w-none">
                     <p className="mb-3 inline-flex max-w-full items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/5 px-3 py-1.5 text-xs font-medium text-cyan-300/95 shadow-sm shadow-cyan-500/10 sm:mb-4">
@@ -160,8 +152,9 @@ export default function Landing() {
                     <div className="mt-6 flex flex-wrap gap-3 sm:mt-8">
                       <Button
                         type="button"
+                        variant="gradientCta"
                         size="lg"
-                        className="min-h-12 w-full gap-2 gradient-brand px-7 text-primary-foreground shadow-lg shadow-primary/25 sm:w-auto"
+                        className="min-h-12 w-full gap-2 px-7 sm:w-auto"
                         onClick={openLoginInHero}
                       >
                         Aceder à plataforma
@@ -194,19 +187,6 @@ export default function Landing() {
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Secção 2: login (revelada ao fazer scroll para baixo no container) */}
-              <div
-                className={cn(
-                  HERO_LOGIN_VIEWPORT_H,
-                  "flex min-h-full items-center justify-center px-2 py-4 sm:px-4",
-                  !showLoginInHero && "pointer-events-none select-none",
-                )}
-                aria-hidden={!showLoginInHero}
-              >
-                <LoginScreenBody variant="landing" formId="login-form-landing" />
-              </div>
           </div>
         </div>
       </section>
@@ -274,8 +254,9 @@ export default function Landing() {
             </div>
             <Button
               type="button"
+              variant="gradientCta"
               size="lg"
-              className="min-h-12 w-full shrink-0 gradient-brand text-primary-foreground shadow-lg sm:w-auto"
+              className="min-h-12 w-full shrink-0 sm:w-auto"
               onClick={openLoginInHero}
             >
               Entrar na AD-HUB
@@ -284,12 +265,40 @@ export default function Landing() {
         </Card>
       </section>
 
-      <footer className="border-t border-white/[0.06] safe-area-x safe-area-b py-10 text-center text-xs text-slate-500">
-        <p className="max-w-prose mx-auto px-1">
+      <footer className="border-t border-white/[0.06] safe-area-x safe-area-b py-10 text-slate-500">
+        <p className="mx-auto max-w-[100vw] px-3 text-center text-[10px] leading-snug sm:text-[11px] lg:text-xs lg:whitespace-nowrap">
           © {new Date().getFullYear()} AD-HUB — Move faster. Grow smarter. Plataforma de gestão de tráfego pago e
           inteligência operacional.
         </p>
       </footer>
+
+      {typeof document !== "undefined" &&
+        showLoginInHero &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[200] flex flex-col items-center justify-end bg-black/75 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:justify-center sm:p-6 animate-in fade-in duration-200"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="landing-login-title"
+          >
+            <button
+              type="button"
+              className="absolute inset-0 cursor-default"
+              aria-label="Fechar"
+              onClick={closeLoginHero}
+            />
+            <div
+              className="relative z-10 w-full max-w-md animate-in slide-in-from-bottom-4 fade-in duration-300 sm:slide-in-from-bottom-0 sm:zoom-in-95"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="landing-login-title" className="sr-only">
+                Iniciar sessão na AD-HUB
+              </h2>
+              <LoginScreenBody variant="landing" formId="login-form-landing" />
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

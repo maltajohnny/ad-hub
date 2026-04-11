@@ -112,7 +112,7 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
     !invalidTenant && username.trim().length > 0 && password.trim().length > 0;
 
   const inputClass =
-    "h-11 rounded-full border-border/50 bg-background/90 pl-10 shadow-sm focus-visible:ring-offset-0 md:text-sm";
+    "h-11 rounded-full border border-slate-200/80 bg-background/95 pl-10 text-foreground shadow-sm placeholder:text-slate-500 focus-visible:ring-offset-0 dark:border-white/12 dark:bg-slate-900/50 dark:placeholder:text-slate-400 md:text-sm";
   const passwordInputClass = cn(inputClass, "pr-11");
 
   const inner = (
@@ -165,7 +165,7 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
         <div className="flex flex-col gap-2">
           <div className="relative">
             <User
-              className="pointer-events-none absolute left-3.5 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              className="pointer-events-none absolute left-3.5 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
               aria-hidden
             />
             <Input
@@ -189,7 +189,7 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
           </div>
           <div className="relative">
             <Lock
-              className="pointer-events-none absolute left-3.5 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              className="pointer-events-none absolute left-3.5 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
               aria-hidden
             />
             <Input
@@ -214,7 +214,7 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
             <button
               type="button"
               onClick={() => setShowPw(!showPw)}
-              className="absolute right-3 top-1/2 z-[1] -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+              className="absolute right-3 top-1/2 z-[1] -translate-y-1/2 rounded-full p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white"
               aria-label={showPw ? "Ocultar senha" : "Mostrar senha"}
             >
               {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -226,7 +226,9 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
 
         <Button
           type="submit"
-          className="h-11 w-full rounded-full bg-foreground text-base font-semibold text-background shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+          variant="gradientCta"
+          size="lg"
+          className="h-11 w-full rounded-full text-base font-semibold disabled:opacity-50"
           disabled={!canSubmitLogin}
         >
           Entrar
@@ -235,7 +237,7 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
         <p className="text-center">
           <Link
             to="/forgot-password"
-            className="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-primary hover:underline"
+            className="text-sm text-slate-500 underline-offset-4 transition-colors hover:text-cyan-500/95 hover:underline dark:text-slate-400 dark:hover:text-cyan-400/90"
           >
             Esqueceu sua senha?
           </Link>
@@ -243,8 +245,8 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
       </form>
 
       {!hidePlatformLink && (
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          <Link to="/" className="text-primary hover:underline">
+        <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
+          <Link to="/" className="text-cyan-600/95 transition-colors hover:text-cyan-500 hover:underline dark:text-cyan-400/90 dark:hover:text-cyan-300">
             Conheça a plataforma AD-HUB
           </Link>
         </p>

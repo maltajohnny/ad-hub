@@ -119,7 +119,7 @@ function AppLayoutMain({
         </div>
         <div
           className={cn(
-            "flex min-h-0 flex-1 flex-col pb-[env(safe-area-inset-bottom,0px)] [scrollbar-gutter:stable]",
+            "flex min-h-0 flex-1 flex-col pb-[env(safe-area-inset-bottom,0px)] [scrollbar-gutter:stable] touch-pan-y [-webkit-overflow-scrolling:touch]",
             isBoard ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden overscroll-y-contain",
           )}
         >
@@ -265,9 +265,9 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     <div
       className={cn(
         "flex w-full max-w-full overflow-x-hidden bg-background",
-        /* Mobile: altura mínima da página; desktop: altura fixa à viewport — scroll só no conteúdo central */
-        "min-h-[100dvh] min-h-[100svh]",
-        "lg:h-[100dvh] lg:max-h-[100dvh] lg:min-h-0 lg:overflow-hidden",
+        /* Altura à viewport em todos os tamanhos: com aside fixed no mobile o flex não limitava a altura e o
+           overflow-y-auto do painel principal não gerava scroll (scroll preso / toque sem efeito). */
+        "min-h-0 h-[100dvh] max-h-[100dvh] overflow-hidden",
       )}
     >
       {user?.mustChangePassword ? <FirstAccessPasswordModal /> : null}
