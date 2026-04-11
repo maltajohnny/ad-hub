@@ -126,6 +126,8 @@ const Login = () => {
                   alt={brand.alt}
                   width={240}
                   height={120}
+                  decoding="async"
+                  fetchPriority="high"
                   className="h-auto w-full max-h-[200px] object-contain mb-1 drop-shadow-lg sm:max-h-[220px]"
                 />
               </div>
@@ -156,9 +158,7 @@ const Login = () => {
 
         <form
           id="login-form"
-          method="post"
-          action="#"
-          autoComplete="off"
+          noValidate
           onSubmit={handleSubmit}
           className="glass-card space-y-5 rounded-xl p-6 sm:p-8"
         >
