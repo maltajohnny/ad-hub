@@ -762,137 +762,148 @@ const Usuarios = () => {
             const owner = isOwner(u.username);
             const isSelf = u.username === user?.username;
             return (
-              <li key={u.username} className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-3 hover:bg-secondary/10">
-                <UserAvatarDisplay user={u} className="h-10 w-10 shrink-0 border border-border/40" iconSize={22} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium">{u.name}</span>
-                    <span className="text-xs text-muted-foreground">@{u.username}</span>
-                    {u.role === "admin" ? (
-                      <Badge variant="outline" className="text-[10px] gap-1 border-primary/40 text-primary">
-                        <Shield className="h-3 w-3" />
-                        Admin
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-[10px] gap-1">
-                        <User className="h-3 w-3" />
-                        Usuário
-                      </Badge>
-                    )}
-                    {owner && (
-                      <Badge variant="outline" className="text-[10px] border-success/40 text-success">
-                        Owner
-                      </Badge>
-                    )}
-                    {u.disabled && (
-                      <Badge variant="outline" className="text-[10px] border-muted-foreground/50 text-muted-foreground">
-                        Desativado
-                      </Badge>
+              <li
+                key={u.username}
+                className="flex gap-4 px-5 py-4 hover:bg-secondary/10 items-stretch"
+              >
+                <div className="shrink-0 self-start">
+                  <UserAvatarDisplay
+                    user={u}
+                    className="h-16 w-16 border border-border/40"
+                    iconSize={36}
+                  />
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium">{u.name}</span>
+                      <span className="text-xs text-muted-foreground">@{u.username}</span>
+                      {u.role === "admin" ? (
+                        <Badge variant="outline" className="text-[10px] gap-1 border-primary/40 text-primary">
+                          <Shield className="h-3 w-3" />
+                          Admin
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-[10px] gap-1">
+                          <User className="h-3 w-3" />
+                          Usuário
+                        </Badge>
+                      )}
+                      {owner && (
+                        <Badge variant="outline" className="text-[10px] border-success/40 text-success">
+                          Owner
+                        </Badge>
+                      )}
+                      {u.disabled && (
+                        <Badge variant="outline" className="text-[10px] border-muted-foreground/50 text-muted-foreground">
+                          Desativado
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                    {u.organizationId ? (
+                      <p className="text-[10px] text-muted-foreground/90">
+                        Organização:{" "}
+                        <span className="text-foreground/90">
+                          {getTenantById(u.organizationId)?.displayName ?? u.organizationId}
+                        </span>
+                      </p>
+                    ) : null}
+                    {u.role === "user" && (
+                      <div className="flex flex-col gap-2 pt-1">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id={`board-${u.username}`}
+                            checked={u.canManageBoard === true}
+                            onCheckedChange={(checked) => {
+                              const res = setBoardSettingsPermission(
+                                u.username,
+                                checked,
+                                platformOp ? null : scopeTenantId,
+                              );
+                              if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
+                              else toast.success(checked ? "Permissão de Board concedida." : "Permissão de Board revogada.");
+                            }}
+                          />
+                          <label htmlFor={`board-${u.username}`} className="text-xs text-muted-foreground cursor-pointer">
+                            Configurar Board (colunas)
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id={`board-del-${u.username}`}
+                            checked={u.canDeleteBoardCards === true}
+                            onCheckedChange={(checked) => {
+                              const res = setBoardDeleteCardsPermission(
+                                u.username,
+                                checked,
+                                platformOp ? null : scopeTenantId,
+                              );
+                              if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
+                              else
+                                toast.success(
+                                  checked ? "Permissão para excluir cards concedida." : "Permissão para excluir cards revogada.",
+                                );
+                            }}
+                          />
+                          <label htmlFor={`board-del-${u.username}`} className="text-xs text-muted-foreground cursor-pointer">
+                            Excluir cards no Board
+                          </label>
+                        </div>
+                      </div>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">{u.email}</p>
-                  {u.organizationId ? (
-                    <p className="text-[10px] text-muted-foreground/90 mt-0.5">
-                      Organização:{" "}
-                      <span className="text-foreground/90">
-                        {getTenantById(u.organizationId)?.displayName ?? u.organizationId}
-                      </span>
-                    </p>
-                  ) : null}
-                  {u.role === "user" && (
-                    <div className="flex flex-col gap-2 mt-2">
-                      <div className="flex items-center gap-2">
+                  <div className="mt-auto flex flex-wrap items-center justify-end gap-2 pt-1">
+                    {!owner && (
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
                         <Switch
-                          id={`board-${u.username}`}
-                          checked={u.canManageBoard === true}
-                          onCheckedChange={(checked) => {
-                            const res = setBoardSettingsPermission(
-                              u.username,
-                              checked,
-                              platformOp ? null : scopeTenantId,
-                            );
-                            if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
-                            else toast.success(checked ? "Permissão de Board concedida." : "Permissão de Board revogada.");
-                          }}
-                        />
-                        <label htmlFor={`board-${u.username}`} className="text-xs text-muted-foreground cursor-pointer">
-                          Configurar Board (colunas)
-                        </label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id={`board-del-${u.username}`}
-                          checked={u.canDeleteBoardCards === true}
-                          onCheckedChange={(checked) => {
-                            const res = setBoardDeleteCardsPermission(
-                              u.username,
-                              checked,
-                              platformOp ? null : scopeTenantId,
-                            );
-                            if (!res.ok) toast.error(res.error || "Não foi possível atualizar.");
-                            else
-                              toast.success(
-                                checked ? "Permissão para excluir cards concedida." : "Permissão para excluir cards revogada.",
+                          id={`account-active-${u.username.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
+                          checked={!u.disabled}
+                          onCheckedChange={(active) => {
+                            void (async () => {
+                              const res = await updateUserByAdmin(
+                                u.username,
+                                { disabled: !active },
+                                platformOp ? null : scopeTenantId,
                               );
+                              if (!res.ok) toast.error(res.error ?? "Erro");
+                              else toast.success(active ? "Conta reativada." : "Conta desativada.");
+                            })();
                           }}
                         />
-                        <label htmlFor={`board-del-${u.username}`} className="text-xs text-muted-foreground cursor-pointer">
-                          Excluir cards no Board
-                        </label>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {!owner && (
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <Switch
-                        id={`account-active-${u.username.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
-                        checked={!u.disabled}
-                        onCheckedChange={(active) => {
-                          void (async () => {
-                            const res = await updateUserByAdmin(
-                              u.username,
-                              { disabled: !active },
-                              platformOp ? null : scopeTenantId,
-                            );
-                            if (!res.ok) toast.error(res.error ?? "Erro");
-                            else toast.success(active ? "Conta reativada." : "Conta desativada.");
-                          })();
-                        }}
-                      />
-                      <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">Ativa</span>
-                    </label>
-                  )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="shrink-0 text-muted-foreground hover:text-foreground"
-                    title="Editar dados da conta"
-                    onClick={() => openEdit(u)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={owner}
-                    title={owner ? "A conta Administrador (owner) não pode ser excluída" : undefined}
-                    className={cn(
-                      "text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0",
-                      owner && "opacity-40",
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Ativa</span>
+                      </label>
                     )}
-                    onClick={() => {
-                      if (owner) return;
-                      if (isSelf && !window.confirm("Excluir sua própria conta? Você será desconectado.")) return;
-                      if (!isSelf && !window.confirm(`Excluir o usuário @${u.username}?`)) return;
-                      handleDelete(u.username);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 text-muted-foreground hover:text-foreground"
+                      title="Editar dados da conta"
+                      onClick={() => openEdit(u)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={owner}
+                      title={owner ? "A conta Administrador (owner) não pode ser excluída" : undefined}
+                      className={cn(
+                        "text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0",
+                        owner && "opacity-40",
+                      )}
+                      onClick={() => {
+                        if (owner) return;
+                        if (isSelf && !window.confirm("Excluir sua própria conta? Você será desconectado.")) return;
+                        if (!isSelf && !window.confirm(`Excluir o usuário @${u.username}?`)) return;
+                        handleDelete(u.username);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </li>
             );
