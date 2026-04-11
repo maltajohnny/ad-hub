@@ -5,7 +5,7 @@ import { useTenant } from "@/contexts/TenantContext";
 import { getTenantById, getTenantBySlug } from "@/lib/tenantsStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Eye, EyeOff, LogIn } from "lucide-react";
+import { Eye, EyeOff, Lock, User } from "lucide-react";
 import adHubFallback from "@/assets/ad-hub-logo.png";
 import {
   extractOrgSlugFromUsername,
@@ -160,50 +160,51 @@ const Login = () => {
           id="login-form"
           noValidate
           onSubmit={handleSubmit}
-          className="glass-card space-y-5 rounded-xl p-6 sm:p-8"
+          className="glass-card flex flex-col gap-4 rounded-2xl p-5 sm:p-6"
         >
-          <div className="space-y-2">
-            <label className="text-sm text-muted-foreground" htmlFor="login-username">
-              Utilizador ou e-mail
-            </label>
-            <Input
-              id="login-username"
-              name="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="ex.: admin, diego.norter ou nome@empresa.com"
-              autoComplete="username"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              className="bg-secondary/50 border-border/50 focus:border-primary"
-              disabled={invalidTenant}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter") return;
-                e.preventDefault();
-                (document.getElementById("login-form") as HTMLFormElement | null)?.requestSubmit();
-              }}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm text-muted-foreground" htmlFor="login-password">
-              Senha
-            </label>
+          <div className="flex flex-col gap-2">
             <div className="relative">
+              <User
+                className="pointer-events-none absolute left-3.5 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <Input
+                id="login-username"
+                name="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Utilizador ou e-mail"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                disabled={invalidTenant}
+                className="h-11 rounded-full border-border/50 bg-background/90 pl-10 shadow-sm focus-visible:ring-offset-0 md:text-sm"
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  (document.getElementById("login-form") as HTMLFormElement | null)?.requestSubmit();
+                }}
+              />
+            </div>
+            <div className="relative">
+              <Lock
+                className="pointer-events-none absolute left-3.5 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
               <Input
                 id="login-password"
                 name="password"
                 type={showPw ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Digite sua senha"
+                placeholder="Senha"
                 autoComplete="current-password"
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                className="bg-secondary/50 border-border/50 focus:border-primary pr-10"
                 disabled={invalidTenant}
+                className="h-11 rounded-full border-border/50 bg-background/90 pl-10 pr-11 shadow-sm focus-visible:ring-offset-0 md:text-sm"
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
                   e.preventDefault();
@@ -213,33 +214,32 @@ const Login = () => {
               <button
                 type="button"
                 onClick={() => setShowPw(!showPw)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-3 top-1/2 z-[1] -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                aria-label={showPw ? "Ocultar senha" : "Mostrar senha"}
               >
                 {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
 
-          <div className="text-right">
-            <Link
-              to="/forgot-password"
-              className="text-xs font-medium text-primary hover:underline"
-            >
-              Esqueceu a senha?
-            </Link>
-          </div>
-
-          {error && <p className="text-destructive text-sm text-center">{error}</p>}
+          {error && <p className="text-destructive text-center text-sm">{error}</p>}
 
           <Button
             type="submit"
-            className="min-h-12 w-full gradient-brand text-base font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            className="h-11 w-full rounded-full bg-foreground text-base font-semibold text-background shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
             disabled={!canSubmitLogin}
           >
-            <LogIn size={16} className="mr-2" />
             Entrar
           </Button>
 
+          <p className="text-center">
+            <Link
+              to="/forgot-password"
+              className="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-primary hover:underline"
+            >
+              Esqueceu sua senha?
+            </Link>
+          </p>
         </form>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
