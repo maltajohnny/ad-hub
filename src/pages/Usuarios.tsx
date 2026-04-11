@@ -766,7 +766,7 @@ const Usuarios = () => {
                 key={u.username}
                 className="flex gap-4 px-5 py-4 hover:bg-secondary/10 items-stretch"
               >
-                <div className="shrink-0 self-start">
+                <div className="shrink-0 self-center">
                   <UserAvatarDisplay
                     user={u}
                     className="h-16 w-16 border border-border/40"
