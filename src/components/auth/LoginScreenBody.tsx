@@ -167,7 +167,15 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
         </div>
       )}
 
-      <form id={formId} noValidate onSubmit={handleSubmit} className="glass-card flex flex-col gap-4 rounded-2xl p-5 sm:p-6">
+      <form
+        id={formId}
+        method="post"
+        action="#"
+        noValidate
+        autoComplete="on"
+        onSubmit={handleSubmit}
+        className="glass-card flex flex-col gap-4 rounded-2xl p-5 sm:p-6"
+      >
         <div className="flex flex-col gap-2">
           <div className="relative">
             <User
