@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LoginScreenBody } from "@/components/auth/LoginScreenBody";
@@ -17,12 +17,35 @@ import {
 import adHubLogo from "@/assets/ad-hub-logo.png";
 import landingHeroAi from "@/assets/landing-hero-ai.png";
 
+/** Altura do viewport do hero/login (duas secções empilhadas = 2× esta altura scrollável). */
+const HERO_LOGIN_VIEWPORT_H =
+  "h-[min(34rem,88dvh)] max-h-[44rem] min-h-[22rem] sm:h-[min(36rem,85dvh)] lg:h-[min(38rem,80dvh)]";
+
 export default function Landing() {
   const [showLoginInHero, setShowLoginInHero] = useState(false);
+  const heroLoginScrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollHeroLoginTo = (which: "hero" | "login") => {
+    const el = heroLoginScrollRef.current;
+    if (!el) return;
+    const y = which === "login" ? el.clientHeight : 0;
+    el.scrollTo({ top: y, behavior: "smooth" });
+  };
 
   const openLoginInHero = () => {
-    setShowLoginInHero(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
+    setShowLoginInHero(true);
+  };
+
+  useLayoutEffect(() => {
+    if (!showLoginInHero) return;
+    const id = requestAnimationFrame(() => scrollHeroLoginTo("login"));
+    return () => cancelAnimationFrame(id);
+  }, [showLoginInHero]);
+
+  const closeLoginHero = () => {
+    scrollHeroLoginTo("hero");
+    window.setTimeout(() => setShowLoginInHero(false), 560);
   };
 
   return (
@@ -31,7 +54,12 @@ export default function Landing() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 safe-area-x py-3 sm:flex-nowrap sm:gap-4">
           <Link
             to="/"
-            onClick={() => setShowLoginInHero(false)}
+            onClick={(e) => {
+              if (showLoginInHero) {
+                e.preventDefault();
+                closeLoginHero();
+              }
+            }}
             className="flex min-w-0 max-w-[calc(100%-8rem)] items-center gap-2.5 group sm:max-w-none sm:gap-3"
           >
             <img
@@ -59,7 +87,7 @@ export default function Landing() {
                 variant="ghost"
                 size="sm"
                 className="min-h-11 px-3 text-slate-300 hover:bg-white/10 hover:text-white sm:min-h-9"
-                onClick={() => setShowLoginInHero(false)}
+                onClick={closeLoginHero}
               >
                 Voltar
               </Button>
@@ -97,18 +125,17 @@ export default function Landing() {
 
         <div className="relative mx-auto max-w-6xl px-[max(1rem,env(safe-area-inset-left,0px))] pb-12 pt-8 pr-[max(1rem,env(safe-area-inset-right,0px))] sm:px-6 sm:pb-14 sm:pt-10 lg:pb-20 xl:max-w-7xl 2xl:max-w-[90rem]">
           {/*
-            Viewport fixo: o painel interior tem 200% da altura; -translate-y-1/2 faz o hero “subir” e revela o login por baixo.
+            Scroll vertical no próprio bloco: ao abrir login, faz scroll para baixo (hero “sobe” como num scroll interno).
           */}
-          <div className="relative mx-auto h-[min(34rem,88dvh)] max-h-[44rem] min-h-[22rem] w-full overflow-hidden sm:h-[min(36rem,85dvh)] lg:h-[min(38rem,80dvh)]">
-            <div
-              className={[
-                "flex h-[200%] w-full flex-col transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
-                "motion-reduce:duration-0",
-                showLoginInHero ? "-translate-y-1/2" : "translate-y-0",
-              ].join(" ")}
-            >
-              {/* Painel 1: hero (metade superior do interior = 100% da janela visível) */}
-              <div className="flex h-1/2 min-h-0 flex-col justify-center py-4 sm:py-5">
+          <div
+            ref={heroLoginScrollRef}
+            className={cn(
+              HERO_LOGIN_VIEWPORT_H,
+              "relative mx-auto w-full overflow-y-auto overflow-x-hidden scroll-smooth overscroll-y-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden motion-reduce:scroll-auto",
+            )}
+          >
+              {/* Secção 1: hero */}
+              <div className={cn(HERO_LOGIN_VIEWPORT_H, "flex min-h-full flex-col justify-center py-4 sm:py-5")}>
                 <div className="grid items-center gap-8 sm:gap-10 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.2fr)] lg:gap-14 xl:gap-16">
                   <div className="max-w-xl min-w-0 lg:max-w-none">
                     <p className="mb-3 inline-flex max-w-full items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/5 px-3 py-1.5 text-xs font-medium text-cyan-300/95 shadow-sm shadow-cyan-500/10 sm:mb-4">
@@ -169,17 +196,17 @@ export default function Landing() {
                 </div>
               </div>
 
-              {/* Painel 2: login (entra de baixo quando o painel desliza) */}
+              {/* Secção 2: login (revelada ao fazer scroll para baixo no container) */}
               <div
                 className={cn(
-                  "flex h-1/2 min-h-0 items-center justify-center px-2 py-4 sm:px-4",
+                  HERO_LOGIN_VIEWPORT_H,
+                  "flex min-h-full items-center justify-center px-2 py-4 sm:px-4",
                   !showLoginInHero && "pointer-events-none select-none",
                 )}
                 aria-hidden={!showLoginInHero}
               >
                 <LoginScreenBody variant="landing" formId="login-form-landing" />
               </div>
-            </div>
           </div>
         </div>
       </section>
