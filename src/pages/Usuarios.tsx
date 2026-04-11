@@ -197,7 +197,7 @@ const Usuarios = () => {
       platformOp ? null : scopeTenantId,
     );
     if (!res.ok) {
-      toast.error(res.error ?? "Não foi possível guardar.");
+      toast.error(res.error ?? "Não foi possível salvar.");
       return;
     }
     toast.success("Conta atualizada.");
@@ -273,6 +273,47 @@ const Usuarios = () => {
     editNewPassword,
     editUsername,
     editOrganizationId,
+    platformOp,
+    scopeTenantId,
+  ]);
+
+  /** Só permitir gravar quando algo mudou em relação ao estado ao abrir o diálogo. */
+  const editIsDirty = useMemo(() => {
+    if (!editTarget) return false;
+    if (editNewPassword.trim() !== "") return true;
+    if (editName.trim() !== editTarget.name) return true;
+    if (editEmail.trim() !== editTarget.email) return true;
+    if ((editPhone ?? "").trim() !== (editTarget.phone ?? "").trim()) return true;
+    if ((editDocument ?? "").trim() !== (editTarget.document ?? "").trim()) return true;
+    if (isOwner(editTarget.username)) return false;
+    if (editRole !== editTarget.role) return true;
+    if (!!editDisabled !== !!editTarget.disabled) return true;
+    const rawLogin = sanitizeLoginInput(editUsername).trim();
+    const editOrgId = platformOp
+      ? editOrganizationId !== "__none__"
+        ? editOrganizationId
+        : null
+      : (editTarget.organizationId ?? scopeTenantId);
+    const editOrgSlug = editOrgId ? getTenantById(editOrgId)?.slug ?? null : null;
+    const nextLogin = editOrgSlug ? (buildOrgScopedLogin(rawLogin, editOrgSlug) ?? "") : rawLogin;
+    if (normalizeLoginKey(nextLogin) !== normalizeLoginKey(editTarget.username)) return true;
+    if (platformOp) {
+      const prevOrg = editTarget.organizationId ?? null;
+      const nextOrg = editOrganizationId === "__none__" ? null : editOrganizationId;
+      if (nextOrg !== prevOrg) return true;
+    }
+    return false;
+  }, [
+    editTarget,
+    editName,
+    editEmail,
+    editPhone,
+    editDocument,
+    editRole,
+    editDisabled,
+    editUsername,
+    editOrganizationId,
+    editNewPassword,
     platformOp,
     scopeTenantId,
   ]);
@@ -612,7 +653,7 @@ const Usuarios = () => {
               else toast.success("Módulos atualizados.");
             }}
           >
-            Guardar módulos
+            Salvar módulos
           </Button>
         </Card>
       )}
@@ -1010,10 +1051,10 @@ const Usuarios = () => {
             <Button
               type="button"
               className="gradient-brand text-primary-foreground"
-              disabled={!editCanSubmit}
+              disabled={!editCanSubmit || !editIsDirty}
               onClick={() => void saveEdit()}
             >
-              Guardar
+              Salvar
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -39,11 +39,23 @@ type Props = {
 export function ClientSettingsModal({ clientId, open, onClose }: Props) {
   const client = clientId != null ? clientsData.find((c) => c.id === clientId) : undefined;
   const [form, setForm] = useState<ClientIntegrationSettings | null>(null);
+  const [baselineJson, setBaselineJson] = useState<string | null>(null);
 
   useEffect(() => {
-    if (clientId == null || !open) return;
-    setForm(loadClientIntegration(clientId));
+    if (clientId == null || !open) {
+      setForm(null);
+      setBaselineJson(null);
+      return;
+    }
+    const loaded = loadClientIntegration(clientId);
+    setForm(loaded);
+    setBaselineJson(JSON.stringify(loaded));
   }, [clientId, open]);
+
+  const isDirty = useMemo(() => {
+    if (form == null || baselineJson == null) return false;
+    return JSON.stringify(form) !== baselineJson;
+  }, [form, baselineJson]);
 
   if (!open || clientId == null || !client) return null;
 
@@ -74,7 +86,7 @@ export function ClientSettingsModal({ clientId, open, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 font-display">
             <Slack className="h-5 w-5 text-[#E01E5A]" />
@@ -217,8 +229,13 @@ export function ClientSettingsModal({ clientId, open, onClose }: Props) {
           <Button type="button" variant="outline" onClick={onClose}>
             Cancelar
           </Button>
-          <Button type="button" className="gradient-brand text-primary-foreground" onClick={handleSave}>
-            Guardar
+          <Button
+            type="button"
+            className="gradient-brand text-primary-foreground"
+            disabled={!isDirty}
+            onClick={handleSave}
+          >
+            Salvar
           </Button>
         </DialogFooter>
       </DialogContent>

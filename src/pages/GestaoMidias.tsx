@@ -1394,7 +1394,7 @@ const GestaoMidias = () => {
               Cancelar
             </Button>
             <Button type="button" onClick={handleNovoCliente}>
-              Guardar cliente
+              Salvar cliente
             </Button>
           </DialogFooter>
         </DialogContent>

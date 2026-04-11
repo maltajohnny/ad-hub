@@ -436,7 +436,7 @@ export default function SocialPulse() {
                       }
                     }}
                   >
-                    Guardar e atualizar
+                    Salvar e atualizar
                   </Button>
                 </div>
               </Card>

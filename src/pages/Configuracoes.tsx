@@ -323,7 +323,7 @@ const Configuracoes = () => {
                   </SelectContent>
                 </Select>
                 <Button type="button" variant="secondary" size="sm" onClick={handleSaveOrgVinculo}>
-                  Guardar vínculo
+                  Salvar vínculo
                 </Button>
               </div>
             </Card>

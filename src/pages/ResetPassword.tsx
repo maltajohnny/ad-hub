@@ -116,7 +116,7 @@ export default function ResetPassword() {
               className="w-full gradient-brand text-primary-foreground"
               disabled={!canSubmit || loading}
             >
-              {loading ? "A guardar…" : "Guardar nova senha"}
+              {loading ? "A salvar…" : "Salvar nova senha"}
             </Button>
           </form>
         ) : null}
