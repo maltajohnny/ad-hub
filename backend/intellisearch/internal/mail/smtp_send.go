@@ -42,11 +42,16 @@ func SendPlain(subject, body string, to []string) (sent bool, err error) {
 	msg := []byte(header + body)
 
 	auth := smtp.PlainAuth("", user, pass, host)
+	// MAIL FROM exige só o endereço (ex.: noreply@dominio.com). "Nome <email>" rebenta em servidores estritos (ex.: Titan 550 5.4.6).
+	env := envelopeFrom(from)
+	if env == "" {
+		env = user
+	}
 	if port == 465 {
-		return true, sendSMTPS(host, portStr, auth, envelopeFrom(from), to, msg)
+		return true, sendSMTPS(host, portStr, auth, env, to, msg)
 	}
 	addr := fmt.Sprintf("%s:%s", host, portStr)
-	return true, smtp.SendMail(addr, auth, from, to, msg)
+	return true, smtp.SendMail(addr, auth, env, to, msg)
 }
 
 // envelopeFrom extrai o endereço para MAIL FROM (evita "Nome <x@y>" se o servidor for estrito).
