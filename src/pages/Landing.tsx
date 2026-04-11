@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { LoginScreenBody } from "@/components/auth/LoginScreenBody";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ArrowRight,
@@ -15,12 +17,20 @@ import adHubLogo from "@/assets/ad-hub-logo.png";
 import landingHeroAi from "@/assets/landing-hero-ai.png";
 
 export default function Landing() {
+  const [showLoginInHero, setShowLoginInHero] = useState(false);
+
+  const openLoginInHero = () => {
+    setShowLoginInHero(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
     <div className="min-h-screen min-h-[100dvh] bg-[#050814] text-foreground overflow-x-hidden pb-[env(safe-area-inset-bottom,0px)]">
       <header className="border-b border-white/[0.06] bg-[#050814]/85 backdrop-blur-xl sticky top-0 z-50 safe-area-t">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 safe-area-x py-3 sm:flex-nowrap sm:gap-4">
           <Link
             to="/"
+            onClick={() => setShowLoginInHero(false)}
             className="flex min-w-0 max-w-[calc(100%-8rem)] items-center gap-2.5 group sm:max-w-none sm:gap-3"
           >
             <img
@@ -42,21 +52,37 @@ export default function Landing() {
             </span>
           </Link>
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="min-h-11 min-w-[2.75rem] px-3 text-muted-foreground hover:text-foreground sm:min-h-9"
-              asChild
-            >
-              <Link to="/login">Entrar</Link>
-            </Button>
-            <Button
-              size="sm"
-              className="min-h-11 min-w-[2.75rem] gradient-brand px-4 text-primary-foreground shadow-lg shadow-primary/20 sm:min-h-9"
-              asChild
-            >
-              <Link to="/login">Começar</Link>
-            </Button>
+            {showLoginInHero ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-h-11 px-3 text-slate-300 hover:bg-white/10 hover:text-white sm:min-h-9"
+                onClick={() => setShowLoginInHero(false)}
+              >
+                Voltar
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-11 min-w-[2.75rem] px-3 text-slate-300 hover:bg-white/10 hover:text-white sm:min-h-9"
+                  onClick={openLoginInHero}
+                >
+                  Entrar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="min-h-11 min-w-[2.75rem] gradient-brand px-4 text-primary-foreground shadow-lg shadow-primary/20 sm:min-h-9"
+                  onClick={openLoginInHero}
+                >
+                  Começar
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -69,6 +95,11 @@ export default function Landing() {
         </div>
 
         <div className="relative mx-auto max-w-6xl px-[max(1rem,env(safe-area-inset-left,0px))] py-12 pr-[max(1rem,env(safe-area-inset-right,0px))] sm:px-6 sm:py-14 lg:py-20 xl:max-w-7xl 2xl:max-w-[90rem]">
+          {showLoginInHero ? (
+            <div className="flex justify-center pb-4 sm:pb-6">
+              <LoginScreenBody variant="landing" formId="login-form-landing" />
+            </div>
+          ) : (
           <div className="grid items-center gap-10 sm:gap-12 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.2fr)] lg:gap-14 xl:gap-16">
             <div className="max-w-xl min-w-0 lg:max-w-none">
               <p className="mb-4 inline-flex max-w-full items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/5 px-3 py-1.5 text-xs font-medium text-cyan-300/95 shadow-sm shadow-cyan-500/10">
@@ -91,14 +122,13 @@ export default function Landing() {
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <Button
+                  type="button"
                   size="lg"
                   className="min-h-12 w-full gap-2 gradient-brand px-7 text-primary-foreground shadow-lg shadow-primary/25 sm:w-auto"
-                  asChild
+                  onClick={openLoginInHero}
                 >
-                  <Link to="/login">
-                    Aceder à plataforma
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+                  Aceder à plataforma
+                  <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
@@ -125,6 +155,7 @@ export default function Landing() {
               </div>
             </div>
           </div>
+          )}
         </div>
       </section>
 
@@ -190,11 +221,12 @@ export default function Landing() {
               </p>
             </div>
             <Button
+              type="button"
               size="lg"
               className="min-h-12 w-full shrink-0 gradient-brand text-primary-foreground shadow-lg sm:w-auto"
-              asChild
+              onClick={openLoginInHero}
             >
-              <Link to="/login">Entrar na AD-HUB</Link>
+              Entrar na AD-HUB
             </Button>
           </CardContent>
         </Card>
