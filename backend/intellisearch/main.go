@@ -64,6 +64,8 @@ func main() {
 	hub := app.Group("/api/ad-hub/auth")
 	hub.Get("/ping", handlers.AdHubPing)
 	hub.Post("/login", handlers.AdHubLogin)
+	hub.Post("/forgot-password", handlers.AdHubForgotPassword)
+	hub.Post("/reset-password", handlers.AdHubResetPassword)
 	hub.Post("/password", handlers.AdHubChangePassword)
 	hub.Get("/registry", handlers.AdHubRegistry)
 	hub.Post("/users", handlers.AdHubCreateUser)

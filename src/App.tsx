@@ -10,6 +10,8 @@ import { FavoritesProvider } from "@/contexts/FavoritesContext";
 import { KanbanProvider } from "@/contexts/KanbanContext";
 import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
 import Board from "@/pages/Board";
 import Clientes from "@/pages/Clientes";
@@ -127,6 +129,20 @@ const LoginRoute = () => {
   return <Login />;
 };
 
+const ForgotPasswordRoute = () => {
+  const { user } = useAuth();
+  const { tenant } = useTenant();
+  if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+  return <ForgotPassword />;
+};
+
+const ResetPasswordRoute = () => {
+  const { user } = useAuth();
+  const { tenant } = useTenant();
+  if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+  return <ResetPassword />;
+};
+
 /** Página inicial pública; utilizadores autenticados vão direto ao painel. */
 const LandingRoute = () => {
   const { user } = useAuth();
@@ -152,6 +168,8 @@ const App = () => (
                     <Route path="/landing" element={<Navigate to="/" replace />} />
                     <Route path="/login" element={<LoginRoute />} />
                     <Route path="/t/:tenantSlug/login" element={<LoginRoute />} />
+                    <Route path="/forgot-password" element={<ForgotPasswordRoute />} />
+                    <Route path="/reset-password" element={<ResetPasswordRoute />} />
                     <Route path="/oauth/popup-callback" element={<OAuthPopupCallback />} />
 
                     <Route element={<ProtectedLayout />}>

@@ -47,17 +47,53 @@ export function useServerAuth(ping: { db: boolean; jwt_ready: boolean } | null):
   return isServerAuthLive(ping);
 }
 
-export async function adHubLogin(username: string, password: string): Promise<{ token: string; user: User } | null> {
+/** `usernameOrEmail` — login normalizado ou e-mail (o servidor aceita ambos). */
+export async function adHubLogin(
+  usernameOrEmail: string,
+  password: string,
+): Promise<{ token: string; user: User } | null> {
   const res = await fetch(`${base()}/api/ad-hub/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username: usernameOrEmail, password }),
     cache: "no-store",
   });
   if (!res.ok) return null;
   const data = (await res.json()) as { token: string; user: User };
   if (!data.token || !data.user) return null;
   return data;
+}
+
+export async function adHubForgotPassword(email: string): Promise<{ ok: boolean; message?: string; error?: string }> {
+  const res = await fetch(`${base()}/api/ad-hub/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ email: email.trim() }),
+    cache: "no-store",
+  });
+  try {
+    const data = (await res.json()) as { ok?: boolean; message?: string; error?: string };
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    return { ok: true, message: data.message };
+  } catch {
+    return { ok: false, error: "Resposta inválida do servidor." };
+  }
+}
+
+export async function adHubResetPassword(token: string, newPassword: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${base()}/api/ad-hub/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ token: token.trim(), newPassword }),
+    cache: "no-store",
+  });
+  try {
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Resposta inválida do servidor." };
+  }
 }
 
 export async function adHubChangePassword(

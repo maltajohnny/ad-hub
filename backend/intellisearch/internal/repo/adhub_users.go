@@ -405,3 +405,79 @@ INSERT INTO users (
 	)
 	return err
 }
+
+// NormalizeEmail para comparação na base (minúsculas, sem espaços nas pontas).
+func NormalizeEmail(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+// GetByEmail obtém utilizador pelo e-mail (primeira linha se houver duplicados — evite e-mails duplicados).
+func GetByEmail(ctx context.Context, emailRaw string) (*Row, error) {
+	if db.DB == nil {
+		return nil, errors.New("mysql indisponível")
+	}
+	em := NormalizeEmail(emailRaw)
+	if em == "" || !strings.Contains(em, "@") {
+		return nil, sql.ErrNoRows
+	}
+	row := db.DB.QueryRowContext(ctx, `
+SELECT organization_id, username, role, name, email, phone, document,
+       password_hash, avatar_data_url, can_manage_board, can_delete_board_cards,
+       must_change_password, allowed_modules, disabled, hide_from_platform_list
+FROM users WHERE LOWER(TRIM(email)) = ? ORDER BY username LIMIT 1`, em)
+	r, err := scanOneUserRow(row)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// SetPasswordResetToken grava token e expiração (UTC).
+func SetPasswordResetToken(ctx context.Context, loginKey, token string, expiresUTC time.Time) error {
+	if db.DB == nil {
+		return errors.New("mysql indisponível")
+	}
+	key := NormalizeLoginKey(loginKey)
+	_, err := db.DB.ExecContext(ctx, `
+UPDATE users SET password_reset_token = ?, password_reset_expires_at = ?, updated_at = ?
+WHERE username = ?`,
+		token, expiresUTC.UTC(), time.Now().UTC(), key)
+	return err
+}
+
+// ClearPasswordResetToken remove token após uso ou cancelamento.
+func ClearPasswordResetToken(ctx context.Context, loginKey string) error {
+	if db.DB == nil {
+		return errors.New("mysql indisponível")
+	}
+	key := NormalizeLoginKey(loginKey)
+	_, err := db.DB.ExecContext(ctx, `
+UPDATE users SET password_reset_token = NULL, password_reset_expires_at = NULL, updated_at = ?
+WHERE username = ?`,
+		time.Now().UTC(), key)
+	return err
+}
+
+// GetByPasswordResetToken resolve utilizador por token válido e não expirado.
+func GetByPasswordResetToken(ctx context.Context, token string) (*Row, error) {
+	if db.DB == nil {
+		return nil, errors.New("mysql indisponível")
+	}
+	t := strings.TrimSpace(token)
+	if t == "" {
+		return nil, sql.ErrNoRows
+	}
+	row := db.DB.QueryRowContext(ctx, `
+SELECT organization_id, username, role, name, email, phone, document,
+       password_hash, avatar_data_url, can_manage_board, can_delete_board_cards,
+       must_change_password, allowed_modules, disabled, hide_from_platform_list
+FROM users
+WHERE password_reset_token = ?
+  AND password_reset_expires_at IS NOT NULL
+  AND password_reset_expires_at > UTC_TIMESTAMP(3)`, t)
+	r, err := scanOneUserRow(row)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}

@@ -164,14 +164,14 @@ const Login = () => {
         >
           <div className="space-y-2">
             <label className="text-sm text-muted-foreground" htmlFor="login-username">
-              Usuário
+              Utilizador ou e-mail
             </label>
             <Input
               id="login-username"
               name="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Utilizador ou utilizador.organização"
+              placeholder="ex.: admin, diego.norter ou nome@empresa.com"
               autoComplete="username"
               autoCapitalize="none"
               autoCorrect="off"
@@ -218,6 +218,15 @@ const Login = () => {
                 {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
+          </div>
+
+          <div className="text-right">
+            <Link
+              to="/forgot-password"
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Esqueceu a senha?
+            </Link>
           </div>
 
           {error && <p className="text-destructive text-sm text-center">{error}</p>}

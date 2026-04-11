@@ -2,23 +2,50 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/crypto/bcrypt"
 
 	adhubjwt "norter/intellisearch/internal/auth"
 	"norter/intellisearch/internal/db"
+	"norter/intellisearch/internal/mail"
 	"norter/intellisearch/internal/repo"
 )
 
 func isPlatformOperatorLogin(loginKey string) bool {
 	k := strings.ToLower(strings.TrimSpace(loginKey))
 	return k == "admin" || k == "qtrafficadmin"
+}
+
+// Alinha à regra do front (passwordPolicy.ts): ≥6, minúscula, maiúscula, caractere não alfanumérico.
+func adHubStrongPassword(s string) bool {
+	if len(s) < 6 {
+		return false
+	}
+	var lo, up, nonAlnum bool
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+			lo = true
+		case r >= 'A' && r <= 'Z':
+			up = true
+		default:
+			if r < '0' || r > '9' {
+				nonAlnum = true
+			}
+		}
+	}
+	return lo && up && nonAlnum
 }
 
 // Nome da base no MYSQL_DSN (ex.: johnn315_db-adhub-prd) para confirmar no DBeaver que é a mesma.
@@ -65,7 +92,7 @@ type loginBody struct {
 	Password string `json:"password"`
 }
 
-// AdHubLogin POST /api/ad-hub/auth/login
+// AdHubLogin POST /api/ad-hub/auth/login — campo `username` aceita login normalizado ou e-mail.
 func AdHubLogin(c *fiber.Ctx) error {
 	if db.DB == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -76,14 +103,22 @@ func AdHubLogin(c *fiber.Ctx) error {
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "JSON inválido"})
 	}
-	key := repo.NormalizeLoginKey(body.Username)
-	if key == "" || body.Password == "" {
+	id := strings.TrimSpace(body.Username)
+	if id == "" || body.Password == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Credenciais em falta"})
 	}
-	row, err := repo.GetByLoginKey(c.Context(), key)
+	var row *repo.Row
+	var err error
+	if strings.Contains(id, "@") {
+		row, err = repo.GetByEmail(c.Context(), id)
+	} else {
+		key := repo.NormalizeLoginKey(id)
+		row, err = repo.GetByLoginKey(c.Context(), key)
+	}
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Credenciais inválidas"})
 	}
+	key := row.LoginKey
 	if err := bcrypt.CompareHashAndPassword([]byte(row.PasswordHash), []byte(body.Password)); err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Credenciais inválidas"})
 	}
@@ -144,7 +179,117 @@ func AdHubChangePassword(c *fiber.Ctx) error {
 	if err := repo.UpdatePassword(c.Context(), key, string(hash)); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao gravar"})
 	}
+	_ = repo.ClearPasswordResetToken(c.Context(), key)
 	// atualizar mustChangePassword no JSON se existir
+	var u map[string]interface{}
+	_ = json.Unmarshal(row.UserJSON, &u)
+	u["mustChangePassword"] = false
+	nextJSON, _ := json.Marshal(u)
+	_ = repo.UpdateUserJSON(c.Context(), key, nextJSON)
+	return c.JSON(fiber.Map{"ok": true})
+}
+
+type forgotBody struct {
+	Email string `json:"email"`
+}
+
+// AdHubForgotPassword POST /api/ad-hub/auth/forgot-password — resposta genérica (não revela se o e-mail existe).
+func AdHubForgotPassword(c *fiber.Ctx) error {
+	okMsg := fiber.Map{
+		"ok":      true,
+		"message": "Se o e-mail estiver registado, receberá um link para redefinir a senha.",
+	}
+	if db.DB == nil {
+		return c.JSON(okMsg)
+	}
+	var body forgotBody
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "JSON inválido"})
+	}
+	em := repo.NormalizeEmail(body.Email)
+	if em == "" || !strings.Contains(em, "@") {
+		return c.JSON(okMsg)
+	}
+	row, err := repo.GetByEmail(c.Context(), em)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return c.JSON(okMsg)
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao processar"})
+	}
+	var u map[string]interface{}
+	if err := json.Unmarshal(row.UserJSON, &u); err != nil {
+		return c.JSON(okMsg)
+	}
+	if dis, ok := u["disabled"].(bool); ok && dis {
+		return c.JSON(okMsg)
+	}
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao gerar token"})
+	}
+	token := hex.EncodeToString(buf)
+	exp := time.Now().UTC().Add(1 * time.Hour)
+	if err := repo.SetPasswordResetToken(c.Context(), row.LoginKey, token, exp); err != nil {
+		log.Printf("adhub forgot-password: SetPasswordResetToken: %v — execute a migração 003_password_reset.sql?", err)
+		return c.JSON(okMsg)
+	}
+	base := strings.TrimRight(strings.TrimSpace(os.Getenv("ADHUB_PUBLIC_APP_URL")), "/")
+	if base == "" {
+		base = "http://localhost:8080"
+	}
+	link := fmt.Sprintf("%s/reset-password?token=%s", base, token)
+	subject := "Recuperação de senha — AD-Hub"
+	bodyText := fmt.Sprintf("Olá,\n\nPara definir uma nova senha, abra o link (válido cerca de 1 hora):\n\n%s\n\nSe não pediu este e-mail, ignore.\n", link)
+	sent, mErr := mail.SendPlain(subject, bodyText, []string{em})
+	if mErr != nil {
+		log.Printf("adhub: envio SMTP falhou (%v). Link para %s: %s", mErr, em, link)
+		return c.JSON(okMsg)
+	}
+	if !sent {
+		log.Printf("adhub: SMTP não configurado — link de recuperação para %s: %s", em, link)
+	}
+	return c.JSON(okMsg)
+}
+
+type resetBody struct {
+	Token       string `json:"token"`
+	NewPassword string `json:"newPassword"`
+}
+
+// AdHubResetPassword POST /api/ad-hub/auth/reset-password
+func AdHubResetPassword(c *fiber.Ctx) error {
+	if db.DB == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "MySQL indisponível"})
+	}
+	var body resetBody
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "JSON inválido"})
+	}
+	if strings.TrimSpace(body.Token) == "" || body.NewPassword == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Token e nova senha são obrigatórios"})
+	}
+	if !adHubStrongPassword(body.NewPassword) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Senha inválida: mínimo 6 caracteres, com maiúscula, minúscula e símbolo",
+		})
+	}
+	row, err := repo.GetByPasswordResetToken(c.Context(), body.Token)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Link inválido ou expirado — peça um novo."})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao validar token"})
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(body.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao gerar hash"})
+	}
+	key := row.LoginKey
+	if err := repo.UpdatePassword(c.Context(), key, string(hash)); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao gravar senha"})
+	}
+	_ = repo.ClearPasswordResetToken(c.Context(), key)
 	var u map[string]interface{}
 	_ = json.Unmarshal(row.UserJSON, &u)
 	u["mustChangePassword"] = false
