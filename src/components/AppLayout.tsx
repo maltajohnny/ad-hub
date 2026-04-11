@@ -9,7 +9,6 @@ import {
   LayoutDashboard,
   Users,
   LogOut,
-  UserCircle,
   ChevronLeft,
   ChevronRight,
   TrendingUp,
@@ -567,41 +566,24 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
 
         <div className="mt-auto shrink-0 space-y-2 border-t border-border/40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
           {!compact && (
-            <div className="px-3 py-2 flex items-start gap-3">
-              <UserAvatarDisplay user={user} className="h-9 w-9 shrink-0" iconSize={20} />
-              <div className="text-xs text-muted-foreground min-w-0 flex-1">
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80">Logado como</span>
-                <span className="text-foreground font-medium block truncate mt-0.5">{user?.name}</span>
-                {user?.role === "admin" ? (
-                  <span className="block text-[10px] text-primary/90 mt-0.5">Administrador</span>
-                ) : (
-                  <span className="block text-[10px] text-muted-foreground/90 mt-1 leading-snug">
-                    Perfil padrão — permissões detalhadas em breve.
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => navigate("/configuracoes?tab=conta")}
-                  className="mt-2 text-left text-[11px] font-medium text-primary hover:underline"
-                >
-                  Perfil e conta
-                </button>
+            <div className="flex flex-col items-center gap-2 px-2 py-2 text-center">
+              <UserAvatarDisplay user={user} className="h-11 w-11 shrink-0" iconSize={22} />
+              <div className="min-w-0 w-full">
+                <span className="text-foreground font-medium block truncate text-sm leading-tight">{user?.name}</span>
+                <span className="mt-1 block text-xs font-medium text-primary/90">
+                  {user?.role === "admin" ? "Administrador" : "Gestor"}
+                </span>
               </div>
             </div>
           )}
           {compact && user && (
-            <div className="flex flex-col items-center gap-2 pb-1">
-              <span className="inline-flex" title={user?.name}>
+            <div className="flex flex-col items-center pb-1">
+              <span
+                className="inline-flex"
+                title={`${user.name} — ${user.role === "admin" ? "Administrador" : "Gestor"}`}
+              >
                 <UserAvatarDisplay user={user} className="h-9 w-9" iconSize={20} />
               </span>
-              <button
-                type="button"
-                onClick={() => navigate("/configuracoes?tab=conta")}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-                title="Perfil e conta"
-              >
-                <UserCircle size={20} />
-              </button>
             </div>
           )}
           <button
