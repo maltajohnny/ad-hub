@@ -383,7 +383,7 @@ export default function Planos() {
 
       <main className="pointer-events-none relative z-10 mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-3 py-2 safe-area-x sm:px-5 lg:py-3">
         <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col animate-in fade-in duration-300">
-          <div className="glass-card pointer-events-auto flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/10 p-3 shadow-2xl ring-1 ring-white/[0.06] sm:rounded-2xl sm:p-4 lg:min-h-0">
+          <div className="glass-card pointer-events-auto flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-xl border border-white/10 p-3 shadow-2xl ring-1 ring-white/[0.06] sm:rounded-2xl sm:p-4 lg:min-h-0">
         <div className="mx-auto max-w-2xl shrink-0 text-center">
           <p className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/25 bg-cyan-500/5 px-2 py-0.5 text-[10px] font-medium text-cyan-300/95 sm:text-[11px]">
             <Sparkles className="h-3 w-3 shrink-0" />
@@ -422,7 +422,7 @@ export default function Planos() {
           </div>
         </div>
 
-        <div className="mt-2 min-h-0 flex-1 grid gap-3 lg:mt-3 lg:grid-cols-3 lg:items-stretch lg:gap-3 lg:overflow-hidden">
+        <div className="mt-2 min-h-0 flex-1 grid gap-3 lg:mt-3 lg:grid-cols-3 lg:items-stretch lg:gap-3">
           {/* Gestor */}
           <PlanCardShell planId="gestor" selected={selectedPlan === "gestor"} onSelect={setSelectedPlan}>
             <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">Gestor</p>
@@ -440,10 +440,6 @@ export default function Planos() {
               <li className="flex gap-1">
                 <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
                 Até 3 clientes
-              </li>
-              <li className="flex gap-1">
-                <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
-                Pacote base com 3 plataformas
               </li>
               <li className="flex gap-1">
                 <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
@@ -513,7 +509,6 @@ export default function Planos() {
             <ul className="mt-2 space-y-0.5 text-[11px] leading-tight text-slate-300 sm:text-xs">
               {[
                 "Até 10 clientes",
-                "3 plataformas (lista)",
                 "Dashboard, Kanban, ROI, Social Pulse",
                 "Relatórios consolidados",
               ].map((t) => (
