@@ -3,8 +3,8 @@
  * No servidor: copie para backend.local.php (mesma pasta que proxy.php).
  * Não commite backend.local.php no Git.
  *
- * Use quando a porta 3041 ficar "presa" no jailshell (ss mostra LISTEN mas
- * lsof/fuser não mostram PID) — suba a API noutra porta no .env (ex.: PORT=3042)
- * e aponte aqui o mesmo URL.
+ * API Go AD-Hub — porta predefinida 3041 (mesmo `PORT` no .env ao lado do binário).
+ * Só altere para 3042 (ou outra) se tiver de fugir a conflito no servidor; nesse caso
+ * use o mesmo URL que o processo Go está a escutar.
  */
-return 'http://127.0.0.1:3042';
+return 'http://127.0.0.1:3041';
