@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { isStrongPassword } from "@/lib/passwordPolicy";
 import { validateTenantSlug } from "@/lib/tenantsStore";
 
-export type LoginScreenVariant = "page" | "landing";
+export type LoginScreenVariant = "page" | "landing" | "embedded";
 
 type LoginScreenBodyProps = {
   variant?: LoginScreenVariant;
@@ -30,16 +30,22 @@ type LoginScreenBodyProps = {
   initialAuthMode?: "login" | "register";
   /** Texto opcional acima do formulário de registo (ex.: contexto vindo da página Planos). */
   registerContextBanner?: string | null;
+  /**
+   * Se definido, após login ou registo com sucesso navega para este destino em vez do habitual
+   * (ex.: voltar a `/planos` para concluir o pagamento).
+   */
+  redirectAfterSuccess?: { to: string; state?: Record<string, unknown> };
 };
 
-/** `landing` = mesmo aspeto do formulário que `page`; só esconde o link “Conheça a plataforma” e usa cartão embutido na landing. */
+/** `landing` = mesmo aspeto do formulário que `page`; só esconde o link “Conheça a plataforma” e usa cartão embutido na landing. `embedded` = bloco compacto (ex. dentro da página Planos). */
 export function LoginScreenBody({
   variant = "page",
   formId = "login-form",
   initialAuthMode = "login",
   registerContextBanner = null,
+  redirectAfterSuccess,
 }: LoginScreenBodyProps) {
-  const hidePlatformLink = variant === "landing";
+  const hidePlatformLink = variant === "landing" || variant === "embedded";
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const location = useLocation();
   const { login, registerOrganization, serverAuth, orgBilling } = useAuth();
@@ -134,6 +140,10 @@ export function LoginScreenBody({
       : logged.organizationId
         ? getTenantById(logged.organizationId)
         : tenant;
+    if (redirectAfterSuccess) {
+      navigate(redirectAfterSuccess.to, { replace: true, state: redirectAfterSuccess.state });
+      return;
+    }
     navigate(defaultPathAfterLogin(logged, tenantForModules?.enabledModules, orgBilling), { replace: true });
   };
 
@@ -171,6 +181,10 @@ export function LoginScreenBody({
       }
       setActiveSlug(slug);
       const t = getTenantBySlug(slug);
+      if (redirectAfterSuccess) {
+        navigate(redirectAfterSuccess.to, { replace: true, state: redirectAfterSuccess.state });
+        return;
+      }
       navigate(defaultPathAfterLogin(res.user, t?.enabledModules, orgBilling), { replace: true });
     } finally {
       setRegSubmitting(false);
@@ -196,46 +210,58 @@ export function LoginScreenBody({
 
   const inner = (
     <>
-      <div
-        key={brand.key}
-        className={cn("animate-in fade-in zoom-in-95 duration-500 fill-mode-both", hidePlatformLink ? "mb-6" : "mb-8")}
-      >
-        {brand.key === "orbix" ? (
-          <OrbixMarkLogo />
-        ) : brand.key === "norter" || brand.key === "tenant-norter" ? (
-          <NorterMarkLogo />
-        ) : (
-          <div className="flex flex-col items-center text-center">
-            {/*
+      {variant === "embedded" ? (
+        <div className="mb-4 text-center">
+          <div className="mx-auto flex justify-center">
+            <img src={adHubFallback} alt="AD-HUB" width={40} height={40} className="h-10 w-10 object-contain" />
+          </div>
+          <p className="mt-2 font-display text-base font-semibold text-white">Criar a sua organização</p>
+          <p className="mt-1 text-[11px] leading-snug text-slate-400">
+            Complete o cadastro para continuar com o plano escolhido.
+          </p>
+        </div>
+      ) : (
+        <div
+          key={brand.key}
+          className={cn("animate-in fade-in zoom-in-95 duration-500 fill-mode-both", hidePlatformLink ? "mb-6" : "mb-8")}
+        >
+          {brand.key === "orbix" ? (
+            <OrbixMarkLogo />
+          ) : brand.key === "norter" || brand.key === "tenant-norter" ? (
+            <NorterMarkLogo />
+          ) : (
+            <div className="flex flex-col items-center text-center">
+              {/*
               Mobile (incl. iPhone em paisagem ~932px): sem w-full na img — evita ícones quadrados a esticar à largura do contentor.
               Tamanho grande só a partir de lg (1024px): abaixo disso md aplicava logo enorme em telemóveis na horizontal.
             */}
-            <div className="mx-auto flex max-w-[71px] shrink-0 justify-center lg:max-w-[min(92vw,260px)]">
-              <img
-                src={showLogoSrc}
-                alt={brand.alt}
-                width={240}
-                height={120}
-                decoding="async"
-                fetchPriority="high"
-                className="mb-1 h-auto w-auto max-h-[41px] max-w-[71px] object-contain object-center drop-shadow-lg lg:max-h-[200px] lg:max-w-none lg:w-full xl:max-h-[220px]"
-              />
+              <div className="mx-auto flex max-w-[71px] shrink-0 justify-center lg:max-w-[min(92vw,260px)]">
+                <img
+                  src={showLogoSrc}
+                  alt={brand.alt}
+                  width={240}
+                  height={120}
+                  decoding="async"
+                  fetchPriority="high"
+                  className="mb-1 h-auto w-auto max-h-[41px] max-w-[71px] object-contain object-center drop-shadow-lg lg:max-h-[200px] lg:max-w-none lg:w-full xl:max-h-[220px]"
+                />
+              </div>
+              <span className="mt-3 font-display text-xl font-semibold tracking-wide text-foreground/90 lg:mt-4 lg:text-base">
+                {brand.name}
+              </span>
+              {brand.tagline ? (
+                <span className="font-display text-[11px] tracking-[0.18em] text-muted-foreground/85 sm:text-xs mt-1.5 uppercase">
+                  {brand.tagline}
+                </span>
+              ) : tenantSlug && tenantRecord ? (
+                <span className="mt-1 font-display text-[10px] tracking-[0.25em] text-foreground/35 uppercase">
+                  Organização
+                </span>
+              ) : null}
             </div>
-            <span className="mt-3 font-display text-xl font-semibold tracking-wide text-foreground/90 lg:mt-4 lg:text-base">
-              {brand.name}
-            </span>
-            {brand.tagline ? (
-              <span className="font-display text-[11px] tracking-[0.18em] text-muted-foreground/85 sm:text-xs mt-1.5 uppercase">
-                {brand.tagline}
-              </span>
-            ) : tenantSlug && tenantRecord ? (
-              <span className="mt-1 font-display text-[10px] tracking-[0.25em] text-foreground/35 uppercase">
-                Organização
-              </span>
-            ) : null}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {invalidTenant && (
         <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -485,7 +511,9 @@ export function LoginScreenBody({
     <div
       className={cn(
         "w-full max-w-sm",
+        variant === "embedded" && "max-w-md",
         hidePlatformLink ? "opacity-100" : "animate-fade-in",
+        variant === "embedded" && "mx-auto px-2 py-1",
         !hidePlatformLink &&
           "relative z-10 px-[max(1.25rem,env(safe-area-inset-left,0px))] py-8 pr-[max(1.25rem,env(safe-area-inset-right,0px))] pt-[max(1.5rem,env(safe-area-inset-top,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]",
       )}

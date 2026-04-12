@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { Check, ChevronDown, Lock, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Lock, Sparkles } from "lucide-react";
+import { LoginScreenBody } from "@/components/auth/LoginScreenBody";
 import adHubLogo from "@/assets/ad-hub-logo.png";
 import landingHeroAi from "@/assets/landing-hero-ai.png";
 import { PlanCheckoutModal } from "@/components/planos/PlanCheckoutModal";
@@ -160,6 +161,14 @@ const PLAN_CHECKOUT_LABEL: Record<PlanId, string> = {
   scale: "Scale — Até 15 gestores",
 };
 
+const PLAN_REGISTER_BANNER: Record<PlanId, string> = {
+  gestor:
+    "Plano Gestor: ao criar a organização, voltamos a Planos para pagar com o valor e extras que escolheu aqui.",
+  organizacao:
+    "Plano Organização: registe a equipa; em seguida conclua o pagamento na mesma página Planos.",
+  scale: "Plano Scale: após o registo, finalize a subscrição aqui em Planos.",
+};
+
 const PLAN_SURFACE: Record<PlanId, string> = {
   gestor: "bg-white/[0.03]",
   organizacao: "bg-white/[0.04]",
@@ -212,6 +221,7 @@ function PlanCardShell({
 
 export default function Planos() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, serverAuth } = useAuth();
   /** Plano com realce (borda dourada); por defeito o primeiro cartão vem ativo. */
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("gestor");
@@ -223,15 +233,19 @@ export default function Planos() {
   /** 0–3 lugares de equipa no plano Gestor (+módulo Usuários). */
   const [gestorTeamSeats, setGestorTeamSeats] = useState("0");
   const [showCheckout, setShowCheckout] = useState(false);
+  /** Visitante: painel de registo/login por cima dos cartões (mesma área glass). */
+  const [showRegisterPanel, setShowRegisterPanel] = useState(false);
 
   const requestCheckout = (plan: PlanId) => {
     setSelectedPlan(plan);
     if (!user) {
-      toast.info("Inicie sessão ou crie a sua organização", {
-        description:
-          "Para subscrever, precisa de uma conta de administrador. No registo, cria-se uma organização — no plano Gestor pode ser só você. Depois volte a Planos para pagar.",
-      });
-      navigate("/", { state: { openRegister: true, planIntent: plan } });
+      if (!serverAuth) {
+        toast.warning("Registo indisponível", {
+          description: "Configure MySQL e a API Go (MYSQL_DSN) para criar conta e subscrever online.",
+        });
+        return;
+      }
+      setShowRegisterPanel(true);
       return;
     }
     if (!serverAuth) {
@@ -329,11 +343,37 @@ export default function Planos() {
         setShowCheckout(false);
         return;
       }
+      if (showRegisterPanel) {
+        setShowRegisterPanel(false);
+        return;
+      }
       navigate("/");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate, showCheckout]);
+  }, [navigate, showCheckout, showRegisterPanel]);
+
+  /** Após login/registo com redirect para cá, abre o checkout do plano. */
+  useEffect(() => {
+    const s = location.state as { openCheckout?: boolean } | null | undefined;
+    if (!s?.openCheckout || !user) return;
+    navigate("/planos", { replace: true, state: {} });
+    if (!serverAuth) {
+      toast.warning("Subscrição indisponível", {
+        description: "Configure MySQL e a API Go (MYSQL_DSN) para pagamentos online.",
+      });
+      return;
+    }
+    if (user.role !== "admin") {
+      toast.error("Apenas o administrador da organização pode subscrever um plano.");
+      return;
+    }
+    if (!user.organizationId) {
+      toast.error("A sua conta precisa de uma organização.");
+      return;
+    }
+    setShowCheckout(true);
+  }, [location.state, user, serverAuth, navigate]);
 
   return (
     <div className="dark flex min-h-[100dvh] flex-col overflow-x-hidden bg-[#050814] text-slate-200 pb-[env(safe-area-inset-bottom,0px)]">
@@ -378,12 +418,21 @@ export default function Planos() {
         type="button"
         className="fixed inset-0 z-[8] cursor-default border-0 bg-transparent p-0"
         aria-label="Voltar ao início"
-        onClick={() => navigate("/")}
+        onClick={() => {
+          if (showRegisterPanel) return;
+          navigate("/");
+        }}
       />
 
       <main className="pointer-events-none relative z-10 mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-3 py-2 safe-area-x sm:px-5 lg:py-3">
         <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col animate-in fade-in duration-300">
-          <div className="glass-card pointer-events-auto flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-xl border border-white/10 p-3 shadow-2xl ring-1 ring-white/[0.06] sm:rounded-2xl sm:p-4 lg:min-h-0">
+          <div className="glass-card pointer-events-auto relative flex min-h-0 min-h-[min(88vh,42rem)] flex-1 flex-col overflow-hidden rounded-xl border border-white/10 p-3 shadow-2xl ring-1 ring-white/[0.06] sm:rounded-2xl sm:p-4 lg:min-h-0">
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden transition duration-500 ease-out",
+            showRegisterPanel && "-translate-y-[6%] scale-[0.97] opacity-[0.2]",
+          )}
+        >
         <div className="mx-auto max-w-2xl shrink-0 text-center">
           <p className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/25 bg-cyan-500/5 px-2 py-0.5 text-[10px] font-medium text-cyan-300/95 sm:text-[11px]">
             <Sparkles className="h-3 w-3 shrink-0" />
@@ -604,13 +653,53 @@ export default function Planos() {
             </div>
           </PlanCardShell>
         </div>
-          </div>
 
         <p className="mx-auto mt-2 max-w-xl shrink-0 px-1 text-center text-[9px] leading-tight text-slate-500 sm:text-[10px]">
           Todos os planos incluem Meta, Instagram e WhatsApp no preço base. Redes adicionais: +{" "}
           <span className="tabular-nums">{fmt(ADDON_PER_PLATFORM_MONTHLY)}</span>/mês por rede. Plano Organização: até +3
           utilizadores extra (+R$ 40/mês cada). Anual: 30% sobre o total de 12 meses.
         </p>
+        </div>
+
+        <div
+          className={cn(
+            "absolute inset-0 z-[20] flex flex-col rounded-[inherit] border border-white/[0.07] bg-[#060a14]/[0.97] p-3 shadow-inner backdrop-blur-md transition duration-500 ease-out sm:p-4",
+            showRegisterPanel
+              ? "translate-y-0 opacity-100"
+              : "pointer-events-none translate-y-full opacity-0",
+          )}
+          aria-hidden={!showRegisterPanel}
+        >
+          <div className="flex shrink-0 items-start justify-between gap-2 border-b border-white/[0.08] pb-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 shrink-0 gap-1 px-2 text-xs text-slate-300 hover:bg-white/10 hover:text-white"
+              onClick={() => setShowRegisterPanel(false)}
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Planos
+            </Button>
+            <div className="min-w-0 text-right">
+              <p className="text-[9px] font-medium uppercase tracking-wide text-slate-500">Plano escolhido</p>
+              <p className="truncate text-xs font-semibold text-white">{PLAN_CHECKOUT_LABEL[selectedPlan]}</p>
+              <p className="text-[11px] tabular-nums text-cyan-300/90">
+                {fmt(checkoutAmount)} <span className="text-slate-500">/ {yearly ? "ano" : "mês"}</span>
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5">
+            <LoginScreenBody
+              variant="embedded"
+              formId="planos-auth"
+              initialAuthMode="register"
+              registerContextBanner={PLAN_REGISTER_BANNER[selectedPlan]}
+              redirectAfterSuccess={{ to: "/planos", state: { openCheckout: true } }}
+            />
+          </div>
+        </div>
+        </div>
         </div>
       </main>
 
