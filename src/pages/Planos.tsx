@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -108,6 +108,7 @@ function PlanCardShell({
 }
 
 export default function Planos() {
+  const navigate = useNavigate();
   /** Plano com realce (borda dourada); por defeito o primeiro cartão vem ativo. */
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("gestor");
   const [yearly, setYearly] = useState(false);
@@ -137,6 +138,14 @@ export default function Planos() {
   const toggleAddon = (id: string, checked: boolean) => {
     setAddonOn((prev) => ({ ...prev, [id]: checked }));
   };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") navigate("/");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navigate]);
 
   return (
     <div className="dark flex min-h-[100dvh] flex-col overflow-x-hidden bg-[#050814] text-slate-200 pb-[env(safe-area-inset-bottom,0px)]">
@@ -176,9 +185,17 @@ export default function Planos() {
         <div className="absolute right-0 bottom-0 h-[320px] w-[320px] rounded-full bg-cyan-500/12 blur-[90px]" />
       </div>
 
-      <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-3 py-2 safe-area-x sm:px-5 lg:py-3">
+      {/* Clicar fora do painel em glass (área escurecida) → landing — mesmo padrão dos modais na home */}
+      <button
+        type="button"
+        className="fixed inset-0 z-[8] cursor-default border-0 bg-transparent p-0"
+        aria-label="Voltar ao início"
+        onClick={() => navigate("/")}
+      />
+
+      <main className="pointer-events-none relative z-10 mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-3 py-2 safe-area-x sm:px-5 lg:py-3">
         <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col animate-in fade-in duration-300">
-          <div className="glass-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/10 p-3 shadow-2xl ring-1 ring-white/[0.06] sm:rounded-2xl sm:p-4 lg:min-h-0">
+          <div className="glass-card pointer-events-auto flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/10 p-3 shadow-2xl ring-1 ring-white/[0.06] sm:rounded-2xl sm:p-4 lg:min-h-0">
         <div className="mx-auto max-w-2xl shrink-0 text-center">
           <p className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/25 bg-cyan-500/5 px-2 py-0.5 text-[10px] font-medium text-cyan-300/95 sm:text-[11px]">
             <Sparkles className="h-3 w-3 shrink-0" />
