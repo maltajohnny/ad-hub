@@ -228,17 +228,18 @@ export function LandingFeatureDetailModals({ openKey, onClose }: Props) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex flex-col items-center justify-end bg-black/75 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:justify-center sm:p-6 animate-in fade-in duration-200"
+      className="pointer-events-auto fixed inset-0 isolate z-[10000] flex flex-col items-center justify-end bg-black/65 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:justify-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="landing-feature-title"
+      onClick={onClose}
     >
-      <button type="button" className="absolute inset-0 cursor-default" aria-label="Fechar" onClick={onClose} />
       <div
-        className="relative z-10 w-full max-w-lg animate-in slide-in-from-bottom-4 fade-in duration-300 sm:slide-in-from-bottom-0 sm:zoom-in-95"
+        className="relative z-[10001] w-full max-w-lg"
+        role="document"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="glass-card rounded-2xl border border-white/12 p-5 sm:p-6 shadow-2xl">
+        <div className="glass-card rounded-2xl border border-white/10 p-5 shadow-2xl ring-1 ring-white/[0.06] sm:p-6">
           <h2 id="landing-feature-title" className="font-display text-lg font-bold text-white">
             {detail.title}
           </h2>
