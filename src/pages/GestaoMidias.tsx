@@ -5,9 +5,9 @@ import { useTenant } from "@/contexts/TenantContext";
 import { isPlatformOperator } from "@/lib/saasTypes";
 import {
   CLIENT_ONBOARDING_BY_PLATFORM,
-  addMediaClient,
   appendAudit,
   authorizeClientPlatformViaApp,
+  findManagerRecord,
   getOrgMediaState,
   setPlatformIntegrationConnected,
   hasApiAccessForClient,
@@ -17,6 +17,7 @@ import {
   setManagerPermissions,
   setSelectedAdAccountsForPlatform,
   syncAllClientsPerformanceMetrics,
+  managerSeesClient,
   upsertManager,
   type MediaClient,
   type MediaConnectionStatus,
@@ -38,17 +39,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -95,17 +87,6 @@ function defaultCaps(platformId: MediaPlatformId): PlatformCapability {
   };
 }
 
-function findManagerRecord(state: OrgMediaState, username: string | undefined, email: string | undefined): MediaManager | null {
-  if (!username && !email) return null;
-  const byLogin = state.managers.find((m) => m.username && normalize(m.username) === normalize(username));
-  if (byLogin) return byLogin;
-  return state.managers.find((m) => normalize(m.email) === normalize(email)) ?? null;
-}
-
-function managerSeesClient(m: MediaManager, clientId: string): boolean {
-  return m.permissions.some((p) => p.mediaClientId === clientId && p.platforms.length > 0);
-}
-
 const GestaoMidias = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, listUsers } = useAuth();
@@ -113,21 +94,7 @@ const GestaoMidias = () => {
   const [state, setState] = useState<OrgMediaState | null>(null);
   const [selectedManagerId, setSelectedManagerId] = useState<string>("");
   const [newManagerUsername, setNewManagerUsername] = useState<string>("");
-  const [managerClientId, setManagerClientId] = useState<string | null>(null);
   const [adminMainTab, setAdminMainTab] = useState("visao");
-  const [dialogCliente, setDialogCliente] = useState(false);
-  const [dialogGestor, setDialogGestor] = useState(false);
-  const [novoClienteNome, setNovoClienteNome] = useState("");
-  const [novoClienteEmail, setNovoClienteEmail] = useState("");
-  const [novoClientePlats, setNovoClientePlats] = useState<Record<MediaPlatformId, boolean>>({
-    "meta-ads": true,
-    "instagram-ads": false,
-    "google-ads": false,
-    "tiktok-ads": false,
-  });
-  const [novoGestorNome, setNovoGestorNome] = useState("");
-  const [novoGestorEmail, setNovoGestorEmail] = useState("");
-  const [novoGestorPhone, setNovoGestorPhone] = useState("");
 
   const connectionBadgeLabel = (status: MediaConnectionStatus): string => {
     if (status === "connected") return "Autorizado";
@@ -271,14 +238,32 @@ const GestaoMidias = () => {
     return state.mediaClients.filter((c) => managerSeesClient(currentManager, c.id));
   }, [currentManager, state]);
 
+  const mc = searchParams.get("mc");
+  const selectableClients = useMemo(() => {
+    if (!state) return [];
+    if (isOrgAdmin) return state.mediaClients;
+    return managerClients;
+  }, [state, isOrgAdmin, managerClients]);
+
+  const selectedClient = useMemo(() => {
+    if (!selectableClients.length) return undefined;
+    const hit = mc && selectableClients.find((c) => c.id === mc);
+    return hit ?? selectableClients[0];
+  }, [selectableClients, mc]);
+
   useEffect(() => {
-    if (managerClients.length && !managerClientId) {
-      setManagerClientId(managerClients[0].id);
+    if (!selectedClient) return;
+    if (mc !== selectedClient.id) {
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev);
+          n.set("mc", selectedClient.id);
+          return n;
+        },
+        { replace: true },
+      );
     }
-    if (managerClients.length && managerClientId && !managerClients.some((c) => c.id === managerClientId)) {
-      setManagerClientId(managerClients[0].id);
-    }
-  }, [managerClientId, managerClients]);
+  }, [selectedClient, mc, setSearchParams]);
 
   if (!user) return null;
 
@@ -411,57 +396,6 @@ const GestaoMidias = () => {
     toast.success("Gestor cadastrado. Defina clientes e plataformas na matriz abaixo.");
   };
 
-  const handleInviteGestor = () => {
-    if (!isOrgAdmin || !novoGestorNome.trim() || !novoGestorEmail.trim()) {
-      toast.error("Preencha nome e e-mail do gestor.");
-      return;
-    }
-    upsertManager(orgId, {
-      id: crypto.randomUUID(),
-      username: null,
-      name: novoGestorNome.trim(),
-      email: novoGestorEmail.trim(),
-      phone: novoGestorPhone.trim() || undefined,
-      active: true,
-      permissions: [],
-      invitedAt: new Date().toISOString(),
-    });
-    setState(appendAudit(orgId, user.username, "Convite de gestor", `E-mail ${novoGestorEmail.trim()}`));
-    setDialogGestor(false);
-    setNovoGestorNome("");
-    setNovoGestorEmail("");
-    setNovoGestorPhone("");
-    toast.success("Notificação simulada: o gestor receberá instruções de acesso à plataforma.");
-  };
-
-  const handleNovoCliente = () => {
-    if (!novoClienteNome.trim() || !novoClienteEmail.trim()) {
-      toast.error("Nome e e-mail do cliente são obrigatórios.");
-      return;
-    }
-    const platformIds = (Object.keys(novoClientePlats) as MediaPlatformId[]).filter((k) => novoClientePlats[k]);
-    if (platformIds.length === 0) {
-      toast.error("Selecione pelo menos uma plataforma.");
-      return;
-    }
-    addMediaClient(orgId, {
-      name: novoClienteNome.trim(),
-      email: novoClienteEmail.trim(),
-      platformIds,
-    });
-    setState(appendAudit(orgId, user.username, "Cliente cadastrado", novoClienteNome.trim()));
-    setDialogCliente(false);
-    setNovoClienteNome("");
-    setNovoClienteEmail("");
-    setNovoClientePlats({
-      "meta-ads": true,
-      "instagram-ads": false,
-      "google-ads": false,
-      "tiktok-ads": false,
-    });
-    toast.success("Cliente registado. O convite e o assistente de autorização seguem o fluxo AD-Hub (simulado).");
-  };
-
   const managerOptions = orgUsers
     .filter((u) => !managerByUsername.has(normalize(u.username)))
     .map((u) => ({ value: u.username, label: `${u.name} (${u.username})` }));
@@ -529,8 +463,6 @@ const GestaoMidias = () => {
       toast.message("Configure VITE_GOOGLE_OAUTH_CLIENT_ID (Google Cloud) e redirect URI.");
     }
   };
-
-  const selectedClient = state?.mediaClients.find((c) => c.id === managerClientId);
 
   const platformsForManagerOnClient = (client: MediaClient): MediaPlatformId[] => {
     if (isOrgAdmin) return client.platformIds;
@@ -785,8 +717,17 @@ const GestaoMidias = () => {
               <Button
                 key={c.id}
                 type="button"
-                variant={managerClientId === c.id ? "default" : "outline"}
-                onClick={() => setManagerClientId(c.id)}
+                variant={selectedClient?.id === c.id ? "default" : "outline"}
+                onClick={() =>
+                  setSearchParams(
+                    (prev) => {
+                      const n = new URLSearchParams(prev);
+                      n.set("mc", c.id);
+                      return n;
+                    },
+                    { replace: true },
+                  )
+                }
               >
                 {c.name}
               </Button>
@@ -837,7 +778,9 @@ const GestaoMidias = () => {
                 </TabsList>
                 {platformsForManagerOnClient(selectedClient).map((pid) => (
                   <TabsContent key={pid} value={pid} className="mt-4">
-                    {renderPlatformPanel(pid, selectedClient)}
+                    <div className="rounded-xl border border-border/50 bg-background/40 p-1">
+                      {renderPlatformPanel(pid, selectedClient)}
+                    </div>
                   </TabsContent>
                 ))}
               </Tabs>
@@ -869,38 +812,7 @@ const GestaoMidias = () => {
             <BarChart3 className="h-4 w-4" />
             Sincronizar KPIs
           </Button>
-          <Button type="button" className="gap-2" onClick={() => setDialogCliente(true)}>
-            <Building2 className="h-4 w-4" />
-            Cadastrar cliente
-          </Button>
-          <Button type="button" variant="secondary" className="gap-2" onClick={() => setDialogGestor(true)}>
-            <Users className="h-4 w-4" />
-            Convidar gestor
-          </Button>
         </div>
-
-        <Card className="p-5 border-border/60">
-          <p className="text-xs text-muted-foreground mb-2">
-            Tráfego pago centralizado: OAuth Meta / Google / TikTok, contas gerenciadas e permissões por cliente — ver contratos em{" "}
-            <code className="text-[10px]">src/lib/mediaApiContract.ts</code> e schema em{" "}
-            <code className="text-[10px]">src/lib/mediaManagementSchema.ts</code>.
-          </p>
-          <h3 className="font-semibold text-sm mb-2">Papéis nesta organização</h3>
-          <ol className="text-sm text-muted-foreground list-decimal pl-5 space-y-1.5 leading-relaxed">
-            <li>
-              <strong className="text-foreground font-medium">Administrador:</strong> convite por e-mail; define utilizadores e quais módulos
-              cada um pode usar (ex.: Gestão de Mídias).
-            </li>
-            <li>
-              <strong className="text-foreground font-medium">Cliente (marca):</strong> convida o e-mail do teu administrador ou gestor nas
-              contas de anúncios (ex.: Meta Business). Esse é o e-mail a usar no login Facebook/TikTok/Google ao abrir cada rede aqui.
-            </li>
-            <li>
-              <strong className="text-foreground font-medium">Utilizadores:</strong> permissões por módulo definidas pelo admin; dentro de
-              Gestão de Mídias, o acesso por cliente e rede segue a matriz de permissões abaixo.
-            </li>
-          </ol>
-        </Card>
 
         <div className="grid gap-4 md:grid-cols-4">
           <Card className="p-4">
@@ -1002,7 +914,9 @@ const GestaoMidias = () => {
 
           {MEDIA_PLATFORMS.map((p) => (
             <TabsContent key={p.id} value={`p-${p.id}`} className="mt-4">
-              {renderPlatformPanel(p.id, undefined)}
+              <div className="rounded-xl border border-border/50 bg-background/40 p-1">
+                {renderPlatformPanel(p.id, selectedClient)}
+              </div>
             </TabsContent>
           ))}
 
@@ -1326,113 +1240,59 @@ const GestaoMidias = () => {
   return (
     <div className="space-y-6">
       <Card className="p-6 border-primary/25">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            {brandingLogoSrc ? (
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex items-start gap-4 min-w-0">
+            {selectedClient ? (
+              <div className="h-12 w-12 shrink-0 rounded-lg bg-teal-500/15 flex items-center justify-center font-bold text-teal-600 dark:text-teal-300 text-lg border border-teal-500/25">
+                {selectedClient.name.slice(0, 1).toUpperCase()}
+              </div>
+            ) : brandingLogoSrc ? (
               <img src={brandingLogoSrc} alt={brandingName} className="h-12 w-auto max-w-[180px] object-contain" />
             ) : (
               <div className="h-12 w-12 rounded-lg bg-primary/15 flex items-center justify-center font-bold text-primary">
                 {brandingName.slice(0, 1).toUpperCase()}
               </div>
             )}
-            <div>
+            <div className="min-w-0">
               <h1 className="text-2xl font-display font-bold">Gestão de Mídias</h1>
-              <p className="text-sm text-muted-foreground">
-                {isOrgAdmin ? "Configuração da organização e convites" : "Operação centralizada por cliente"} ·{" "}
-                <span className="font-medium text-foreground">{brandingName}</span> · {tenantDomain}
-              </p>
-              <p className="text-xs text-muted-foreground mt-2 max-w-2xl leading-relaxed">
-                Por organização: administrador e equipa com módulos atribuídos. Em cada rede, o login oficial (ex.: Facebook) usa o e-mail
-                convidado pelo cliente; o dashboard e as operações sincronizam via API.
-              </p>
+              {selectedClient ? (
+                <>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    <span className="font-medium text-foreground">{selectedClient.name}</span>
+                    <span className="text-muted-foreground"> · {selectedClient.email}</span>
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {selectedClient.platformIds.map((pid) => (
+                      <Badge key={pid} variant="secondary">
+                        {MEDIA_PLATFORMS.find((x) => x.id === pid)?.label ?? pid}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3 max-w-2xl leading-relaxed">
+                    Campanhas, conjuntos e anúncios para este cliente estão nas abas por rede. A área de cada separador corresponde à perspetiva
+                    da plataforma (login oficial + iframe ou API).
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    <span className="font-medium text-foreground">{brandingName}</span> · {tenantDomain}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2 max-w-2xl leading-relaxed">
+                    Cadastre clientes e convide gestores em <strong className="text-foreground">Clientes → Cadastrar e organização</strong>.
+                    Depois, volte aqui para autorizar redes e operar por cliente.
+                  </p>
+                </>
+              )}
             </div>
           </div>
-          <Badge variant="outline">{tenant.slug}</Badge>
+          <Badge variant="outline" className="shrink-0">
+            {tenant.slug}
+          </Badge>
         </div>
       </Card>
 
       {isOrgAdmin ? renderAdminExperience() : renderManagerExperience()}
-
-      <Dialog open={dialogCliente} onOpenChange={setDialogCliente}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Cadastrar cliente</DialogTitle>
-            <DialogDescription>
-              Nome, e-mail e redes em que opera. O cliente deve convidar o teu e-mail nas contas de anúncios; depois, nas abas Meta/TikTok/Google,
-              usas o login oficial dessa rede com esse mesmo e-mail.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 py-2">
-            <div className="space-y-1.5">
-              <Label>Nome do cliente</Label>
-              <Input value={novoClienteNome} onChange={(e) => setNovoClienteNome(e.target.value)} placeholder="Empresa XYZ" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>E-mail de contato</Label>
-              <Input
-                type="email"
-                value={novoClienteEmail}
-                onChange={(e) => setNovoClienteEmail(e.target.value)}
-                placeholder="contato@empresa.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Plataformas utilizadas</Label>
-              {MEDIA_PLATFORMS.map((p) => (
-                <label key={p.id} className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={novoClientePlats[p.id]}
-                    onCheckedChange={(c) => setNovoClientePlats((prev) => ({ ...prev, [p.id]: c === true }))}
-                  />
-                  {p.label}
-                </label>
-              ))}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDialogCliente(false)}>
-              Cancelar
-            </Button>
-            <Button type="button" onClick={handleNovoCliente}>
-              Salvar cliente
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={dialogGestor} onOpenChange={setDialogGestor}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Convidar gestor</DialogTitle>
-            <DialogDescription>
-              Nome, e-mail e telefone. O gestor receberá o convite na AD-Hub (simulado) e, após aceitar, poderá aceder ao dashboard dos clientes
-              que lhe atribuir na aba Gestores — sempre dentro desta plataforma.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 py-2">
-            <div className="space-y-1.5">
-              <Label>Nome</Label>
-              <Input value={novoGestorNome} onChange={(e) => setNovoGestorNome(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>E-mail</Label>
-              <Input type="email" value={novoGestorEmail} onChange={(e) => setNovoGestorEmail(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Telefone (opcional)</Label>
-              <Input value={novoGestorPhone} onChange={(e) => setNovoGestorPhone(e.target.value)} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDialogGestor(false)}>
-              Cancelar
-            </Button>
-            <Button type="button" onClick={handleInviteGestor}>
-              Enviar notificação
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

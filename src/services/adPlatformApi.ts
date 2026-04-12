@@ -1,6 +1,13 @@
 import type { ManagedAdAccountRef } from "@/lib/mediaManagementStore";
 
-const apiBase = () => (import.meta.env.VITE_ADHUB_API_URL ?? "").replace(/\/$/, "");
+/**
+ * Em desenvolvimento, usar sempre o mesmo origin para `/api/ad-platform` (proxy Vite → Go local).
+ * Se `VITE_ADHUB_API_URL` apontar para um servidor remoto instável, o browser deixava de passar pelo proxy.
+ */
+function apiBase(): string {
+  if (import.meta.env.DEV) return "";
+  return (import.meta.env.VITE_ADHUB_API_URL ?? "").replace(/\/$/, "");
+}
 
 function apiUrl(path: string): string {
   const p = path.startsWith("/") ? path : `/${path}`;

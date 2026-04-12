@@ -17,6 +17,10 @@ import {
 } from "lucide-react";
 import adHubLogo from "@/assets/ad-hub-logo.png";
 import landingHeroAi from "@/assets/landing-hero-ai.png";
+import {
+  LandingFeatureDetailModals,
+  type LandingFeatureKey,
+} from "@/components/landing/LandingFeatureDetailModals";
 
 /** Altura mínima do bloco hero (só marketing — o login não faz parte do scroll da página). */
 const HERO_SECTION_MIN_H =
@@ -24,6 +28,7 @@ const HERO_SECTION_MIN_H =
 
 export default function Landing() {
   const [showLoginInHero, setShowLoginInHero] = useState(false);
+  const [featureModal, setFeatureModal] = useState<LandingFeatureKey | null>(null);
 
   const openLoginInHero = () => {
     /** Não fazer scroll da janela — evita confundir com “scroll abre o login” e mantém só o clique nos CTAs. */
@@ -104,14 +109,8 @@ export default function Landing() {
                 >
                   Entrar
                 </Button>
-                <Button
-                  type="button"
-                  variant="gradientCta"
-                  size="sm"
-                  className="min-h-11 min-w-[2.75rem] px-4 sm:min-h-9"
-                  onClick={openLoginInHero}
-                >
-                  Começar
+                <Button type="button" variant="gradientCta" size="sm" className="min-h-11 min-w-[2.75rem] px-4 sm:min-h-9" asChild>
+                  <Link to="/planos">Assinar</Link>
                 </Button>
               </>
             )}
@@ -234,7 +233,19 @@ export default function Landing() {
               desc: "A IA propõe; o gestor mantém a palavra final quando a estratégia exige.",
             },
           ].map((f) => (
-            <Card key={f.title} className="border-white/[0.08] bg-white/[0.03] backdrop-blur-sm">
+            <Card
+              key={f.title}
+              role="button"
+              tabIndex={0}
+              onClick={() => setFeatureModal(f.title as LandingFeatureKey)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setFeatureModal(f.title as LandingFeatureKey);
+                }
+              }}
+              className="border-white/[0.08] bg-white/[0.03] backdrop-blur-sm cursor-pointer transition hover:bg-white/[0.06] hover:border-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+            >
               <CardHeader className="space-y-1">
                 <f.icon className="h-8 w-8 text-cyan-400/90" />
                 <CardTitle className="text-base text-white">{f.title}</CardTitle>
@@ -276,6 +287,8 @@ export default function Landing() {
           </p>
         </div>
       </footer>
+
+      <LandingFeatureDetailModals openKey={featureModal} onClose={() => setFeatureModal(null)} />
 
       {typeof document !== "undefined" &&
         showLoginInHero &&

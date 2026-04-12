@@ -77,6 +77,7 @@ import {
 } from "@/services/aiOptimizationService";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ClientSettingsModal } from "@/components/ClientSettingsModal";
+import { MediaOrgCadastroSection } from "@/components/media/MediaOrgCadastroSection";
 import {
   Dialog,
   DialogContent,
@@ -1521,6 +1522,8 @@ const Clientes = () => {
     [orgId, user?.username],
   );
 
+  const adminCadastroView = user?.role === "admin" && orgId && searchParams.get("v") === "cadastro";
+
   return (
     <div className="min-w-0 w-full max-w-full space-y-5 animate-fade-in">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1545,6 +1548,45 @@ const Clientes = () => {
         ) : null}
       </div>
 
+      {user?.role === "admin" && orgId ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={!adminCadastroView ? "default" : "outline"}
+            onClick={() => {
+              setSearchParams(
+                (p) => {
+                  p.delete("v");
+                  return p;
+                },
+                { replace: true },
+              );
+            }}
+          >
+            Lista de clientes
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={adminCadastroView ? "default" : "outline"}
+            onClick={() => {
+              setSearchParams(
+                (p) => {
+                  p.set("v", "cadastro");
+                  return p;
+                },
+                { replace: true },
+              );
+            }}
+          >
+            Cadastrar e organização
+          </Button>
+        </div>
+      ) : null}
+
+      {!adminCadastroView ? (
+        <>
       <Card className="glass-card min-w-0 w-full max-w-full overflow-x-hidden border-border/60 p-2.5 sm:p-5">
         <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Filtros</p>
 
@@ -2036,6 +2078,10 @@ const Clientes = () => {
           );
         })}
       </div>
+        </>
+      ) : (
+        <MediaOrgCadastroSection />
+      )}
 
       <Dialog
         open={Boolean(selectedPanelClient)}

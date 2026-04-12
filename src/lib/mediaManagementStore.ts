@@ -869,3 +869,23 @@ export function setPlatformIntegrationConnected(orgId: string, platformId: Media
   return next;
 }
 
+function normManagerLogin(v: string | null | undefined): string {
+  return (v ?? "").trim().toLowerCase();
+}
+
+/** Resolve o registo de gestor no estado da org (login SaaS ou e-mail do convite). */
+export function findManagerRecord(
+  state: OrgMediaState,
+  username: string | undefined,
+  email: string | undefined,
+): MediaManager | null {
+  if (!username && !email) return null;
+  const byLogin = state.managers.find((m) => m.username && normManagerLogin(m.username) === normManagerLogin(username));
+  if (byLogin) return byLogin;
+  return state.managers.find((m) => normManagerLogin(m.email) === normManagerLogin(email)) ?? null;
+}
+
+export function managerSeesClient(m: MediaManager, clientId: string): boolean {
+  return m.permissions.some((p) => p.mediaClientId === clientId && p.platforms.length > 0);
+}
+
