@@ -35,6 +35,9 @@ func Init() error {
 	}
 	conn.SetMaxOpenConns(12)
 	conn.SetMaxIdleConns(4)
+	// Hosting partilhado (ex. cPanel) costuma ter wait_timeout baixo — ligações idle fechadas pelo MySQL
+	// geram "closing bad idle connection: EOF" no driver; reciclar antes evita surpresas ao reutilizar o pool.
+	conn.SetConnMaxIdleTime(90 * time.Second)
 	conn.SetConnMaxLifetime(55 * time.Minute)
 	if err := conn.Ping(); err != nil {
 		_ = conn.Close()
