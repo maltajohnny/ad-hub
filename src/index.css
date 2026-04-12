@@ -154,4 +154,22 @@
   .glow-primary {
     box-shadow: 0 0 30px -5px hsl(var(--primary) / 0.22);
   }
+
+  /**
+   * Borda em gradiente alinhada ao gradiente da marca (login / logo) — violeta → ciano → azul.
+   * Usar: wrapper `plan-card-gradient-ring` + interior `plan-card-gradient-inner`.
+   */
+  .plan-card-gradient-ring {
+    border-radius: 1rem;
+    padding: 2px;
+    background: linear-gradient(135deg, rgb(167 139 250), rgb(34 211 238), rgb(59 130 246));
+    box-shadow:
+      0 0 28px -6px rgba(139, 92, 246, 0.55),
+      0 0 40px -12px rgba(34, 211, 238, 0.35),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  }
+  .plan-card-gradient-inner {
+    border-radius: 14px;
+    @apply border border-white/10 bg-[#050814]/95 backdrop-blur-xl;
+  }
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,25 +11,118 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { Check, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Lock, Sparkles } from "lucide-react";
 import adHubLogo from "@/assets/ad-hub-logo.png";
+import landingHeroAi from "@/assets/landing-hero-ai.png";
 
 const HIGHLIGHT = "#EAD9A0";
+
+/** Três redes incluídas no pacote base (sempre ativas). */
+const INCLUDED_PLATFORMS: { id: string; label: string }[] = [
+  { id: "meta", label: "Meta Ads" },
+  { id: "instagram", label: "Instagram Ads" },
+  { id: "whatsapp", label: "WhatsApp Ads" },
+];
+
+/** Redes adicionais — checkboxes começam desmarcados; cada uma incrementa o valor. */
+const OPTIONAL_ADDONS: { id: string; label: string }[] = [
+  { id: "tiktok", label: "TikTok Ads" },
+  { id: "google", label: "Google Ads" },
+  { id: "pinterest", label: "Pinterest Ads" },
+  { id: "linkedin", label: "LinkedIn Ads" },
+  { id: "microsoft", label: "Microsoft Advertising" },
+  { id: "snapchat", label: "Snapchat Ads" },
+  { id: "reddit", label: "Reddit Ads" },
+  { id: "x", label: "X (Twitter) Ads" },
+];
+
+const BASE_MONTHLY = 169.9;
+/** Valor aproximado por rede extra / mês (ilustrativo). */
+const ADDON_PER_PLATFORM_MONTHLY = 35;
 
 const fmt = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 });
 
+/** Rótulo curto para chips (cabe numa linha no card). */
+function shortPlatformLabel(id: string): string {
+  const m: Record<string, string> = {
+    meta: "Meta",
+    instagram: "Instagram",
+    whatsapp: "WhatsApp",
+  };
+  return m[id] ?? id;
+}
+
+type PlanId = "gestor" | "organizacao" | "scale";
+
+const PLAN_SURFACE: Record<PlanId, string> = {
+  gestor: "bg-white/[0.03]",
+  organizacao: "bg-white/[0.04]",
+  scale: "bg-gradient-to-b from-white/[0.05] to-transparent",
+};
+
+function PlanCardShell({
+  planId,
+  selected,
+  onSelect,
+  children,
+}: {
+  planId: PlanId;
+  selected: boolean;
+  onSelect: (id: PlanId) => void;
+  children: ReactNode;
+}) {
+  const surface = PLAN_SURFACE[planId];
+  return (
+    <div
+      role="presentation"
+      className="h-full outline-none"
+      onClick={() => onSelect(planId)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(planId);
+        }
+      }}
+      tabIndex={0}
+      aria-current={selected ? "true" : undefined}
+    >
+      {selected ? (
+        <div className="plan-card-gradient-ring h-full min-h-full">
+          <div className="plan-card-gradient-inner relative flex min-h-full cursor-pointer flex-col p-3 sm:p-3.5">{children}</div>
+        </div>
+      ) : (
+        <div
+          className={cn(
+            "relative flex min-h-full cursor-pointer flex-col rounded-2xl border border-white/[0.08] p-3 sm:p-3.5 backdrop-blur-sm transition-all hover:border-white/15",
+            surface,
+          )}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Planos() {
+  /** Plano com realce (borda dourada); por defeito o primeiro cartão vem ativo. */
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>("gestor");
   const [yearly, setYearly] = useState(false);
-  const [starterInstagram, setStarterInstagram] = useState(false);
+  const [basePack, setBasePack] = useState("meta-ig-wa");
+  const [addonOn, setAddonOn] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(OPTIONAL_ADDONS.map((a) => [a.id, false])),
+  );
   const [growthExtraUsers, setGrowthExtraUsers] = useState("0");
 
+  const addonCount = useMemo(() => OPTIONAL_ADDONS.filter((a) => addonOn[a.id]).length, [addonOn]);
+
   const starterPrice = useMemo(() => {
-    const base = yearly ? 169.9 * 10 : 169.9;
-    const withIg = yearly ? 229.9 * 10 : 229.9;
-    return starterInstagram ? withIg : base;
-  }, [starterInstagram, yearly]);
+    const monthly = BASE_MONTHLY + addonCount * ADDON_PER_PLATFORM_MONTHLY;
+    return yearly ? monthly * 10 : monthly;
+  }, [addonCount, yearly]);
 
   const growthPrice = useMemo(() => {
     const extra = Number(growthExtraUsers) || 0;
@@ -39,43 +132,71 @@ export default function Planos() {
 
   const scalePrice = useMemo(() => (yearly ? 497 * 10 : 497), [yearly]);
 
-  const discountNote = yearly ? " ~2 meses incluídos no anual" : null;
+  const discountNote = yearly ? "Faturação anual (valor ilustrativo)" : null;
+
+  const toggleAddon = (id: string, checked: boolean) => {
+    setAddonOn((prev) => ({ ...prev, [id]: checked }));
+  };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-gradient-to-b from-slate-50 via-white to-slate-100 text-foreground">
-      <header className="border-b border-slate-200/80 bg-white/70 backdrop-blur-md sticky top-0 z-20">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <Link to="/" className="flex items-center gap-2">
-            <img src={adHubLogo} alt="AD-HUB" className="h-10 w-10 object-contain" width={40} height={40} />
-            <span className="font-display text-sm font-bold tracking-wide text-slate-900">AD-HUB</span>
+    <div className="dark flex min-h-[100dvh] flex-col overflow-x-hidden bg-[#050814] text-slate-200 pb-[env(safe-area-inset-bottom,0px)]">
+      <header className="sticky top-0 z-20 shrink-0 border-b border-white/[0.06] bg-[#050814]/85 backdrop-blur-xl safe-area-t">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-2 sm:px-6 sm:py-2.5">
+          <Link to="/" className="flex items-center gap-2 group">
+            <img src={adHubLogo} alt="AD-HUB" className="h-8 w-8 object-contain sm:h-9 sm:w-9" width={36} height={36} />
+            <span className="font-display text-xs font-bold tracking-wide text-white sm:text-sm">AD-HUB</span>
           </Link>
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" asChild>
-              <Link to="/login">Entrar</Link>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-slate-300 hover:bg-white/10 hover:text-white"
+              asChild
+            >
+              <Link to="/" state={{ openLogin: true }}>
+                Entrar
+              </Link>
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
-        <div className="text-center max-w-2xl mx-auto">
-          <p className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
-            <Sparkles className="h-3.5 w-3.5 text-amber-600/80" />
+      {/* Mesma atmosfera da landing (PRD): imagem + vinheta + orbes — conteúdo em glass por cima */}
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <img
+          src={landingHeroAi}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover object-[center_24%] opacity-[0.38]"
+          aria-hidden
+        />
+        <div className="absolute inset-0 bg-[#050814]/55" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.22),transparent)]" />
+        <div className="absolute -left-20 top-0 h-[420px] w-[420px] rounded-full bg-violet-600/20 blur-[100px]" />
+        <div className="absolute right-0 bottom-0 h-[320px] w-[320px] rounded-full bg-cyan-500/12 blur-[90px]" />
+      </div>
+
+      <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-3 py-2 safe-area-x sm:px-5 lg:py-3">
+        <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col animate-in fade-in duration-300">
+          <div className="glass-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/10 p-3 shadow-2xl ring-1 ring-white/[0.06] sm:rounded-2xl sm:p-4 lg:min-h-0">
+        <div className="mx-auto max-w-2xl shrink-0 text-center">
+          <p className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/25 bg-cyan-500/5 px-2 py-0.5 text-[10px] font-medium text-cyan-300/95 sm:text-[11px]">
+            <Sparkles className="h-3 w-3 shrink-0" />
             Planos pensados para equipas de mídia
           </p>
-          <h1 className="mt-4 font-display text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+          <h1 className="mt-1.5 font-display text-xl font-bold leading-tight tracking-tight text-white sm:text-2xl lg:text-[1.65rem]">
             Escolha o ritmo da sua operação
           </h1>
-          <p className="mt-3 text-slate-600 leading-relaxed">
-            Preços transparentes, add-ons quando fizer sentido e destaque no plano com melhor custo-benefício.
+          <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-slate-400 sm:text-xs">
+            Preços transparentes: três redes base por cliente e redes extra à escolha.
           </p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 sm:mt-2.5 sm:gap-2">
             <button
               type="button"
               onClick={() => setYearly(false)}
               className={cn(
-                "rounded-full px-4 py-2 text-sm font-medium transition-colors",
-                !yearly ? "bg-slate-900 text-white shadow" : "text-slate-600 hover:bg-slate-100",
+                "rounded-full px-3 py-1.5 text-xs font-medium transition-colors sm:px-4 sm:py-2 sm:text-sm",
+                !yearly ? "bg-white/10 text-white ring-1 ring-white/15" : "text-slate-400 hover:bg-white/5 hover:text-white",
               )}
             >
               Mensal
@@ -84,114 +205,167 @@ export default function Planos() {
               type="button"
               onClick={() => setYearly(true)}
               className={cn(
-                "rounded-full px-4 py-2 text-sm font-medium transition-colors",
-                yearly ? "bg-slate-900 text-white shadow" : "text-slate-600 hover:bg-slate-100",
+                "rounded-full px-3 py-1.5 text-xs font-medium transition-colors sm:px-4 sm:py-2 sm:text-sm",
+                yearly ? "bg-white/10 text-white ring-1 ring-cyan-500/30" : "text-slate-400 hover:bg-white/5 hover:text-white",
               )}
             >
               Anual
             </button>
             {yearly ? (
-              <span className="text-xs text-emerald-700 font-medium">Economize com faturação anual</span>
+              <span className="text-xs text-emerald-400/90 font-medium">Economize com faturação anual</span>
             ) : null}
           </div>
         </div>
 
-        <div className="mt-12 grid gap-6 lg:grid-cols-3 lg:items-stretch">
-          {/* Starter / Gestor */}
-          <div
-            className={cn(
-              "flex flex-col rounded-2xl border p-6 shadow-sm backdrop-blur-sm transition hover:shadow-md",
-              "border-slate-200/90 bg-white/65",
-            )}
-            style={{ boxShadow: `0 0 0 1px rgba(15,23,42,0.06)` }}
-          >
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Gestor</p>
-            <h2 className="mt-2 font-display text-lg font-bold text-slate-900">Assinatura para gestor</h2>
-            <p className="text-sm text-slate-600 mt-1">1 conta · até 3 clientes na base</p>
-            <div className="mt-5 flex items-baseline gap-1">
-              <span className="text-3xl font-bold tabular-nums text-slate-900">{fmt(starterPrice)}</span>
-              <span className="text-slate-500 text-sm">/{yearly ? "ano" : "mês"}</span>
+        <div className="mt-2 min-h-0 flex-1 grid gap-3 lg:mt-3 lg:grid-cols-3 lg:items-stretch lg:gap-3 lg:overflow-hidden">
+          {/* Gestor */}
+          <PlanCardShell planId="gestor" selected={selectedPlan === "gestor"} onSelect={setSelectedPlan}>
+            <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">Gestor</p>
+            <h2 className="mt-0.5 font-display text-sm font-bold leading-tight text-white sm:text-base">Assinatura para gestor</h2>
+            <p className="mt-0.5 text-[11px] leading-tight text-slate-400">1 conta · até 3 clientes</p>
+            <div className="mt-2 flex items-baseline gap-1">
+              <span className="text-xl font-bold tabular-nums text-white sm:text-2xl">{fmt(starterPrice)}</span>
+              <span className="text-[11px] text-slate-500">/{yearly ? "ano" : "mês"}</span>
             </div>
-            {discountNote ? <p className="text-[11px] text-slate-500 mt-1">{discountNote}</p> : null}
+            {discountNote ? <p className="mt-0.5 text-[9px] text-slate-500">{discountNote}</p> : null}
 
-            <ul className="mt-6 space-y-2.5 text-sm text-slate-700">
-              {[
-                "Até 3 clientes",
-                "3 plataformas por cliente (Meta Ads, Google Ads, TikTok Ads)",
-                "Dashboard + Kanban",
-                "Integrações base",
-              ].map((t) => (
-                <li key={t} className="flex gap-2">
-                  <Check className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
-                  <span>{t}</span>
-                </li>
-              ))}
+            <ul className="mt-2 space-y-0.5 text-[11px] leading-tight text-slate-300 sm:text-xs">
+              <li className="flex gap-1">
+                <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
+                Até 3 clientes
+              </li>
+              <li className="flex gap-1">
+                <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
+                Pacote base com 3 plataformas
+              </li>
+              <li className="flex gap-1">
+                <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
+                Dashboard + Kanban
+              </li>
             </ul>
 
-            <div
-              className="mt-6 rounded-xl border border-dashed px-3 py-3 space-y-3"
-              style={{ borderColor: `${HIGHLIGHT}99`, background: `${HIGHLIGHT}22` }}
-            >
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  id="ig-addon"
-                  checked={starterInstagram}
-                  onCheckedChange={(c) => setStarterInstagram(c === true)}
-                />
-                <Label htmlFor="ig-addon" className="text-sm leading-snug cursor-pointer font-normal">
-                  Incluir <strong className="font-semibold">Instagram Ads</strong> (add-on) — total{" "}
-                  <span className="tabular-nums font-medium">{fmt(yearly ? 229.9 * 10 : 229.9)}</span>/{yearly ? "ano" : "mês"}
-                </Label>
+            <div className="mt-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+              <Label className="text-[10px] text-slate-400">Pacote base (3 redes)</Label>
+              <Select value={basePack} onValueChange={setBasePack}>
+                <SelectTrigger className="h-7 min-h-7 border-white/10 bg-slate-900/50 py-0 text-[11px] text-slate-200 sm:h-8 sm:min-h-8 sm:text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="border-white/10 bg-[#0c1228] text-slate-200">
+                  <SelectItem value="meta-ig-wa">Meta Ads + Instagram + WhatsApp (padrão)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="mt-2 rounded-md border border-white/[0.08] bg-black/20 px-2 py-1.5">
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">Incluídas no preço base</p>
+              <div className="mt-1 flex flex-wrap gap-1" title="Meta, Instagram e WhatsApp incluídos">
+                {INCLUDED_PLATFORMS.map((p) => (
+                  <span
+                    key={p.id}
+                    className="inline-flex items-center gap-0.5 rounded border border-emerald-500/35 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-100/95"
+                  >
+                    <Lock className="h-2.5 w-2.5 shrink-0 text-emerald-400/90" aria-hidden />
+                    {shortPlatformLabel(p.id)}
+                  </span>
+                ))}
               </div>
             </div>
 
-            <div className="mt-auto pt-8">
-              <Button type="button" className="w-full rounded-full" variant="outline" asChild>
-                <Link to="/login">Começar agora</Link>
+            <div
+              className="mt-2 rounded-md border border-dashed px-2 py-1.5 sm:py-2"
+              style={{ borderColor: `${HIGHLIGHT}55`, background: `${HIGHLIGHT}12` }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Redes adicionais</p>
+              <p className="text-[9px] text-slate-500">
+                +{fmt(ADDON_PER_PLATFORM_MONTHLY)}/rede/mês · {addonCount} extra
+              </p>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-7 min-h-7 w-full justify-between gap-1 border-white/15 bg-black/35 px-2 py-0.5 text-left text-[11px] font-normal text-slate-200 hover:bg-white/5 hover:text-white sm:h-8 sm:min-h-8 sm:text-xs"
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {addonCount > 0
+                        ? `${addonCount} rede${addonCount === 1 ? "" : "s"} extra · abrir para editar`
+                        : "Abrir lista e escolher redes"}
+                    </span>
+                    <ChevronDown className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  sideOffset={6}
+                  className="w-[min(calc(100vw-2rem),22rem)] border-white/10 bg-[#0c1228] p-3 text-slate-200 shadow-xl"
+                  onOpenAutoFocus={(e) => e.preventDefault()}
+                >
+                  <p className="mb-3 text-[11px] leading-relaxed text-slate-400">
+                    Marque as redes que pretende além de Meta, Instagram e WhatsApp. Cada rede soma{" "}
+                    <span className="tabular-nums text-slate-300">{fmt(ADDON_PER_PLATFORM_MONTHLY)}</span>/mês.
+                  </p>
+                  <div className="grid max-h-[min(50vh,280px)] gap-2 overflow-y-auto overscroll-contain pr-0.5 sm:grid-cols-2">
+                    {OPTIONAL_ADDONS.map((a) => (
+                      <label
+                        key={a.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/[0.08] bg-black/35 px-2 py-2 text-sm text-slate-300 hover:bg-white/[0.06]"
+                      >
+                        <Checkbox
+                          checked={addonOn[a.id]}
+                          onCheckedChange={(c) => toggleAddon(a.id, c === true)}
+                          className="border-white/20"
+                        />
+                        <span>{a.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="mt-auto pt-2" onClick={(e) => e.stopPropagation()}>
+              <Button type="button" className="h-8 w-full rounded-full text-xs font-semibold sm:h-9 sm:text-sm" variant="gradientCta" asChild>
+                <Link to="/login">Selecionar plano</Link>
               </Button>
             </div>
-          </div>
+          </PlanCardShell>
 
-          {/* Growth — popular */}
-          <div
-            className={cn(
-              "relative flex flex-col rounded-2xl border p-6 shadow-md backdrop-blur-sm",
-              "border-amber-200/90 bg-white/75 ring-2 ring-[#EAD9A0] ring-offset-2 ring-offset-slate-50",
-            )}
-          >
-            <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-900 text-white hover:bg-slate-900">
+          {/* Growth */}
+          <PlanCardShell planId="organizacao" selected={selectedPlan === "organizacao"} onSelect={setSelectedPlan}>
+            <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 border border-white/10 bg-slate-900 px-1.5 py-0 text-[9px] text-white hover:bg-slate-900 sm:text-[10px]">
               Mais popular
             </Badge>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Organização</p>
-            <h2 className="mt-2 font-display text-lg font-bold text-slate-900">3 a 5 gestores</h2>
-            <p className="text-sm text-slate-600 mt-1">Escala para equipa e mais visibilidade de ROI</p>
-            <div className="mt-5 flex items-baseline gap-1">
-              <span className="text-3xl font-bold tabular-nums text-slate-900">{fmt(growthPrice)}</span>
-              <span className="text-slate-500 text-sm">/{yearly ? "ano" : "mês"}</span>
+            <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">Organização</p>
+            <h2 className="mt-0.5 font-display text-sm font-bold leading-tight text-white sm:text-base">3 a 5 gestores</h2>
+            <p className="mt-0.5 text-[11px] leading-tight text-slate-400">Equipa e visibilidade de ROI</p>
+            <div className="mt-2 flex items-baseline gap-1">
+              <span className="text-xl font-bold tabular-nums text-white sm:text-2xl">{fmt(growthPrice)}</span>
+              <span className="text-[11px] text-slate-500">/{yearly ? "ano" : "mês"}</span>
             </div>
-            <p className="text-[11px] text-emerald-800 mt-1 font-medium">Add-ons com 20% de desconto vs. avulso</p>
+            <p className="mt-0.5 text-[9px] font-medium text-emerald-400/90">Add-ons −20% vs. avulso</p>
 
-            <ul className="mt-6 space-y-2.5 text-sm text-slate-700">
+            <ul className="mt-2 space-y-0.5 text-[11px] leading-tight text-slate-300 sm:text-xs">
               {[
                 "Até 10 clientes",
-                "3 plataformas incluídas (seleção em lista)",
-                "Dashboard + Kanban + ROI + Social Pulse",
+                "3 plataformas (lista)",
+                "Dashboard, Kanban, ROI, Social Pulse",
                 "Relatórios consolidados",
               ].map((t) => (
-                <li key={t} className="flex gap-2">
-                  <Check className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
+                <li key={t} className="flex gap-1">
+                  <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
                   <span>{t}</span>
                 </li>
               ))}
             </ul>
 
-            <div className="mt-4 space-y-1.5">
-              <Label className="text-xs text-slate-600">Utilizadores extra</Label>
+            <div className="mt-2 space-y-0.5" onClick={(e) => e.stopPropagation()}>
+              <Label className="text-[10px] text-slate-400">Utilizadores extra</Label>
               <Select value={growthExtraUsers} onValueChange={setGrowthExtraUsers}>
-                <SelectTrigger className="bg-white/90">
+                <SelectTrigger className="h-7 min-h-7 border-white/10 bg-slate-900/50 text-[11px] text-slate-200 sm:h-8 sm:min-h-8 sm:text-xs">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="border-white/10 bg-[#0c1228] text-slate-200">
                   <SelectItem value="0">Sem extras</SelectItem>
                   <SelectItem value="1">+1 utilizador (+R$ 40/mês)</SelectItem>
                   <SelectItem value="2">+2 utilizadores (+R$ 80/mês)</SelectItem>
@@ -200,54 +374,55 @@ export default function Planos() {
               </Select>
             </div>
 
-            <div className="mt-auto pt-8">
-              <Button type="button" className="w-full rounded-full" asChild>
-                <Link to="/login">Começar agora</Link>
+            <div className="mt-auto pt-2" onClick={(e) => e.stopPropagation()}>
+              <Button type="button" className="h-8 w-full rounded-full text-xs font-semibold sm:h-9 sm:text-sm" variant="gradientCta" asChild>
+                <Link to="/login">Selecionar plano</Link>
               </Button>
             </div>
-          </div>
+          </PlanCardShell>
 
           {/* Scale */}
-          <div
-            className={cn(
-              "flex flex-col rounded-2xl border p-6 shadow-sm backdrop-blur-sm",
-              "border-slate-300/90 bg-gradient-to-b from-white/90 to-slate-50/90",
-            )}
-          >
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Scale</p>
-            <h2 className="mt-2 font-display text-lg font-bold text-slate-900">Até 10 gestores</h2>
-            <p className="text-sm text-slate-600 mt-1">Âncora premium — operações complexas e multi-workspace</p>
-            <div className="mt-5 flex items-baseline gap-1">
-              <span className="text-3xl font-bold tabular-nums text-slate-900">{fmt(scalePrice)}</span>
-              <span className="text-slate-500 text-sm">/{yearly ? "ano" : "mês"}</span>
+          <PlanCardShell planId="scale" selected={selectedPlan === "scale"} onSelect={setSelectedPlan}>
+            <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">Scale</p>
+            <h2 className="mt-0.5 font-display text-sm font-bold leading-tight text-white sm:text-base">Até 10 gestores</h2>
+            <p className="mt-0.5 text-[11px] leading-tight text-slate-400">Premium · multi-workspace</p>
+            <div className="mt-2 flex items-baseline gap-1">
+              <span className="text-xl font-bold tabular-nums text-white sm:text-2xl">{fmt(scalePrice)}</span>
+              <span className="text-[11px] text-slate-500">/{yearly ? "ano" : "mês"}</span>
             </div>
 
-            <ul className="mt-6 space-y-2.5 text-sm text-slate-700">
+            <ul className="mt-2 space-y-0.5 text-[11px] leading-tight text-slate-300 sm:text-xs">
               {[
-                "50+ clientes ou ilimitado (conforme contrato)",
-                "Todas as plataformas incluídas",
-                "IA insights e relatórios avançados",
+                "50+ clientes ou ilimitado",
+                "Todas as plataformas",
+                "IA e relatórios avançados",
                 "Automações e multi-workspace",
               ].map((t) => (
-                <li key={t} className="flex gap-2">
-                  <Check className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
+                <li key={t} className="flex gap-1">
+                  <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
                   <span>{t}</span>
                 </li>
               ))}
             </ul>
 
-            <div className="mt-auto pt-8">
-              <Button type="button" className="w-full rounded-full" variant="secondary" asChild>
+            <div className="mt-auto pt-2" onClick={(e) => e.stopPropagation()}>
+              <Button
+                type="button"
+                className="h-8 w-full rounded-full border border-white/20 bg-white/10 text-xs font-semibold text-white hover:bg-white/15 sm:h-9 sm:text-sm"
+                asChild
+              >
                 <Link to="/login">Falar com vendas</Link>
               </Button>
             </div>
-          </div>
+          </PlanCardShell>
         </div>
+          </div>
 
-        <p className="mt-10 text-center text-xs text-slate-500 max-w-xl mx-auto leading-relaxed">
-          Valores ilustrativos para conversão; contratos B2B podem incluir condições específicas. O plano <strong>Gestor</strong> reflete a
-          assinatura com 3 plataformas por cliente e opção de Instagram Ads no valor indicado.
+        <p className="mx-auto mt-2 max-w-xl shrink-0 px-1 text-center text-[9px] leading-tight text-slate-500 sm:text-[10px]">
+          Valores ilustrativos. Gestor inclui Meta, IG e WA; redes extra +{" "}
+          <span className="tabular-nums">{fmt(ADDON_PER_PLATFORM_MONTHLY)}</span>/mês cada (simulação).
         </p>
+        </div>
       </main>
     </div>
   );

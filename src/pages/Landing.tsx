@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LoginScreenBody } from "@/components/auth/LoginScreenBody";
 import { cn } from "@/lib/utils";
@@ -27,8 +27,19 @@ const HERO_SECTION_MIN_H =
   "min-h-[min(34rem,88svh)] sm:min-h-[min(36rem,85svh)] lg:min-h-[min(38rem,80svh)]";
 
 export default function Landing() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [showLoginInHero, setShowLoginInHero] = useState(false);
   const [featureModal, setFeatureModal] = useState<LandingFeatureKey | null>(null);
+
+  /** Ex.: Planos → «Entrar» com `state={{ openLogin: true }}` abre o mesmo modal PRD na landing. */
+  useEffect(() => {
+    const s = location.state as { openLogin?: boolean } | null | undefined;
+    if (s?.openLogin) {
+      setShowLoginInHero(true);
+      navigate("/", { replace: true, state: {} });
+    }
+  }, [location.state, navigate]);
 
   const openLoginInHero = () => {
     /** Não fazer scroll da janela — evita confundir com “scroll abre o login” e mantém só o clique nos CTAs. */
@@ -294,19 +305,19 @@ export default function Landing() {
         showLoginInHero &&
         createPortal(
           <div
-            className="fixed inset-0 z-[200] flex flex-col items-center justify-end bg-black/75 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:justify-center sm:p-6 animate-in fade-in duration-200"
+            className="pointer-events-auto fixed inset-0 isolate z-[10000] flex flex-col items-center justify-end bg-black/65 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:justify-center sm:p-6"
             role="dialog"
             aria-modal="true"
             aria-labelledby="landing-login-title"
           >
             <button
               type="button"
-              className="absolute inset-0 cursor-default"
+              className="absolute inset-0 z-0 cursor-default bg-transparent"
               aria-label="Fechar"
               onClick={closeLoginHero}
             />
             <div
-              className="relative z-10 w-full max-w-md animate-in slide-in-from-bottom-4 fade-in duration-300 sm:slide-in-from-bottom-0 sm:zoom-in-95"
+              className="relative z-[10001] w-full max-w-md"
               onClick={(e) => e.stopPropagation()}
             >
               <h2 id="landing-login-title" className="sr-only">

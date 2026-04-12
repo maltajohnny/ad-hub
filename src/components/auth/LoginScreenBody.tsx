@@ -271,7 +271,8 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
   return (
     <div
       className={cn(
-        "w-full max-w-sm animate-fade-in",
+        "w-full max-w-sm",
+        hidePlatformLink ? "opacity-100" : "animate-fade-in",
         !hidePlatformLink &&
           "relative z-10 px-[max(1.25rem,env(safe-area-inset-left,0px))] py-8 pr-[max(1.25rem,env(safe-area-inset-right,0px))] pt-[max(1.5rem,env(safe-area-inset-top,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]",
       )}
