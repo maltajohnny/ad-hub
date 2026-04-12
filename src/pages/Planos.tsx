@@ -689,7 +689,7 @@ export default function Planos() {
               </p>
             </div>
           </div>
-          <div className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5">
+          <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain pr-0.5">
             <LoginScreenBody
               variant="embedded"
               formId="planos-auth"

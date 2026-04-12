@@ -52,8 +52,8 @@ export function LoginScreenBody({
   const { setActiveSlug, tenant } = useTenant();
   const navigate = useNavigate();
   const showServerRegister = Boolean(serverAuth && !tenantSlug);
-  const [authMode, setAuthMode] = useState<"login" | "register">(
-    initialAuthMode === "register" && showServerRegister ? "register" : "login",
+  const [authMode, setAuthMode] = useState<"login" | "register">(() =>
+    initialAuthMode === "register" ? "register" : "login",
   );
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -80,13 +80,11 @@ export function LoginScreenBody({
     [tenantSlug, tenantRecord, invalidTenant, username],
   );
 
-  useEffect(() => {
-    if (!showServerRegister) {
-      setAuthMode("login");
-      return;
-    }
-    setAuthMode(initialAuthMode === "register" ? "register" : "login");
-  }, [initialAuthMode, showServerRegister]);
+  /**
+   * Formulário efectivo: sem API de registo ou tenant inválido → só login.
+   * Nunca escreve por cima de `authMode` (evita o efeito que repunha «Criar» após clicar em «Entrar»).
+   */
+  const uiMode: "login" | "register" = invalidTenant || !showServerRegister ? "login" : authMode;
 
   useEffect(() => {
     if (!tenantSlug) {
@@ -211,13 +209,24 @@ export function LoginScreenBody({
   const inner = (
     <>
       {variant === "embedded" ? (
-        <div className="mb-4 text-center">
-          <div className="mx-auto flex justify-center">
-            <img src={adHubFallback} alt="AD-HUB" width={40} height={40} className="h-10 w-10 object-contain" />
+        <div className="mb-4 w-full text-center">
+          {/* Logo: altura fixa, largura automática — evita flex/`max-w` a achatar o PNG */}
+          <div className="flex w-full justify-center">
+            <img
+              src={adHubFallback}
+              alt="AD-HUB"
+              decoding="async"
+              draggable={false}
+              className="pointer-events-none block h-[48px] w-auto max-w-[min(12rem,100%)] shrink-0 object-contain object-center"
+            />
           </div>
-          <p className="mt-2 font-display text-base font-semibold text-white">Criar a sua organização</p>
+          <p className="mt-2 font-display text-base font-semibold text-white">
+            {uiMode === "login" ? "Iniciar sessão" : "Criar a sua organização"}
+          </p>
           <p className="mt-1 text-[11px] leading-snug text-slate-400">
-            Complete o cadastro para continuar com o plano escolhido.
+            {uiMode === "login"
+              ? "Entre com a sua conta para continuar com o plano e o pagamento."
+              : "Complete o cadastro para continuar com o plano escolhido."}
           </p>
         </div>
       ) : (
@@ -307,13 +316,13 @@ export function LoginScreenBody({
         </div>
       )}
 
-      {showServerRegister && authMode === "register" && registerContextBanner ? (
+      {showServerRegister && uiMode === "register" && registerContextBanner ? (
         <div className="mb-4 rounded-lg border border-cyan-500/25 bg-cyan-500/5 px-3 py-2 text-xs leading-relaxed text-slate-300">
           {registerContextBanner}
         </div>
       ) : null}
 
-      {authMode === "login" || !showServerRegister || invalidTenant ? (
+      {uiMode === "login" ? (
         <form
           id={formId}
           method="post"
@@ -383,7 +392,7 @@ export function LoginScreenBody({
             </div>
           </div>
 
-          {error && authMode === "login" && (
+          {error && uiMode === "login" && (
             <p className="text-center text-sm text-destructive">{error}</p>
           )}
 
@@ -475,7 +484,7 @@ export function LoginScreenBody({
             autoComplete="new-password"
             disabled={regSubmitting}
           />
-          {error && authMode === "register" && (
+          {error && uiMode === "register" && (
             <p className="text-center text-sm text-destructive">{error}</p>
           )}
           <Button
