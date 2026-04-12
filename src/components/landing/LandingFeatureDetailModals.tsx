@@ -239,7 +239,8 @@ export function LandingFeatureDetailModals({ openKey, onClose }: Props) {
         role="document"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="glass-card rounded-2xl border border-white/10 p-5 shadow-2xl ring-1 ring-white/[0.06] sm:p-6">
+        <div className="plan-card-gradient-ring w-full shadow-2xl">
+          <div className="plan-card-gradient-inner p-5 sm:p-6">
           <h2 id="landing-feature-title" className="font-display text-lg font-bold text-white">
             {detail.title}
           </h2>
@@ -263,6 +264,7 @@ export function LandingFeatureDetailModals({ openKey, onClose }: Props) {
             <Button type="button" variant="secondary" className="rounded-full" onClick={onClose}>
               Fechar
             </Button>
+          </div>
           </div>
         </div>
       </div>

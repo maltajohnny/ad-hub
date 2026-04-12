@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LoginScreenBody } from "@/components/auth/LoginScreenBody";
 import { cn } from "@/lib/utils";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   ArrowRight,
   BarChart3,
@@ -244,25 +244,27 @@ export default function Landing() {
               desc: "A IA propõe; o gestor mantém a palavra final quando a estratégia exige.",
             },
           ].map((f) => (
-            <Card
-              key={f.title}
-              role="button"
-              tabIndex={0}
-              onClick={() => setFeatureModal(f.title as LandingFeatureKey)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setFeatureModal(f.title as LandingFeatureKey);
-                }
-              }}
-              className="border-white/[0.08] bg-white/[0.03] backdrop-blur-sm cursor-pointer transition hover:bg-white/[0.06] hover:border-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
-            >
-              <CardHeader className="space-y-1">
-                <f.icon className="h-8 w-8 text-cyan-400/90" />
-                <CardTitle className="text-base text-white">{f.title}</CardTitle>
-                <CardDescription className="text-sm leading-relaxed text-slate-400">{f.desc}</CardDescription>
-              </CardHeader>
-            </Card>
+            <div key={f.title} className="plan-card-gradient-ring h-full min-h-0">
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setFeatureModal(f.title as LandingFeatureKey)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setFeatureModal(f.title as LandingFeatureKey);
+                  }
+                }}
+                className={cn(
+                  "plan-card-gradient-inner flex h-full min-h-[10rem] cursor-pointer flex-col p-5 text-left transition sm:min-h-[9rem] sm:p-6",
+                  "hover:bg-[#050814]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050814]",
+                )}
+              >
+                <f.icon className="h-8 w-8 shrink-0 text-cyan-400/90" aria-hidden />
+                <span className="font-display mt-2 text-base font-semibold text-white">{f.title}</span>
+                <p className="mt-1 text-sm leading-relaxed text-slate-400">{f.desc}</p>
+              </div>
+            </div>
           ))}
         </div>
       </section>
