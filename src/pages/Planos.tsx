@@ -16,8 +16,16 @@ import { cn } from "@/lib/utils";
 import { Check, ChevronDown, Lock, Sparkles } from "lucide-react";
 import adHubLogo from "@/assets/ad-hub-logo.png";
 import landingHeroAi from "@/assets/landing-hero-ai.png";
+import { PlanCheckoutModal } from "@/components/planos/PlanCheckoutModal";
 
 const HIGHLIGHT = "#EAD9A0";
+
+/** Desconto aplicado ao total de 12× o valor mensal na modalidade anual. */
+const YEARLY_DISCOUNT = 0.3;
+
+function yearlyTotalFromMonthly(monthly: number): number {
+  return monthly * 12 * (1 - YEARLY_DISCOUNT);
+}
 
 /** Três redes incluídas no pacote base (sempre ativas). */
 const INCLUDED_PLATFORMS: { id: string; label: string }[] = [
@@ -39,7 +47,7 @@ const OPTIONAL_ADDONS: { id: string; label: string }[] = [
 ];
 
 const BASE_MONTHLY = 169.9;
-/** Valor aproximado por rede extra / mês (ilustrativo). */
+/** Valor por rede adicional / mês (além de Meta, Instagram e WhatsApp no pacote base). */
 const ADDON_PER_PLATFORM_MONTHLY = 35;
 
 const fmt = (n: number) =>
@@ -56,6 +64,12 @@ function shortPlatformLabel(id: string): string {
 }
 
 type PlanId = "gestor" | "organizacao" | "scale";
+
+const PLAN_CHECKOUT_LABEL: Record<PlanId, string> = {
+  gestor: "Gestor — Assinatura para gestor",
+  organizacao: "Organização — 3 a 5 gestores",
+  scale: "Scale — Até 10 gestores",
+};
 
 const PLAN_SURFACE: Record<PlanId, string> = {
   gestor: "bg-white/[0.03]",
@@ -117,23 +131,38 @@ export default function Planos() {
     Object.fromEntries(OPTIONAL_ADDONS.map((a) => [a.id, false])),
   );
   const [growthExtraUsers, setGrowthExtraUsers] = useState("0");
+  const [showCheckout, setShowCheckout] = useState(false);
 
   const addonCount = useMemo(() => OPTIONAL_ADDONS.filter((a) => addonOn[a.id]).length, [addonOn]);
 
   const starterPrice = useMemo(() => {
     const monthly = BASE_MONTHLY + addonCount * ADDON_PER_PLATFORM_MONTHLY;
-    return yearly ? monthly * 10 : monthly;
+    return yearly ? yearlyTotalFromMonthly(monthly) : monthly;
   }, [addonCount, yearly]);
 
   const growthPrice = useMemo(() => {
     const extra = Number(growthExtraUsers) || 0;
-    const base = yearly ? 297 * 10 : 297;
-    return base + extra * (yearly ? 40 * 10 : 40);
+    const monthly = 297 + extra * 40;
+    return yearly ? yearlyTotalFromMonthly(monthly) : monthly;
   }, [growthExtraUsers, yearly]);
 
-  const scalePrice = useMemo(() => (yearly ? 497 * 10 : 497), [yearly]);
+  const scalePrice = useMemo(() => {
+    const monthly = 497;
+    return yearly ? yearlyTotalFromMonthly(monthly) : monthly;
+  }, [yearly]);
 
-  const discountNote = yearly ? "Faturação anual (valor ilustrativo)" : null;
+  const checkoutAmount = useMemo(() => {
+    switch (selectedPlan) {
+      case "gestor":
+        return starterPrice;
+      case "organizacao":
+        return growthPrice;
+      case "scale":
+        return scalePrice;
+      default:
+        return starterPrice;
+    }
+  }, [selectedPlan, starterPrice, growthPrice, scalePrice]);
 
   const toggleAddon = (id: string, checked: boolean) => {
     setAddonOn((prev) => ({ ...prev, [id]: checked }));
@@ -141,11 +170,16 @@ export default function Planos() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") navigate("/");
+      if (e.key !== "Escape") return;
+      if (showCheckout) {
+        setShowCheckout(false);
+        return;
+      }
+      navigate("/");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate]);
+  }, [navigate, showCheckout]);
 
   return (
     <div className="dark flex min-h-[100dvh] flex-col overflow-x-hidden bg-[#050814] text-slate-200 pb-[env(safe-area-inset-bottom,0px)]">
@@ -229,7 +263,7 @@ export default function Planos() {
               Anual
             </button>
             {yearly ? (
-              <span className="text-xs text-emerald-400/90 font-medium">Economize com faturação anual</span>
+              <span className="text-xs text-emerald-400/90 font-medium">30% de desconto na faturação anual</span>
             ) : null}
           </div>
         </div>
@@ -244,7 +278,9 @@ export default function Planos() {
               <span className="text-xl font-bold tabular-nums text-white sm:text-2xl">{fmt(starterPrice)}</span>
               <span className="text-[11px] text-slate-500">/{yearly ? "ano" : "mês"}</span>
             </div>
-            {discountNote ? <p className="mt-0.5 text-[9px] text-slate-500">{discountNote}</p> : null}
+            {yearly ? (
+              <p className="mt-0.5 text-[9px] text-emerald-400/85">Total anual com 30% de desconto (vs. 12× mensal)</p>
+            ) : null}
 
             <ul className="mt-2 space-y-0.5 text-[11px] leading-tight text-slate-300 sm:text-xs">
               <li className="flex gap-1">
@@ -342,8 +378,16 @@ export default function Planos() {
             </div>
 
             <div className="mt-auto pt-2" onClick={(e) => e.stopPropagation()}>
-              <Button type="button" className="h-8 w-full rounded-full text-xs font-semibold sm:h-9 sm:text-sm" variant="gradientCta" asChild>
-                <Link to="/login">Selecionar plano</Link>
+              <Button
+                type="button"
+                className="h-8 w-full rounded-full text-xs font-semibold sm:h-9 sm:text-sm"
+                variant="gradientCta"
+                onClick={() => {
+                  setSelectedPlan("gestor");
+                  setShowCheckout(true);
+                }}
+              >
+                Selecionar plano
               </Button>
             </div>
           </PlanCardShell>
@@ -360,7 +404,11 @@ export default function Planos() {
               <span className="text-xl font-bold tabular-nums text-white sm:text-2xl">{fmt(growthPrice)}</span>
               <span className="text-[11px] text-slate-500">/{yearly ? "ano" : "mês"}</span>
             </div>
-            <p className="mt-0.5 text-[9px] font-medium text-emerald-400/90">Add-ons −20% vs. avulso</p>
+            {yearly ? (
+              <p className="mt-0.5 text-[9px] text-emerald-400/85">Total anual com 30% de desconto (vs. 12× mensal)</p>
+            ) : (
+              <p className="mt-0.5 text-[9px] font-medium text-emerald-400/90">Add-ons −20% vs. avulso</p>
+            )}
 
             <ul className="mt-2 space-y-0.5 text-[11px] leading-tight text-slate-300 sm:text-xs">
               {[
@@ -392,8 +440,16 @@ export default function Planos() {
             </div>
 
             <div className="mt-auto pt-2" onClick={(e) => e.stopPropagation()}>
-              <Button type="button" className="h-8 w-full rounded-full text-xs font-semibold sm:h-9 sm:text-sm" variant="gradientCta" asChild>
-                <Link to="/login">Selecionar plano</Link>
+              <Button
+                type="button"
+                className="h-8 w-full rounded-full text-xs font-semibold sm:h-9 sm:text-sm"
+                variant="gradientCta"
+                onClick={() => {
+                  setSelectedPlan("organizacao");
+                  setShowCheckout(true);
+                }}
+              >
+                Selecionar plano
               </Button>
             </div>
           </PlanCardShell>
@@ -407,6 +463,9 @@ export default function Planos() {
               <span className="text-xl font-bold tabular-nums text-white sm:text-2xl">{fmt(scalePrice)}</span>
               <span className="text-[11px] text-slate-500">/{yearly ? "ano" : "mês"}</span>
             </div>
+            {yearly ? (
+              <p className="mt-0.5 text-[9px] text-emerald-400/85">Total anual com 30% de desconto (vs. 12× mensal)</p>
+            ) : null}
 
             <ul className="mt-2 space-y-0.5 text-[11px] leading-tight text-slate-300 sm:text-xs">
               {[
@@ -426,9 +485,12 @@ export default function Planos() {
               <Button
                 type="button"
                 className="h-8 w-full rounded-full border border-white/20 bg-white/10 text-xs font-semibold text-white hover:bg-white/15 sm:h-9 sm:text-sm"
-                asChild
+                onClick={() => {
+                  setSelectedPlan("scale");
+                  setShowCheckout(true);
+                }}
               >
-                <Link to="/login">Falar com vendas</Link>
+                Falar com vendas
               </Button>
             </div>
           </PlanCardShell>
@@ -436,11 +498,25 @@ export default function Planos() {
           </div>
 
         <p className="mx-auto mt-2 max-w-xl shrink-0 px-1 text-center text-[9px] leading-tight text-slate-500 sm:text-[10px]">
-          Valores ilustrativos. Gestor inclui Meta, IG e WA; redes extra +{" "}
-          <span className="tabular-nums">{fmt(ADDON_PER_PLATFORM_MONTHLY)}</span>/mês cada (simulação).
+          O plano Gestor inclui Meta, Instagram e WhatsApp no pacote base. Cada rede adicional: +{" "}
+          <span className="tabular-nums">{fmt(ADDON_PER_PLATFORM_MONTHLY)}</span>/mês por rede. Anual: 30% de desconto
+          sobre o total de 12 meses.
         </p>
         </div>
       </main>
+
+      <PlanCheckoutModal
+        open={showCheckout}
+        onClose={() => setShowCheckout(false)}
+        planTitle={PLAN_CHECKOUT_LABEL[selectedPlan]}
+        periodDescription={
+          yearly
+            ? "Faturação anual — 30% de desconto sobre o total de 12× o valor mensal"
+            : "Cobrança mensal"
+        }
+        totalFormatted={fmt(checkoutAmount)}
+        yearly={yearly}
+      />
     </div>
   );
 }
