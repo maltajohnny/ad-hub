@@ -161,7 +161,7 @@ const menuAfterClientes: MenuItem[] = [
 ];
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, orgBilling } = useAuth();
   const { tenant, brandingLogoSrc, brandingName, setActiveSlug } = useTenant();
   const navigate = useNavigate();
   const location = useLocation();
@@ -216,7 +216,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     !brandingLogoSrc && (isOrbixTeamMember(user) || tenant?.slug === "qtraffic");
   const sidebarNorterWordmark =
     !brandingLogoSrc && !sidebarOrbix && (!tenant || tenant.slug === "norter");
-  const eff = effectiveModulesForUser(user, tenant?.enabledModules);
+  const eff = effectiveModulesForUser(user, tenant?.enabledModules, orgBilling);
   const canSee = (m: AppModule) => eff === "all" || eff.includes(m);
   const homePath = eff === "all" ? "/dashboard" : firstAllowedPath(eff);
 

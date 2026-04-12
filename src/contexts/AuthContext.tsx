@@ -1,9 +1,9 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react";
 import { isStrongPassword } from "@/lib/passwordPolicy";
-import { isPlatformOperator, type AppModule } from "@/lib/saasTypes";
+import { isPlatformOperator, maxOrgMembersForBilling, type AppModule, type OrgBillingInfo } from "@/lib/saasTypes";
 import { isValidLoginUsername, normalizeLoginKey, sanitizeLoginInput } from "@/lib/loginUsername";
 import { migrateStoredUsernameInLocalStorage } from "@/lib/migrateStoredUsername";
-import { BUILTIN_NORTER_ID, BUILTIN_QTRAFFIC_ID, getTenantById } from "@/lib/tenantsStore";
+import { BUILTIN_NORTER_ID, BUILTIN_QTRAFFIC_ID, getTenantById, upsertTenantRecord } from "@/lib/tenantsStore";
 import { getClientOrganizationScope } from "@/lib/clientOrgScope";
 import {
   buildOrgScopedLogin,
@@ -16,9 +16,11 @@ import {
   adHubChangePassword,
   adHubCreateUser,
   adHubDeleteUser,
+  adHubFetchOrgSubscription,
   adHubFetchRegistry,
   adHubLogin,
   adHubPatchUser,
+  adHubRegister,
   getAdHubToken,
   isServerAuthLive,
   setAdHubToken,
@@ -295,11 +297,25 @@ function persistRegistry(next: Record<string, RegistryEntry>) {
 
 interface AuthContextType {
   user: User | null;
+  /** API Go com MySQL + JWT ativa (login/registo persistidos no servidor). */
+  serverAuth: boolean;
+  /** Plano / faturação da org (só com servidor + JWT). `undefined` = ainda não carregado. */
+  orgBilling: OrgBillingInfo | undefined;
+  refreshOrgBilling: () => Promise<void>;
   /** Com MySQL+JWT no servidor, valida na BD; caso contrário registo local. */
   login: (
     username: string,
     password: string,
   ) => Promise<{ user: User | null; accountDisabled?: boolean }>;
+  /** Registo público: nova organização + primeiro utilizador admin (só com `serverAuth`). */
+  registerOrganization: (input: {
+    email: string;
+    password: string;
+    name: string;
+    username: string;
+    organizationName: string;
+    organizationSlug: string;
+  }) => Promise<{ ok: boolean; error?: string; user?: User }>;
   logout: () => void;
   updateProfile: (data: Partial<Omit<User, "username">>) => void;
   /** Nome exibido, contactos e login (exceto o owner `admin`, cujo login não pode mudar). */
@@ -396,6 +412,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const [serverAuthPing, setServerAuthPing] = useState<{ db: boolean; jwt_ready: boolean } | null>(null);
   const serverAuth = useServerAuth(serverAuthPing);
+  const [orgBilling, setOrgBilling] = useState<OrgBillingInfo | undefined>(undefined);
+
+  const refreshOrgBilling = useCallback(async () => {
+    if (!serverAuth) {
+      setOrgBilling(undefined);
+      return;
+    }
+    const tok = getAdHubToken();
+    if (!tok) {
+      setOrgBilling(undefined);
+      return;
+    }
+    const b = await adHubFetchOrgSubscription(tok);
+    setOrgBilling(b ?? undefined);
+  }, [serverAuth]);
 
   useEffect(() => {
     void adHubAuthPing().then((p) => setServerAuthPing(p ?? null));
@@ -441,6 +472,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [serverAuth, refreshRegistryFromServer]);
 
   useEffect(() => {
+    if (!user || !serverAuth) {
+      setOrgBilling(undefined);
+      return;
+    }
+    void refreshOrgBilling();
+  }, [user, serverAuth, refreshOrgBilling]);
+
+  useEffect(() => {
     if (user) sessionStorage.setItem("norter_user", JSON.stringify(user));
     else sessionStorage.removeItem("norter_user");
   }, [user]);
@@ -458,6 +497,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return { ...entry.user };
     });
   }, [registry]);
+
+  const registerOrganization = useCallback(
+    async (input: {
+      email: string;
+      password: string;
+      name: string;
+      username: string;
+      organizationName: string;
+      organizationSlug: string;
+    }): Promise<{ ok: boolean; error?: string; user?: User }> => {
+      if (!serverAuth) {
+        return {
+          ok: false,
+          error: "Criação de conta no servidor indisponível. Verifique MySQL e a API Go (MYSQL_DSN, ADHUB_JWT_SECRET).",
+        };
+      }
+      const r = await adHubRegister(input);
+      if (!r.ok) {
+        return { ok: false, error: r.error };
+      }
+      setAdHubToken(r.token);
+      upsertTenantRecord({
+        id: r.organization.id,
+        slug: r.organization.slug,
+        displayName: r.organization.displayName,
+        logoDataUrl: null,
+        enabledModules: [],
+        createdAt: new Date().toISOString(),
+      });
+      const ent = await adHubFetchRegistry(r.token);
+      if (ent) {
+        const next: Record<string, RegistryEntry> = {};
+        for (const [k, v] of Object.entries(ent)) {
+          next[k] = { password: SERVER_MANAGED_PASSWORD, user: v.user };
+        }
+        syncRegistry(next);
+      } else {
+        const key = normalizeLoginKey(r.user.username);
+        setRegistry((prev) => {
+          const next = { ...prev, [key]: { password: SERVER_MANAGED_PASSWORD, user: r.user } };
+          persistRegistry(next);
+          return next;
+        });
+      }
+      setUser(r.user);
+      void refreshOrgBilling();
+      return { ok: true, user: r.user };
+    },
+    [serverAuth, syncRegistry, refreshOrgBilling],
+  );
 
   const login = useCallback(
     async (
@@ -484,6 +573,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             });
           }
           setUser(r.user);
+          void refreshOrgBilling();
           return { user: r.user };
         }
         return { user: null };
@@ -502,12 +592,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(u);
       return { user: u };
     },
-    [registry, serverAuth, syncRegistry],
+    [registry, serverAuth, syncRegistry, refreshOrgBilling],
   );
 
   const logout = () => {
     setAdHubToken(null);
     setUser(null);
+    setOrgBilling(undefined);
   };
 
   const updateProfile = useCallback(
@@ -779,6 +870,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (orgId && !rawLogin.trim()) {
         return { ok: false, error: "Indique o nome de utilizador (será nome.organização)." };
       }
+      if (
+        !isPlatformOperator(user.username) &&
+        orgId &&
+        user.organizationId &&
+        orgId === user.organizationId &&
+        orgBilling != null
+      ) {
+        const cap = maxOrgMembersForBilling(orgBilling);
+        if (cap != null) {
+          const n = Object.values(registry).filter(
+            (e) => e.user.organizationId === orgId && e.user.disabled !== true,
+          ).length;
+          if (n >= cap) {
+            return {
+              ok: false,
+              error: `Limite do plano: no máximo ${cap} contas nesta organização.`,
+            };
+          }
+        }
+      }
       if (registry[u]) return { ok: false, error: "Este login já existe." };
       if (!isStrongPassword(input.password)) {
         return {
@@ -833,6 +944,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const created = await adHubCreateUser(tok, u, input.password, newUser);
         if (!created.ok) return { ok: false, error: created.error ?? "Não foi possível criar utilizador no servidor." };
         await refreshRegistryFromServer({ force: true });
+        await refreshOrgBilling();
         return { ok: true };
       }
       const nextReg = {
@@ -842,7 +954,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       syncRegistry(nextReg);
       return { ok: true, savedLocalOnly: true };
     },
-    [user, registry, syncRegistry, refreshRegistryFromServer, serverAuth],
+    [user, registry, syncRegistry, refreshRegistryFromServer, serverAuth, orgBilling, refreshOrgBilling],
   );
 
   const setBoardSettingsPermission = useCallback(
@@ -1260,7 +1372,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     <AuthContext.Provider
       value={{
         user,
+        serverAuth,
+        orgBilling,
+        refreshOrgBilling,
         login,
+        registerOrganization,
         logout,
         updateProfile,
         saveAccountProfile,

@@ -30,12 +30,37 @@ export default function Landing() {
   const location = useLocation();
   const navigate = useNavigate();
   const [showLoginInHero, setShowLoginInHero] = useState(false);
+  const [heroAuthMode, setHeroAuthMode] = useState<"login" | "register">("login");
   const [featureModal, setFeatureModal] = useState<LandingFeatureKey | null>(null);
+  const [pricingPlanHint, setPricingPlanHint] = useState<string | null>(null);
 
-  /** Ex.: Planos → «Entrar» com `state={{ openLogin: true }}` abre o mesmo modal PRD na landing. */
+  /** Ex.: Planos → `openLogin` / `openRegister` abre o modal na landing; `planIntent` mostra contexto no registo. */
   useEffect(() => {
-    const s = location.state as { openLogin?: boolean } | null | undefined;
-    if (s?.openLogin) {
+    const s = location.state as
+      | { openLogin?: boolean; openRegister?: boolean; planIntent?: "gestor" | "organizacao" | "scale" }
+      | null
+      | undefined;
+    if (!s) return;
+    const hints: Record<"gestor" | "organizacao" | "scale", string> = {
+      gestor:
+        "Plano Gestor: crie a sua organização (pode ser só você como administrador). Depois, em Planos, conclua o pagamento.",
+      organizacao:
+        "Plano Organização: registe a sua equipa. Em seguida, volte a Planos para finalizar a subscrição.",
+      scale: "Plano Scale: registe a sua organização e conclua a subscrição na página Planos.",
+    };
+    if (s.planIntent && hints[s.planIntent]) {
+      setPricingPlanHint(hints[s.planIntent]);
+    } else if (s.openRegister || s.openLogin) {
+      setPricingPlanHint(null);
+    }
+    if (s.openRegister) {
+      setHeroAuthMode("register");
+      setShowLoginInHero(true);
+      navigate("/", { replace: true, state: {} });
+      return;
+    }
+    if (s.openLogin) {
+      setHeroAuthMode("login");
       setShowLoginInHero(true);
       navigate("/", { replace: true, state: {} });
     }
@@ -46,7 +71,10 @@ export default function Landing() {
     setShowLoginInHero(true);
   };
 
-  const closeLoginHero = () => setShowLoginInHero(false);
+  const closeLoginHero = () => {
+    setShowLoginInHero(false);
+    setPricingPlanHint(null);
+  };
 
   useEffect(() => {
     if (!showLoginInHero) return;
@@ -325,7 +353,12 @@ export default function Landing() {
               <h2 id="landing-login-title" className="sr-only">
                 Iniciar sessão na AD-HUB
               </h2>
-              <LoginScreenBody variant="landing" formId="login-form-landing" />
+              <LoginScreenBody
+                variant="landing"
+                formId="login-form-landing"
+                initialAuthMode={heroAuthMode}
+                registerContextBanner={pricingPlanHint}
+              />
             </div>
           </div>,
           document.body,

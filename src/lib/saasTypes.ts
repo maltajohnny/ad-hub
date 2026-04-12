@@ -53,10 +53,19 @@ export const RESERVED_TENANT_SLUGS = new Set([
   "t",
 ]);
 
+/** Estado de subscrição vindo da API Go (GET /api/ad-hub/auth/organization/subscription). */
+export type OrgBillingInfo = {
+  planSlug: string | null;
+  subscriptionStatus: string;
+  gestorTeamSeats: number;
+};
+
 /** Intersecção org + utilizador; admin de organização respeita módulos da org; operador de plataforma vê só serviços AD-Hub. */
 export function effectiveModulesForUser(
   user: { role: string; username: string; allowedModules?: AppModule[] | null } | null,
   tenantEnabled: AppModule[] | undefined,
+  /** `undefined` = ainda não carregado — não aplica gate do plano Gestor (modo local / loading). */
+  orgBilling?: OrgBillingInfo | null,
 ): AppModule[] | "all" {
   if (!user) return [];
   if (isPlatformOperator(user.username)) {
@@ -65,15 +74,50 @@ export function effectiveModulesForUser(
 
   const orgSet = tenantEnabled?.length ? new Set(tenantEnabled) : null;
 
+  const applyGestorUsuariosGate = (mods: AppModule[]): AppModule[] => {
+    const b = orgBilling;
+    if (b == null) return mods;
+    const active = b.subscriptionStatus === "active" || b.subscriptionStatus === "pending";
+    if (active && b.planSlug === "gestor" && (b.gestorTeamSeats ?? 0) === 0) {
+      return mods.filter((m) => m !== "usuarios");
+    }
+    return mods;
+  };
+
   if (user.role === "admin") {
-    if (!orgSet) return "all";
-    return APP_MODULES.filter((m) => orgSet.has(m));
+    if (!orgSet) {
+      const gated = applyGestorUsuariosGate([...APP_MODULES]);
+      return gated.length === APP_MODULES.length ? "all" : gated;
+    }
+    return applyGestorUsuariosGate(APP_MODULES.filter((m) => orgSet.has(m)));
   }
 
   const all = [...APP_MODULES];
   const userSet = user.allowedModules?.length ? new Set(user.allowedModules) : null;
-  if (!orgSet && !userSet) return "all";
-  return all.filter((m) => (orgSet ? orgSet.has(m) : true) && (userSet ? userSet.has(m) : true));
+  if (!orgSet && !userSet) {
+    const gated = applyGestorUsuariosGate(all);
+    return gated.length === APP_MODULES.length ? "all" : gated;
+  }
+  const merged = all.filter((m) => (orgSet ? orgSet.has(m) : true) && (userSet ? userSet.has(m) : true));
+  return applyGestorUsuariosGate(merged);
+}
+
+/** Limite de contas na organização conforme plano pago (null = sem limite aplicado). */
+export function maxOrgMembersForBilling(billing: OrgBillingInfo | null | undefined): number | null {
+  if (billing == null) return null;
+  const st = billing.subscriptionStatus;
+  const active = st === "active" || st === "pending";
+  if (!active) return null;
+  switch (billing.planSlug) {
+    case "gestor":
+      return 1 + Math.min(3, Math.max(0, billing.gestorTeamSeats ?? 0));
+    case "organizacao":
+      return 5;
+    case "scale":
+      return 15;
+    default:
+      return null;
+  }
 }
 
 export function pathToModule(pathname: string): AppModule | null {
@@ -131,8 +175,9 @@ export function firstAllowedPath(mods: AppModule[]): string {
 export function defaultPathAfterLogin(
   user: { role: string; username: string; allowedModules?: AppModule[] | null },
   tenantEnabled: AppModule[] | undefined,
+  orgBilling?: OrgBillingInfo | null,
 ): string {
-  const eff = effectiveModulesForUser(user, tenantEnabled);
+  const eff = effectiveModulesForUser(user, tenantEnabled, orgBilling);
   if (eff === "all") return "/dashboard";
   return firstAllowedPath(eff);
 }

@@ -64,13 +64,19 @@ func main() {
 	hub := app.Group("/api/ad-hub/auth")
 	hub.Get("/ping", handlers.AdHubPing)
 	hub.Post("/login", handlers.AdHubLogin)
+	hub.Post("/register", handlers.AdHubRegister)
 	hub.Post("/forgot-password", handlers.AdHubForgotPassword)
 	hub.Post("/reset-password", handlers.AdHubResetPassword)
 	hub.Post("/password", handlers.AdHubChangePassword)
 	hub.Get("/registry", handlers.AdHubRegistry)
+	hub.Get("/organization/subscription", handlers.AdHubOrgSubscription)
 	hub.Post("/users", handlers.AdHubCreateUser)
 	hub.Patch("/users/:login", handlers.AdHubPatchUser)
 	hub.Delete("/users/:login", handlers.AdHubDeleteUser)
+
+	bill := app.Group("/api/ad-hub/billing")
+	bill.Post("/asaas-checkout", handlers.AdHubBillingCheckout)
+	bill.Post("/asaas-webhook", handlers.AdHubBillingWebhook)
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"ok": true, "service": "intellisearch"})

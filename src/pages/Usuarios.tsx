@@ -19,7 +19,7 @@ import { UsersRound, Trash2, Shield, User, Building2, Eye, EyeOff, Pencil } from
 import { toast } from "sonner";
 import { cn, isPlausibleEmail } from "@/lib/utils";
 import { ModuleCheckboxLabel } from "@/components/ModuleCheckboxLabel";
-import { APP_MODULES, type AppModule, isPlatformOperator } from "@/lib/saasTypes";
+import { APP_MODULES, maxOrgMembersForBilling, type AppModule, isPlatformOperator } from "@/lib/saasTypes";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserAvatarDisplay } from "@/components/UserAvatarDisplay";
 import {
@@ -42,6 +42,7 @@ import { Label } from "@/components/ui/label";
 const Usuarios = () => {
   const {
     user,
+    orgBilling,
     listUsers,
     createUser,
     deleteUser,
@@ -74,6 +75,20 @@ const Usuarios = () => {
         normalizeLoginKey(u.username) === normalizeLoginKey(user.username),
     );
   }, [listUsers, user, platformOp, scopeTenantId]);
+
+  const orgMemberCap = useMemo(() => {
+    if (platformOp || !scopeTenantId || !user?.organizationId || scopeTenantId !== user.organizationId) {
+      return null;
+    }
+    return maxOrgMembersForBilling(orgBilling);
+  }, [platformOp, scopeTenantId, user?.organizationId, orgBilling]);
+
+  const orgMemberCount = useMemo(() => {
+    if (!scopeTenantId) return 0;
+    return rows.filter((u) => u.organizationId === scopeTenantId && u.disabled !== true).length;
+  }, [rows, scopeTenantId]);
+
+  const atOrgMemberCap = orgMemberCap != null && orgMemberCount >= orgMemberCap;
 
   const usersOnly = useMemo(() => rows.filter((u) => u.role === "user"), [rows]);
 
@@ -227,6 +242,7 @@ const Usuarios = () => {
   }, [permUser, userListForModules]);
 
   const createCanSubmit = useMemo(() => {
+    if (atOrgMemberCap && !platformOp) return false;
     const rawLogin = sanitizeLoginInput(username).trim();
     if (!rawLogin || !isValidLoginUsername(rawLogin)) return false;
     if (!name.trim()) return false;
@@ -246,6 +262,7 @@ const Usuarios = () => {
     platformOp,
     createOrganizationId,
     scopeTenantId,
+    atOrgMemberCap,
   ]);
 
   const editCanSubmit = useMemo(() => {
@@ -419,6 +436,16 @@ const Usuarios = () => {
           <p className="text-sm text-amber-700 dark:text-amber-400/90 mt-2">
             Escolha uma organização no contexto da aplicação (menu lateral / organização ativa) para gerir ou criar
             utilizadores desta organização.
+          </p>
+        )}
+        {!platformOp && orgMemberCap != null && scopeTenantId && user?.organizationId === scopeTenantId && (
+          <p className="text-sm text-muted-foreground mt-2">
+            Limite do plano para esta organização: {orgMemberCount} de {orgMemberCap} contas.
+          </p>
+        )}
+        {atOrgMemberCap && !platformOp && (
+          <p className="text-sm text-amber-700 dark:text-amber-400/90 mt-2">
+            Limite de contas atingido. Actualize o plano em Planos ou remova uma conta para criar outra.
           </p>
         )}
       </div>

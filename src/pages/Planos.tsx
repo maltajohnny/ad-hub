@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -17,6 +16,8 @@ import { Check, ChevronDown, Lock, Sparkles } from "lucide-react";
 import adHubLogo from "@/assets/ad-hub-logo.png";
 import landingHeroAi from "@/assets/landing-hero-ai.png";
 import { PlanCheckoutModal } from "@/components/planos/PlanCheckoutModal";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 const HIGHLIGHT = "#EAD9A0";
 
@@ -49,6 +50,8 @@ const OPTIONAL_ADDONS: { id: string; label: string }[] = [
 const BASE_MONTHLY = 169.9;
 /** Valor por rede adicional / mês (além de Meta, Instagram e WhatsApp no pacote base). */
 const ADDON_PER_PLATFORM_MONTHLY = 35;
+/** Lugares de equipa no plano Gestor (1–3 pessoas) — desbloqueia módulo Usuários. */
+const ADDON_TEAM_MONTHLY = 59.9;
 
 const fmt = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 });
@@ -63,12 +66,98 @@ function shortPlatformLabel(id: string): string {
   return m[id] ?? id;
 }
 
+function makeEmptyAddonState(): Record<string, boolean> {
+  return Object.fromEntries(OPTIONAL_ADDONS.map((a) => [a.id, false])) as Record<string, boolean>;
+}
+
+function IncludedBaseBlock() {
+  return (
+    <div className="mt-2 rounded-md border border-white/[0.08] bg-black/20 px-2 py-1.5">
+      <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">Incluídas no preço base</p>
+      <div className="mt-1 flex flex-wrap gap-1" title="Meta, Instagram e WhatsApp incluídos">
+        {INCLUDED_PLATFORMS.map((p) => (
+          <span
+            key={p.id}
+            className="inline-flex items-center gap-0.5 rounded border border-emerald-500/35 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-100/95"
+          >
+            <Lock className="h-2.5 w-2.5 shrink-0 text-emerald-400/90" aria-hidden />
+            {shortPlatformLabel(p.id)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type AdditionalNetworksBlockProps = {
+  addonOn: Record<string, boolean>;
+  addonCount: number;
+  onToggle: (id: string, checked: boolean) => void;
+};
+
+function AdditionalNetworksBlock({ addonOn, addonCount, onToggle }: AdditionalNetworksBlockProps) {
+  return (
+    <div
+      className="mt-2 rounded-md border border-dashed px-2 py-1.5 sm:py-2"
+      style={{ borderColor: `${HIGHLIGHT}55`, background: `${HIGHLIGHT}12` }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Redes adicionais</p>
+      <p className="text-[9px] text-slate-500">
+        +{fmt(ADDON_PER_PLATFORM_MONTHLY)}/rede/mês · {addonCount} extra
+      </p>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-7 min-h-7 w-full justify-between gap-1 border-white/15 bg-black/35 px-2 py-0.5 text-left text-[11px] font-normal text-slate-200 hover:bg-white/5 hover:text-white sm:h-8 sm:min-h-8 sm:text-xs"
+          >
+            <span className="min-w-0 flex-1 truncate">
+              {addonCount > 0
+                ? `${addonCount} rede${addonCount === 1 ? "" : "s"} extra · abrir para editar`
+                : "Abrir lista e escolher redes"}
+            </span>
+            <ChevronDown className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          className="w-[min(calc(100vw-2rem),22rem)] border-white/10 bg-[#0c1228] p-3 text-slate-200 shadow-xl"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <p className="mb-3 text-[11px] leading-relaxed text-slate-400">
+            Marque as redes que pretende além de Meta, Instagram e WhatsApp. Cada rede soma{" "}
+            <span className="tabular-nums text-slate-300">{fmt(ADDON_PER_PLATFORM_MONTHLY)}</span>/mês.
+          </p>
+          <div className="grid max-h-[min(50vh,280px)] gap-2 overflow-y-auto overscroll-contain pr-0.5 sm:grid-cols-2">
+            {OPTIONAL_ADDONS.map((a) => (
+              <label
+                key={a.id}
+                className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/[0.08] bg-black/35 px-2 py-2 text-sm text-slate-300 hover:bg-white/[0.06]"
+              >
+                <Checkbox
+                  checked={addonOn[a.id]}
+                  onCheckedChange={(c) => onToggle(a.id, c === true)}
+                  className="border-white/20"
+                />
+                <span>{a.label}</span>
+              </label>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 type PlanId = "gestor" | "organizacao" | "scale";
 
 const PLAN_CHECKOUT_LABEL: Record<PlanId, string> = {
   gestor: "Gestor — Assinatura para gestor",
   organizacao: "Organização — 3 a 5 gestores",
-  scale: "Scale — Até 10 gestores",
+  scale: "Scale — Até 15 gestores",
 };
 
 const PLAN_SURFACE: Record<PlanId, string> = {
@@ -123,33 +212,92 @@ function PlanCardShell({
 
 export default function Planos() {
   const navigate = useNavigate();
+  const { user, serverAuth } = useAuth();
   /** Plano com realce (borda dourada); por defeito o primeiro cartão vem ativo. */
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("gestor");
   const [yearly, setYearly] = useState(false);
-  const [basePack, setBasePack] = useState("meta-ig-wa");
-  const [addonOn, setAddonOn] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(OPTIONAL_ADDONS.map((a) => [a.id, false])),
-  );
+  const [addonGestor, setAddonGestor] = useState(makeEmptyAddonState);
+  const [addonOrganizacao, setAddonOrganizacao] = useState(makeEmptyAddonState);
+  const [addonScale, setAddonScale] = useState(makeEmptyAddonState);
   const [growthExtraUsers, setGrowthExtraUsers] = useState("0");
+  /** 0–3 lugares de equipa no plano Gestor (+módulo Usuários). */
+  const [gestorTeamSeats, setGestorTeamSeats] = useState("0");
   const [showCheckout, setShowCheckout] = useState(false);
 
-  const addonCount = useMemo(() => OPTIONAL_ADDONS.filter((a) => addonOn[a.id]).length, [addonOn]);
+  const requestCheckout = (plan: PlanId) => {
+    setSelectedPlan(plan);
+    if (!user) {
+      toast.info("Inicie sessão ou crie a sua organização", {
+        description:
+          "Para subscrever, precisa de uma conta de administrador. No registo, cria-se uma organização — no plano Gestor pode ser só você. Depois volte a Planos para pagar.",
+      });
+      navigate("/", { state: { openRegister: true, planIntent: plan } });
+      return;
+    }
+    if (!serverAuth) {
+      toast.warning("Subscrição indisponível", {
+        description: "Configure MySQL e a API Go (MYSQL_DSN) para pagamentos online.",
+      });
+      return;
+    }
+    if (user.role !== "admin") {
+      toast.error("Apenas o administrador da organização pode subscrever um plano.");
+      return;
+    }
+    if (!user.organizationId) {
+      toast.error("A sua conta precisa de uma organização.");
+      return;
+    }
+    setShowCheckout(true);
+  };
+
+  const gestorAddonCount = useMemo(
+    () => OPTIONAL_ADDONS.filter((a) => addonGestor[a.id]).length,
+    [addonGestor],
+  );
+  const orgAddonCount = useMemo(
+    () => OPTIONAL_ADDONS.filter((a) => addonOrganizacao[a.id]).length,
+    [addonOrganizacao],
+  );
+  const scaleAddonCount = useMemo(
+    () => OPTIONAL_ADDONS.filter((a) => addonScale[a.id]).length,
+    [addonScale],
+  );
+
+  const teamSeatCount = Number(gestorTeamSeats) || 0;
 
   const starterPrice = useMemo(() => {
-    const monthly = BASE_MONTHLY + addonCount * ADDON_PER_PLATFORM_MONTHLY;
+    const monthly =
+      BASE_MONTHLY +
+      gestorAddonCount * ADDON_PER_PLATFORM_MONTHLY +
+      teamSeatCount * ADDON_TEAM_MONTHLY;
     return yearly ? yearlyTotalFromMonthly(monthly) : monthly;
-  }, [addonCount, yearly]);
+  }, [gestorAddonCount, yearly, teamSeatCount]);
 
   const growthPrice = useMemo(() => {
     const extra = Number(growthExtraUsers) || 0;
-    const monthly = 297 + extra * 40;
+    const monthly =
+      297 + orgAddonCount * ADDON_PER_PLATFORM_MONTHLY + extra * 40;
     return yearly ? yearlyTotalFromMonthly(monthly) : monthly;
-  }, [growthExtraUsers, yearly]);
+  }, [growthExtraUsers, yearly, orgAddonCount]);
 
   const scalePrice = useMemo(() => {
-    const monthly = 497;
+    const monthly = 497 + scaleAddonCount * ADDON_PER_PLATFORM_MONTHLY;
     return yearly ? yearlyTotalFromMonthly(monthly) : monthly;
-  }, [yearly]);
+  }, [yearly, scaleAddonCount]);
+
+  const checkoutAddonPlatformCount = useMemo(() => {
+    switch (selectedPlan) {
+      case "gestor":
+        return gestorAddonCount;
+      case "organizacao":
+        return orgAddonCount;
+      case "scale":
+        return scaleAddonCount;
+      default:
+        return gestorAddonCount;
+    }
+  }, [selectedPlan, gestorAddonCount, orgAddonCount, scaleAddonCount]);
 
   const checkoutAmount = useMemo(() => {
     switch (selectedPlan) {
@@ -164,8 +312,14 @@ export default function Planos() {
     }
   }, [selectedPlan, starterPrice, growthPrice, scalePrice]);
 
-  const toggleAddon = (id: string, checked: boolean) => {
-    setAddonOn((prev) => ({ ...prev, [id]: checked }));
+  const toggleAddonGestor = (id: string, checked: boolean) => {
+    setAddonGestor((prev) => ({ ...prev, [id]: checked }));
+  };
+  const toggleAddonOrganizacao = (id: string, checked: boolean) => {
+    setAddonOrganizacao((prev) => ({ ...prev, [id]: checked }));
+  };
+  const toggleAddonScale = (id: string, checked: boolean) => {
+    setAddonScale((prev) => ({ ...prev, [id]: checked }));
   };
 
   useEffect(() => {
@@ -297,84 +451,33 @@ export default function Planos() {
               </li>
             </ul>
 
-            <div className="mt-2 space-y-1" onClick={(e) => e.stopPropagation()}>
-              <Label className="text-[10px] text-slate-400">Pacote base (3 redes)</Label>
-              <Select value={basePack} onValueChange={setBasePack}>
-                <SelectTrigger className="h-7 min-h-7 border-white/10 bg-slate-900/50 py-0 text-[11px] text-slate-200 sm:h-8 sm:min-h-8 sm:text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="border-white/10 bg-[#0c1228] text-slate-200">
-                  <SelectItem value="meta-ig-wa">Meta Ads + Instagram + WhatsApp (padrão)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="mt-2 rounded-md border border-white/[0.08] bg-black/20 px-2 py-1.5">
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">Incluídas no preço base</p>
-              <div className="mt-1 flex flex-wrap gap-1" title="Meta, Instagram e WhatsApp incluídos">
-                {INCLUDED_PLATFORMS.map((p) => (
-                  <span
-                    key={p.id}
-                    className="inline-flex items-center gap-0.5 rounded border border-emerald-500/35 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-100/95"
-                  >
-                    <Lock className="h-2.5 w-2.5 shrink-0 text-emerald-400/90" aria-hidden />
-                    {shortPlatformLabel(p.id)}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <IncludedBaseBlock />
+            <AdditionalNetworksBlock
+              addonOn={addonGestor}
+              addonCount={gestorAddonCount}
+              onToggle={toggleAddonGestor}
+            />
 
             <div
               className="mt-2 rounded-md border border-dashed px-2 py-1.5 sm:py-2"
-              style={{ borderColor: `${HIGHLIGHT}55`, background: `${HIGHLIGHT}12` }}
+              style={{ borderColor: `${HIGHLIGHT}44`, background: `${HIGHLIGHT}08` }}
               onClick={(e) => e.stopPropagation()}
             >
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Redes adicionais</p>
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Pessoas na equipa</p>
               <p className="text-[9px] text-slate-500">
-                +{fmt(ADDON_PER_PLATFORM_MONTHLY)}/rede/mês · {addonCount} extra
+                +{fmt(ADDON_TEAM_MONTHLY)}/pessoa/mês · desbloqueia o módulo Usuários · {teamSeatCount} extra
               </p>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-7 min-h-7 w-full justify-between gap-1 border-white/15 bg-black/35 px-2 py-0.5 text-left text-[11px] font-normal text-slate-200 hover:bg-white/5 hover:text-white sm:h-8 sm:min-h-8 sm:text-xs"
-                  >
-                    <span className="min-w-0 flex-1 truncate">
-                      {addonCount > 0
-                        ? `${addonCount} rede${addonCount === 1 ? "" : "s"} extra · abrir para editar`
-                        : "Abrir lista e escolher redes"}
-                    </span>
-                    <ChevronDown className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="start"
-                  sideOffset={6}
-                  className="w-[min(calc(100vw-2rem),22rem)] border-white/10 bg-[#0c1228] p-3 text-slate-200 shadow-xl"
-                  onOpenAutoFocus={(e) => e.preventDefault()}
-                >
-                  <p className="mb-3 text-[11px] leading-relaxed text-slate-400">
-                    Marque as redes que pretende além de Meta, Instagram e WhatsApp. Cada rede soma{" "}
-                    <span className="tabular-nums text-slate-300">{fmt(ADDON_PER_PLATFORM_MONTHLY)}</span>/mês.
-                  </p>
-                  <div className="grid max-h-[min(50vh,280px)] gap-2 overflow-y-auto overscroll-contain pr-0.5 sm:grid-cols-2">
-                    {OPTIONAL_ADDONS.map((a) => (
-                      <label
-                        key={a.id}
-                        className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/[0.08] bg-black/35 px-2 py-2 text-sm text-slate-300 hover:bg-white/[0.06]"
-                      >
-                        <Checkbox
-                          checked={addonOn[a.id]}
-                          onCheckedChange={(c) => toggleAddon(a.id, c === true)}
-                          className="border-white/20"
-                        />
-                        <span>{a.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
+              <Select value={gestorTeamSeats} onValueChange={setGestorTeamSeats}>
+                <SelectTrigger className="mt-1 h-7 min-h-7 border-white/10 bg-slate-900/50 py-0 text-[11px] text-slate-200 sm:h-8 sm:min-h-8 sm:text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="border-white/10 bg-[#0c1228] text-slate-200">
+                  <SelectItem value="0">Só a conta gestor (sem lugares extra)</SelectItem>
+                  <SelectItem value="1">+1 pessoa (+{fmt(ADDON_TEAM_MONTHLY)}/mês)</SelectItem>
+                  <SelectItem value="2">+2 pessoas (+{fmt(ADDON_TEAM_MONTHLY * 2)}/mês)</SelectItem>
+                  <SelectItem value="3">+3 pessoas (+{fmt(ADDON_TEAM_MONTHLY * 3)}/mês)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="mt-auto pt-2" onClick={(e) => e.stopPropagation()}>
@@ -382,10 +485,7 @@ export default function Planos() {
                 type="button"
                 className="h-8 w-full rounded-full text-xs font-semibold sm:h-9 sm:text-sm"
                 variant="gradientCta"
-                onClick={() => {
-                  setSelectedPlan("gestor");
-                  setShowCheckout(true);
-                }}
+                onClick={() => requestCheckout("gestor")}
               >
                 Selecionar plano
               </Button>
@@ -424,10 +524,22 @@ export default function Planos() {
               ))}
             </ul>
 
-            <div className="mt-2 space-y-0.5" onClick={(e) => e.stopPropagation()}>
-              <Label className="text-[10px] text-slate-400">Utilizadores extra</Label>
+            <IncludedBaseBlock />
+            <AdditionalNetworksBlock
+              addonOn={addonOrganizacao}
+              addonCount={orgAddonCount}
+              onToggle={toggleAddonOrganizacao}
+            />
+
+            <div
+              className="mt-2 rounded-md border border-dashed px-2 py-1.5 sm:py-2"
+              style={{ borderColor: `${HIGHLIGHT}44`, background: `${HIGHLIGHT}08` }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Utilizadores extra</p>
+              <p className="text-[9px] text-slate-500">+R$ 40,00/utilizador/mês · além da equipa incluída no plano</p>
               <Select value={growthExtraUsers} onValueChange={setGrowthExtraUsers}>
-                <SelectTrigger className="h-7 min-h-7 border-white/10 bg-slate-900/50 text-[11px] text-slate-200 sm:h-8 sm:min-h-8 sm:text-xs">
+                <SelectTrigger className="mt-1 h-7 min-h-7 border-white/10 bg-slate-900/50 py-0 text-[11px] text-slate-200 sm:h-8 sm:min-h-8 sm:text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="border-white/10 bg-[#0c1228] text-slate-200">
@@ -444,10 +556,7 @@ export default function Planos() {
                 type="button"
                 className="h-8 w-full rounded-full text-xs font-semibold sm:h-9 sm:text-sm"
                 variant="gradientCta"
-                onClick={() => {
-                  setSelectedPlan("organizacao");
-                  setShowCheckout(true);
-                }}
+                onClick={() => requestCheckout("organizacao")}
               >
                 Selecionar plano
               </Button>
@@ -457,7 +566,7 @@ export default function Planos() {
           {/* Scale */}
           <PlanCardShell planId="scale" selected={selectedPlan === "scale"} onSelect={setSelectedPlan}>
             <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">Scale</p>
-            <h2 className="mt-0.5 font-display text-sm font-bold leading-tight text-white sm:text-base">Até 10 gestores</h2>
+            <h2 className="mt-0.5 font-display text-sm font-bold leading-tight text-white sm:text-base">Até 15 gestores</h2>
             <p className="mt-0.5 text-[11px] leading-tight text-slate-400">Premium · multi-workspace</p>
             <div className="mt-2 flex items-baseline gap-1">
               <span className="text-xl font-bold tabular-nums text-white sm:text-2xl">{fmt(scalePrice)}</span>
@@ -481,16 +590,21 @@ export default function Planos() {
               ))}
             </ul>
 
+            <IncludedBaseBlock />
+            <AdditionalNetworksBlock
+              addonOn={addonScale}
+              addonCount={scaleAddonCount}
+              onToggle={toggleAddonScale}
+            />
+
             <div className="mt-auto pt-2" onClick={(e) => e.stopPropagation()}>
               <Button
                 type="button"
-                className="h-8 w-full rounded-full border border-white/20 bg-white/10 text-xs font-semibold text-white hover:bg-white/15 sm:h-9 sm:text-sm"
-                onClick={() => {
-                  setSelectedPlan("scale");
-                  setShowCheckout(true);
-                }}
+                className="h-8 w-full rounded-full text-xs font-semibold sm:h-9 sm:text-sm"
+                variant="gradientCta"
+                onClick={() => requestCheckout("scale")}
               >
-                Falar com vendas
+                Selecionar plano
               </Button>
             </div>
           </PlanCardShell>
@@ -498,9 +612,9 @@ export default function Planos() {
           </div>
 
         <p className="mx-auto mt-2 max-w-xl shrink-0 px-1 text-center text-[9px] leading-tight text-slate-500 sm:text-[10px]">
-          O plano Gestor inclui Meta, Instagram e WhatsApp no pacote base. Cada rede adicional: +{" "}
-          <span className="tabular-nums">{fmt(ADDON_PER_PLATFORM_MONTHLY)}</span>/mês por rede. Anual: 30% de desconto
-          sobre o total de 12 meses.
+          Todos os planos incluem Meta, Instagram e WhatsApp no preço base. Redes adicionais: +{" "}
+          <span className="tabular-nums">{fmt(ADDON_PER_PLATFORM_MONTHLY)}</span>/mês por rede. Plano Organização: até +3
+          utilizadores extra (+R$ 40/mês cada). Anual: 30% sobre o total de 12 meses.
         </p>
         </div>
       </main>
@@ -509,6 +623,8 @@ export default function Planos() {
         open={showCheckout}
         onClose={() => setShowCheckout(false)}
         planTitle={PLAN_CHECKOUT_LABEL[selectedPlan]}
+        planId={selectedPlan}
+        amountBrl={checkoutAmount}
         periodDescription={
           yearly
             ? "Faturação anual — 30% de desconto sobre o total de 12× o valor mensal"
@@ -516,6 +632,9 @@ export default function Planos() {
         }
         totalFormatted={fmt(checkoutAmount)}
         yearly={yearly}
+        gestorTeamSeats={teamSeatCount}
+        addonPlatformCount={checkoutAddonPlatformCount}
+        growthExtraUsers={Number(growthExtraUsers) || 0}
       />
     </div>
   );

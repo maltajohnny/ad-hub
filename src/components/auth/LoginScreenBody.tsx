@@ -5,7 +5,7 @@ import { useTenant } from "@/contexts/TenantContext";
 import { getTenantById, getTenantBySlug } from "@/lib/tenantsStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Eye, EyeOff, Lock, User } from "lucide-react";
+import { Eye, EyeOff, Lock, User, Building2, Loader2 } from "lucide-react";
 import adHubFallback from "@/assets/ad-hub-logo.png";
 import {
   extractOrgSlugFromUsername,
@@ -17,6 +17,8 @@ import { NorterMarkLogo } from "@/components/NorterMarkLogo";
 import { defaultPathAfterLogin } from "@/lib/saasTypes";
 import { applyDocumentBranding, resolveTenantForLoginBranding } from "@/lib/documentBranding";
 import { cn } from "@/lib/utils";
+import { isStrongPassword } from "@/lib/passwordPolicy";
+import { validateTenantSlug } from "@/lib/tenantsStore";
 
 export type LoginScreenVariant = "page" | "landing";
 
@@ -24,20 +26,40 @@ type LoginScreenBodyProps = {
   variant?: LoginScreenVariant;
   /** id do <form> (evitar duplicado se algum dia montar dois em dev) */
   formId?: string;
+  /** Abre no separador «Criar organização» (ex.: vindo dos Planos). */
+  initialAuthMode?: "login" | "register";
+  /** Texto opcional acima do formulário de registo (ex.: contexto vindo da página Planos). */
+  registerContextBanner?: string | null;
 };
 
 /** `landing` = mesmo aspeto do formulário que `page`; só esconde o link “Conheça a plataforma” e usa cartão embutido na landing. */
-export function LoginScreenBody({ variant = "page", formId = "login-form" }: LoginScreenBodyProps) {
+export function LoginScreenBody({
+  variant = "page",
+  formId = "login-form",
+  initialAuthMode = "login",
+  registerContextBanner = null,
+}: LoginScreenBodyProps) {
   const hidePlatformLink = variant === "landing";
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, registerOrganization, serverAuth, orgBilling } = useAuth();
   const { setActiveSlug, tenant } = useTenant();
   const navigate = useNavigate();
+  const showServerRegister = Boolean(serverAuth && !tenantSlug);
+  const [authMode, setAuthMode] = useState<"login" | "register">(
+    initialAuthMode === "register" && showServerRegister ? "register" : "login",
+  );
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+  const [regSubmitting, setRegSubmitting] = useState(false);
+  const [orgName, setOrgName] = useState("");
+  const [orgSlug, setOrgSlug] = useState("");
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regUser, setRegUser] = useState("");
+  const [regPassword, setRegPassword] = useState("");
   const tenantRecord = tenantSlug ? getTenantBySlug(tenantSlug) : undefined;
   const invalidTenant = Boolean(tenantSlug && !tenantRecord);
 
@@ -51,6 +73,14 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
       }),
     [tenantSlug, tenantRecord, invalidTenant, username],
   );
+
+  useEffect(() => {
+    if (!showServerRegister) {
+      setAuthMode("login");
+      return;
+    }
+    setAuthMode(initialAuthMode === "register" ? "register" : "login");
+  }, [initialAuthMode, showServerRegister]);
 
   useEffect(() => {
     if (!tenantSlug) {
@@ -104,12 +134,61 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
       : logged.organizationId
         ? getTenantById(logged.organizationId)
         : tenant;
-    navigate(defaultPathAfterLogin(logged, tenantForModules?.enabledModules), { replace: true });
+    navigate(defaultPathAfterLogin(logged, tenantForModules?.enabledModules, orgBilling), { replace: true });
+  };
+
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!showServerRegister) return;
+    const slug = orgSlug.trim().toLowerCase();
+    const slugOk = validateTenantSlug(slug);
+    if (!slugOk.ok) {
+      setError(slugOk.error);
+      return;
+    }
+    if (!orgName.trim() || !regName.trim() || !regEmail.trim() || !regUser.trim() || !regPassword.trim()) {
+      setError("Preencha todos os campos.");
+      return;
+    }
+    if (!isStrongPassword(regPassword)) {
+      setError("Senha: mínimo 6 caracteres, maiúscula, minúscula e símbolo.");
+      return;
+    }
+    setRegSubmitting(true);
+    try {
+      const res = await registerOrganization({
+        email: regEmail.trim(),
+        password: regPassword,
+        name: regName.trim(),
+        username: regUser.trim(),
+        organizationName: orgName.trim(),
+        organizationSlug: slug,
+      });
+      if (!res.ok || !res.user) {
+        setError(res.error ?? "Não foi possível criar a conta.");
+        return;
+      }
+      setActiveSlug(slug);
+      const t = getTenantBySlug(slug);
+      navigate(defaultPathAfterLogin(res.user, t?.enabledModules, orgBilling), { replace: true });
+    } finally {
+      setRegSubmitting(false);
+    }
   };
 
   const showLogoSrc = brand.logo ?? adHubFallback;
   const canSubmitLogin =
     !invalidTenant && username.trim().length > 0 && password.trim().length > 0;
+  const canSubmitRegister =
+    showServerRegister &&
+    orgName.trim().length > 0 &&
+    orgSlug.trim().length > 1 &&
+    regName.trim().length > 0 &&
+    regEmail.includes("@") &&
+    regUser.trim().length > 0 &&
+    regPassword.length > 0 &&
+    !regSubmitting;
 
   const inputClass =
     "h-11 rounded-full border border-slate-200/80 bg-background/95 pl-10 text-foreground shadow-sm placeholder:text-slate-500 focus-visible:ring-offset-0 dark:border-white/12 dark:bg-slate-900/50 dark:placeholder:text-slate-400 md:text-sm";
@@ -167,96 +246,230 @@ export function LoginScreenBody({ variant = "page", formId = "login-form" }: Log
         </div>
       )}
 
-      <form
-        id={formId}
-        method="post"
-        action="#"
-        noValidate
-        autoComplete="on"
-        onSubmit={handleSubmit}
-        className="glass-card flex flex-col gap-4 rounded-2xl p-5 sm:p-6"
-      >
-        <div className="flex flex-col gap-2">
-          <div className="relative">
-            <User
-              className="pointer-events-none absolute left-3.5 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
-              aria-hidden
-            />
-            <Input
-              id={`${formId}-username`}
-              name="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Utilizador ou e-mail"
-              autoComplete="section-auth username"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              disabled={invalidTenant}
-              className={inputClass}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter") return;
-                e.preventDefault();
-                (document.getElementById(formId) as HTMLFormElement | null)?.requestSubmit();
-              }}
-            />
-          </div>
-          <div className="relative">
-            <Lock
-              className="pointer-events-none absolute left-3.5 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
-              aria-hidden
-            />
-            <Input
-              id={`${formId}-password`}
-              name="password"
-              type={showPw ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Senha"
-              autoComplete="section-auth current-password"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              disabled={invalidTenant}
-              className={passwordInputClass}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter") return;
-                e.preventDefault();
-                (document.getElementById(formId) as HTMLFormElement | null)?.requestSubmit();
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPw(!showPw)}
-              className="absolute right-3 top-1/2 z-[1] -translate-y-1/2 rounded-full p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white"
-              aria-label={showPw ? "Ocultar senha" : "Mostrar senha"}
-            >
-              {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-        </div>
-
-        {error && <p className="text-center text-sm text-destructive">{error}</p>}
-
-        <Button
-          type="submit"
-          variant="gradientCta"
-          size="lg"
-          className="h-11 w-full rounded-full text-base font-semibold disabled:opacity-50"
-          disabled={!canSubmitLogin}
-        >
-          Entrar
-        </Button>
-
-        <p className="text-center">
-          <Link
-            to="/forgot-password"
-            className="text-sm text-slate-500 underline-offset-4 transition-colors hover:text-cyan-500/95 hover:underline dark:text-slate-400 dark:hover:text-cyan-400/90"
+      {showServerRegister && !invalidTenant && (
+        <div className="mb-4 flex rounded-full border border-white/10 bg-white/[0.04] p-1">
+          <button
+            type="button"
+            className={cn(
+              "flex-1 rounded-full py-2 text-xs font-semibold transition-colors sm:text-sm",
+              authMode === "login"
+                ? "bg-white/10 text-white shadow-sm"
+                : "text-slate-400 hover:text-slate-200",
+            )}
+            onClick={() => {
+              setAuthMode("login");
+              setError("");
+            }}
           >
-            Esqueceu sua senha?
-          </Link>
-        </p>
-      </form>
+            Entrar
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "flex-1 rounded-full py-2 text-xs font-semibold transition-colors sm:text-sm",
+              authMode === "register"
+                ? "bg-white/10 text-white shadow-sm"
+                : "text-slate-400 hover:text-slate-200",
+            )}
+            onClick={() => {
+              setAuthMode("register");
+              setError("");
+            }}
+          >
+            Criar organização
+          </button>
+        </div>
+      )}
+
+      {showServerRegister && authMode === "register" && registerContextBanner ? (
+        <div className="mb-4 rounded-lg border border-cyan-500/25 bg-cyan-500/5 px-3 py-2 text-xs leading-relaxed text-slate-300">
+          {registerContextBanner}
+        </div>
+      ) : null}
+
+      {authMode === "login" || !showServerRegister || invalidTenant ? (
+        <form
+          id={formId}
+          method="post"
+          action="#"
+          noValidate
+          autoComplete="on"
+          onSubmit={handleSubmit}
+          className="glass-card flex flex-col gap-4 rounded-2xl p-5 sm:p-6"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="relative">
+              <User
+                className="pointer-events-none absolute left-3.5 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
+                aria-hidden
+              />
+              <Input
+                id={`${formId}-username`}
+                name="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Utilizador ou e-mail"
+                autoComplete="section-auth username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                disabled={invalidTenant}
+                className={inputClass}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  (document.getElementById(formId) as HTMLFormElement | null)?.requestSubmit();
+                }}
+              />
+            </div>
+            <div className="relative">
+              <Lock
+                className="pointer-events-none absolute left-3.5 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
+                aria-hidden
+              />
+              <Input
+                id={`${formId}-password`}
+                name="password"
+                type={showPw ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Senha"
+                autoComplete="section-auth current-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                disabled={invalidTenant}
+                className={passwordInputClass}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  (document.getElementById(formId) as HTMLFormElement | null)?.requestSubmit();
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(!showPw)}
+                className="absolute right-3 top-1/2 z-[1] -translate-y-1/2 rounded-full p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white"
+                aria-label={showPw ? "Ocultar senha" : "Mostrar senha"}
+              >
+                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          {error && authMode === "login" && (
+            <p className="text-center text-sm text-destructive">{error}</p>
+          )}
+
+          <Button
+            type="submit"
+            variant="gradientCta"
+            size="lg"
+            className="h-11 w-full rounded-full text-base font-semibold disabled:opacity-50"
+            disabled={!canSubmitLogin}
+          >
+            Entrar
+          </Button>
+
+          <p className="text-center">
+            <Link
+              to="/forgot-password"
+              className="text-sm text-slate-500 underline-offset-4 transition-colors hover:text-cyan-500/95 hover:underline dark:text-slate-400 dark:hover:text-cyan-400/90"
+            >
+              Esqueceu sua senha?
+            </Link>
+          </p>
+        </form>
+      ) : (
+        <form
+          id={`${formId}-register`}
+          method="post"
+          action="#"
+          noValidate
+          autoComplete="on"
+          onSubmit={handleRegisterSubmit}
+          className="glass-card flex max-h-[min(70vh,32rem)] flex-col gap-3 overflow-y-auto rounded-2xl p-5 sm:p-6"
+        >
+          <p className="text-center text-[11px] leading-snug text-slate-400">
+            Cria a tua organização e torna-te administrador. O login será{" "}
+            <span className="font-mono text-cyan-400/90">
+              {regUser.trim() || "utilizador"}.{orgSlug.trim() || "slug"}
+            </span>
+            .
+          </p>
+          <Input
+            placeholder="Nome da organização"
+            value={orgName}
+            onChange={(e) => setOrgName(e.target.value)}
+            className={inputClass.replace("pl-10", "pl-3")}
+            autoComplete="organization"
+            disabled={regSubmitting}
+          />
+          <Input
+            placeholder="Slug (URL) — ex.: minha-agencia"
+            value={orgSlug}
+            onChange={(e) => setOrgSlug(e.target.value.toLowerCase())}
+            className={inputClass.replace("pl-10", "pl-3")}
+            autoCapitalize="none"
+            spellCheck={false}
+            disabled={regSubmitting}
+          />
+          <Input
+            placeholder="O teu nome"
+            value={regName}
+            onChange={(e) => setRegName(e.target.value)}
+            className={inputClass.replace("pl-10", "pl-3")}
+            autoComplete="name"
+            disabled={regSubmitting}
+          />
+          <Input
+            placeholder="E-mail"
+            type="email"
+            value={regEmail}
+            onChange={(e) => setRegEmail(e.target.value)}
+            className={inputClass.replace("pl-10", "pl-3")}
+            autoComplete="email"
+            disabled={regSubmitting}
+          />
+          <Input
+            placeholder="Utilizador (parte antes do ponto)"
+            value={regUser}
+            onChange={(e) => setRegUser(e.target.value)}
+            className={inputClass.replace("pl-10", "pl-3")}
+            autoCapitalize="none"
+            spellCheck={false}
+            disabled={regSubmitting}
+          />
+          <Input
+            placeholder="Senha"
+            type="password"
+            value={regPassword}
+            onChange={(e) => setRegPassword(e.target.value)}
+            className={inputClass.replace("pl-10", "pl-3")}
+            autoComplete="new-password"
+            disabled={regSubmitting}
+          />
+          {error && authMode === "register" && (
+            <p className="text-center text-sm text-destructive">{error}</p>
+          )}
+          <Button
+            type="submit"
+            variant="gradientCta"
+            size="lg"
+            className="h-11 w-full shrink-0 rounded-full text-base font-semibold disabled:opacity-50"
+            disabled={!canSubmitRegister}
+          >
+            {regSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin inline" />
+                A criar…
+              </>
+            ) : (
+              "Criar conta"
+            )}
+          </Button>
+        </form>
+      )}
 
       {!hidePlatformLink && (
         <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">

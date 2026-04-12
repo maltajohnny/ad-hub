@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { isPlatformOperator } from "@/lib/saasTypes";
 import { useTenant } from "@/contexts/TenantContext";
 import { useKanban } from "@/contexts/KanbanContext";
 import { clientsData } from "@/pages/Clientes";
@@ -19,7 +20,7 @@ function parseRoiStr(roi: string): number {
 
 /** Barra superior global (todas as rotas exceto Board): título contextual + cliente selecionado. */
 export function DashboardHeaderChrome() {
-  const { canUserSeeClient, user } = useAuth();
+  const { canUserSeeClient, user, orgBilling } = useAuth();
   const { tenant } = useTenant();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -71,10 +72,43 @@ export function DashboardHeaderChrome() {
 
   const headerTitle = isGestaoMidias ? "Gestão de Mídias" : "Dashboard";
 
+  const planChip =
+    user &&
+    user.organizationId &&
+    !isPlatformOperator(user.username) &&
+    orgBilling != null &&
+    (orgBilling.planSlug || orgBilling.subscriptionStatus !== "none")
+      ? (() => {
+          const name =
+            orgBilling.planSlug === "gestor"
+              ? "Gestor"
+              : orgBilling.planSlug === "organizacao"
+                ? "Organização"
+                : orgBilling.planSlug === "scale"
+                  ? "Scale"
+                  : "Plano";
+          const st =
+            orgBilling.subscriptionStatus === "active"
+              ? "Ativo"
+              : orgBilling.subscriptionStatus === "pending"
+                ? "Pendente"
+                : orgBilling.subscriptionStatus;
+          return `${name} · ${st}`;
+        })()
+      : null;
+
   return (
     <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3 md:gap-4">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <h1 className="text-lg sm:text-xl font-display font-bold shrink-0 text-foreground">{headerTitle}</h1>
+        {planChip ? (
+          <span
+            className="max-w-[min(100%,14rem)] truncate rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground sm:text-[11px]"
+            title={planChip}
+          >
+            {planChip}
+          </span>
+        ) : null}
         <span className="text-muted-foreground/80 hidden sm:inline" aria-hidden={true}>
           —
         </span>

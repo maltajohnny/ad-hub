@@ -49,41 +49,46 @@ import { TenantProvider, useTenant } from "@/contexts/TenantContext";
 import { DocumentBrandingSync } from "@/components/DocumentBrandingSync";
 import SocialPulse from "@/pages/SocialPulse";
 import { userCanAccessSocialPulse } from "@/lib/socialPulseAccess";
-import { defaultPathAfterLogin, isPlatformOperator } from "@/lib/saasTypes";
+import { defaultPathAfterLogin, effectiveModulesForUser, isPlatformOperator, type AppModule } from "@/lib/saasTypes";
 import { getTenantById } from "@/lib/tenantsStore";
 import { isOrbixTeamMember } from "@/lib/orbixAccess";
 
 const queryClient = new QueryClient();
 
-const AdminRoute = ({ children }: { children: ReactNode }) => {
-  const { user } = useAuth();
+/** Admin + módulo na matriz efetiva (ex.: plano Gestor sem lugares de equipa não vê Usuários). */
+const AdminModuleRoute = ({ module, children }: { module: AppModule; children: ReactNode }) => {
+  const { user, orgBilling } = useAuth();
   const { tenant } = useTenant();
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "admin")
-    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules, orgBilling)} replace />;
+  const eff = effectiveModulesForUser(user, tenant?.enabledModules, orgBilling);
+  if (eff !== "all" && !eff.includes(module)) {
+    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules, orgBilling)} replace />;
+  }
   return <>{children}</>;
 };
 
 /** Módulo Social Pulse — respeita `enabledModules` da org e permissões por utilizador. */
 const SocialPulseRoute = ({ children }: { children: ReactNode }) => {
-  const { user } = useAuth();
+  const { user, orgBilling } = useAuth();
   const { tenant } = useTenant();
   if (!user) return <Navigate to="/login" replace />;
-  if (!userCanAccessSocialPulse(user, tenant?.enabledModules)) {
-    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+  if (!userCanAccessSocialPulse(user, tenant?.enabledModules, orgBilling)) {
+    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules, orgBilling)} replace />;
   }
   return <>{children}</>;
 };
 
 /** Organizações: operadores da plataforma ou conta da org AD-Hub (equipa principal). */
 const OrbixTeamAdminRoute = ({ children }: { children: ReactNode }) => {
-  const { user } = useAuth();
+  const { user, orgBilling } = useAuth();
   const { tenant } = useTenant();
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "admin")
-    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules, orgBilling)} replace />;
   if (!isOrbixTeamMember(user))
-    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+    return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules, orgBilling)} replace />;
   return <>{children}</>;
 };
 
@@ -124,31 +129,31 @@ const ProtectedLayout = () => {
 };
 
 const LoginRoute = () => {
-  const { user } = useAuth();
+  const { user, orgBilling } = useAuth();
   const { tenant } = useTenant();
-  if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+  if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules, orgBilling)} replace />;
   return <Login />;
 };
 
 const ForgotPasswordRoute = () => {
-  const { user } = useAuth();
+  const { user, orgBilling } = useAuth();
   const { tenant } = useTenant();
-  if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+  if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules, orgBilling)} replace />;
   return <ForgotPassword />;
 };
 
 const ResetPasswordRoute = () => {
-  const { user } = useAuth();
+  const { user, orgBilling } = useAuth();
   const { tenant } = useTenant();
-  if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+  if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules, orgBilling)} replace />;
   return <ResetPassword />;
 };
 
 /** Página inicial pública; utilizadores autenticados vão direto ao painel. */
 const LandingRoute = () => {
-  const { user } = useAuth();
+  const { user, orgBilling } = useAuth();
   const { tenant } = useTenant();
-  if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules)} replace />;
+  if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules, orgBilling)} replace />;
   return <Landing />;
 };
 
@@ -215,9 +220,9 @@ const App = () => (
                       <Route
                         path="/usuarios"
                         element={
-                          <AdminRoute>
+                          <AdminModuleRoute module="usuarios">
                             <Usuarios />
-                          </AdminRoute>
+                          </AdminModuleRoute>
                         }
                       />
                       <Route

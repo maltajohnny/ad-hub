@@ -2,6 +2,7 @@
  * Autenticação AD-Hub contra a API Go (/api/ad-hub/auth/*) quando MySQL + ADHUB_JWT_SECRET estão ativos.
  */
 import type { User } from "@/types/user";
+import type { OrgBillingInfo } from "@/lib/saasTypes";
 
 const TOKEN_KEY = "adhub_jwt";
 
@@ -48,6 +49,85 @@ export function useServerAuth(ping: { db: boolean; jwt_ready: boolean } | null):
 }
 
 /** `usernameOrEmail` — login normalizado ou e-mail (o servidor aceita ambos). */
+export type AdHubRegisterInput = {
+  email: string;
+  password: string;
+  name: string;
+  username: string;
+  organizationName: string;
+  organizationSlug: string;
+};
+
+/** Registo público: cria organização + primeiro utilizador (admin). */
+export async function adHubRegister(
+  input: AdHubRegisterInput,
+): Promise<
+  | { ok: true; token: string; user: User; organization: { id: string; slug: string; displayName: string } }
+  | { ok: false; error: string }
+> {
+  const res = await fetch(`${base()}/api/ad-hub/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(input),
+    cache: "no-store",
+  });
+  let data: { token?: string; user?: User; organization?: { id: string; slug: string; displayName: string }; error?: string };
+  try {
+    data = (await res.json()) as typeof data;
+  } catch {
+    return { ok: false, error: "Resposta inválida do servidor." };
+  }
+  if (!res.ok) {
+    return { ok: false, error: typeof data.error === "string" ? data.error : `HTTP ${res.status}` };
+  }
+  if (!data.token || !data.user || !data.organization) {
+    return { ok: false, error: "Resposta incompleta do servidor." };
+  }
+  return {
+    ok: true,
+    token: data.token,
+    user: data.user,
+    organization: data.organization,
+  };
+}
+
+export async function adHubBillingAsaasCheckout(
+  token: string,
+  payload: Record<string, unknown>,
+): Promise<
+  | { ok: true; paymentId: string; status?: string; invoiceUrl?: string }
+  | { ok: false; error: string }
+> {
+  const res = await fetch(`${base()}/api/ad-hub/billing/asaas-checkout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  let data: { ok?: boolean; paymentId?: string; status?: string; invoiceUrl?: string; error?: string };
+  try {
+    data = (await res.json()) as typeof data;
+  } catch {
+    return { ok: false, error: "Resposta inválida do servidor." };
+  }
+  if (!res.ok) {
+    return { ok: false, error: typeof data.error === "string" ? data.error : `HTTP ${res.status}` };
+  }
+  if (data.ok && typeof data.paymentId === "string") {
+    return {
+      ok: true,
+      paymentId: data.paymentId,
+      status: data.status,
+      invoiceUrl: data.invoiceUrl,
+    };
+  }
+  return { ok: false, error: "Resposta inesperada do servidor." };
+}
+
 export async function adHubLogin(
   usernameOrEmail: string,
   password: string,
@@ -120,6 +200,25 @@ export async function adHubFetchRegistry(token: string): Promise<RegistryEntries
   if (!res.ok) return null;
   const data = (await res.json()) as { entries: RegistryEntriesPayload };
   return data.entries ?? null;
+}
+
+/** Plano e estado de faturação da organização (JWT). */
+export async function adHubFetchOrgSubscription(token: string): Promise<OrgBillingInfo | null> {
+  const res = await fetch(`${base()}/api/ad-hub/auth/organization/subscription`, {
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  try {
+    const data = (await res.json()) as Partial<OrgBillingInfo>;
+    return {
+      planSlug: data.planSlug ?? null,
+      subscriptionStatus: typeof data.subscriptionStatus === "string" ? data.subscriptionStatus : "none",
+      gestorTeamSeats: typeof data.gestorTeamSeats === "number" ? data.gestorTeamSeats : 0,
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function adHubErrorMessage(res: Response): Promise<string> {

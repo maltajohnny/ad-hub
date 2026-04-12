@@ -166,6 +166,19 @@ export function validateTenantSlug(slug: string): { ok: true } | { ok: false; er
   return { ok: true };
 }
 
+/** Após registo na API (organização nova): garante tenant no localStorage para menu e contexto. */
+export function upsertTenantRecord(record: TenantRecord): void {
+  const list = loadRaw();
+  const i = list.findIndex((t) => t.id === record.id || t.slug === record.slug);
+  const entry = withTenantDefaults({
+    ...record,
+    enabledModules: migrateTenantModules([...record.enabledModules]),
+  });
+  if (i >= 0) list[i] = entry;
+  else list.push(entry);
+  persist(list);
+}
+
 export function createTenant(input: {
   slug: string;
   displayName: string;
