@@ -2091,7 +2091,8 @@ const Clientes = () => {
       >
         <DialogContent
           key={`${selectedDemo?.id ?? ""}-${selectedMediaClient?.id ?? ""}`}
-          className="flex max-h-[min(92dvh,56rem)] w-[calc(100vw-1.25rem)] max-w-[min(96vw,72rem)] flex-col gap-0 overflow-hidden border-border/60 p-0 sm:max-h-[min(90dvh,56rem)]"
+          disableInnerScroll
+          className="flex max-h-[calc(100dvh-1.5rem)] w-[calc(100vw-1.25rem)] max-w-[min(96vw,72rem)] flex-col gap-0 overflow-hidden border-border/60 p-0 sm:max-h-[calc(100dvh-2rem)] lg:max-h-[min(calc(100dvh-2rem),56rem)]"
         >
           {selectedPanelClient && (
             <>

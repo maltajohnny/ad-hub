@@ -345,7 +345,7 @@ export async function sendReportToSlack(
           return {
             ok: false,
             error:
-              "Relay Slack indisponível (404). Em desenvolvimento use `npm run dev` ou `npm run preview`. Em hospedagem estática, exponha um POST /api/slack-webhook no servidor ou defina VITE_SLACK_RELAY_URL com a URL base desse relay.",
+              "Relay Slack indisponível (404). Em desenvolvimento use `npm run dev` ou `npm run preview`. Em hospedagem estática, faça deploy de `public/api/slack-webhook.php` e da regra no `.htaccess`, ou defina VITE_SLACK_RELAY_URL com a URL base do relay.",
           };
         }
         try {
@@ -356,13 +356,28 @@ export async function sendReportToSlack(
         }
         return { ok: false, error: raw || `HTTP ${res.status}` };
       }
+      let j: { ok?: boolean; slack?: string; error?: string };
       try {
-        const j = JSON.parse(raw) as { ok?: boolean; slack?: string };
-        if (j && j.ok === false) {
-          return { ok: false, error: j.slack?.trim() || "Slack rejeitou o envio." };
-        }
+        j = JSON.parse(raw) as typeof j;
       } catch {
-        /* resposta inesperada mas HTTP ok */
+        return {
+          ok: false,
+          error:
+            "Relay Slack devolveu resposta inválida (não JSON). Em produção confirme que /api/slack-webhook chega a `slack-webhook.php` (não ao index.html da SPA).",
+        };
+      }
+      if (typeof j.error === "string" && j.error.trim()) {
+        return { ok: false, error: j.error.trim() };
+      }
+      if (j.ok === false) {
+        return { ok: false, error: j.slack?.trim() || "Slack rejeitou o envio." };
+      }
+      if (j.ok !== true) {
+        return {
+          ok: false,
+          error:
+            "Resposta inesperada do relay Slack (esperado JSON com ok: true). Verifique `public/api/slack-webhook.php` e os logs PHP no servidor.",
+        };
       }
       return { ok: true };
     }

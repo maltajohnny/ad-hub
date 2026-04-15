@@ -3,8 +3,8 @@
  * Proxy IntelliSearch → API Go (mesmo servidor).
  *
  * Ordem de URL tentada:
- * 1) Variável de ambiente INTELLISEARCH_BACKEND (Apache SetEnv no .htaccess)
- * 2) Ficheiro backend.local.php nesta pasta (return 'http://...';) — útil na HostGator
+ * 1) Ficheiro backend.local.php nesta pasta (return 'http://...';) — prioridade na HostGator
+ * 2) Variável de ambiente INTELLISEARCH_BACKEND (getenv ou $_SERVER, ex.: SetEnv no .htaccess)
  * 3) Loopback 127.0.0.1 / localhost nas portas 3041 e (legado) 3042
  * 4) IP do servidor ($_SERVER['SERVER_ADDR']) nas mesmas portas — em alguns hostings o PHP (CageFS)
  *    não alcança 127.0.0.1 mas alcança o IP interno da máquina.
@@ -24,16 +24,19 @@ if (strpos($uri, '/api/intellisearch') !== 0) {
 }
 
 $candidates = [];
-$envB = getenv('INTELLISEARCH_BACKEND');
-if (is_string($envB) && $envB !== '') {
-    $candidates[] = rtrim($envB, '/');
-}
 $localFile = __DIR__ . '/backend.local.php';
 if (is_readable($localFile)) {
     $override = include $localFile;
     if (is_string($override) && $override !== '') {
         $candidates[] = rtrim($override, '/');
     }
+}
+$envB = getenv('INTELLISEARCH_BACKEND');
+if (!is_string($envB) || $envB === '') {
+    $envB = isset($_SERVER['INTELLISEARCH_BACKEND']) ? (string) $_SERVER['INTELLISEARCH_BACKEND'] : '';
+}
+if (is_string($envB) && $envB !== '') {
+    $candidates[] = rtrim($envB, '/');
 }
 $candidates[] = 'http://127.0.0.1:3041';
 $candidates[] = 'http://localhost:3041';

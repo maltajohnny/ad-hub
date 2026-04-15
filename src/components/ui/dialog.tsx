@@ -29,8 +29,14 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    /**
+     * Modais com cabeçalho/rodapé fixos e corpo com scroll próprio: evita um segundo contentor com scroll
+     * (o que cortava conteúdo em 100% de zoom no desktop).
+     */
+    disableInnerScroll?: boolean;
+  }
+>(({ className, children, disableInnerScroll, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -42,9 +48,13 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="relative z-0 min-h-0 max-h-[min(92dvh,calc(100dvh-1rem))] flex-1 overflow-y-auto overscroll-y-contain px-6 pb-5 pt-6 [-webkit-overflow-scrolling:touch] touch-pan-y [scrollbar-gutter:stable]">
-          {children}
-        </div>
+        {disableInnerScroll ? (
+          children
+        ) : (
+          <div className="relative z-0 min-h-0 max-h-[min(92dvh,calc(100dvh-1rem))] flex-1 overflow-y-auto overscroll-y-contain px-6 pb-5 pt-6 [-webkit-overflow-scrolling:touch] touch-pan-y [scrollbar-gutter:stable]">
+            {children}
+          </div>
+        )}
       </div>
       <DialogPrimitive.Close className="absolute right-4 top-4 z-[60] rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-accent data-[state=open]:text-muted-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
         <X className="h-4 w-4" />

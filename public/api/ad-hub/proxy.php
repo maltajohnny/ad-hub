@@ -23,6 +23,9 @@ if (is_readable($localFile)) {
     }
 }
 $envB = getenv('ADHUB_GO_BACKEND');
+if (!is_string($envB) || $envB === '') {
+    $envB = isset($_SERVER['ADHUB_GO_BACKEND']) ? (string) $_SERVER['ADHUB_GO_BACKEND'] : '';
+}
 if (is_string($envB) && $envB !== '') {
     $candidates[] = rtrim($envB, '/');
 }

@@ -4,5 +4,11 @@
  * Não commite backend.local.php no Git.
  *
  * Use se o Go estiver noutra porta ou URL interna que o PHP consiga alcançar.
+ *
+ * HostGator / CageFS: se `curl http://127.0.0.1:3041/api/intellisearch/ping` por SSH estiver OK mas o
+ * site mostrar «API Go inacessível», o PHP do site pode não alcançar 127.0.0.1. Experimente:
+ *   - URL interna indicada pelo suporte (IP privado + porta 3041), ou
+ *   - No .htaccess desta pasta: SetEnv INTELLISEARCH_BACKEND http://IP:3041
+ *   - Ou subdomínio HTTPS com reverse proxy para o binário Go e `VITE_INTELLISEARCH_API_URL` no build.
  */
 return 'http://127.0.0.1:3041';

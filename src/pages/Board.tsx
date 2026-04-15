@@ -2073,6 +2073,7 @@ const Board = () => {
         }}
       >
         <DialogContent
+          disableInnerScroll
           className={cn(
             "flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0",
             detailModalExpanded

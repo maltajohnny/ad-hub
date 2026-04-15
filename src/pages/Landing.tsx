@@ -97,7 +97,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen min-h-[100dvh] bg-[#050814] text-foreground overflow-x-hidden pb-[env(safe-area-inset-bottom,0px)]">
       <header className="border-b border-white/[0.06] bg-[#050814]/85 backdrop-blur-xl sticky top-0 z-50 safe-area-t">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 safe-area-x py-3 sm:flex-nowrap sm:gap-4">
+        <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 safe-area-x py-3 sm:flex sm:flex-nowrap sm:items-center sm:justify-between sm:gap-4">
           <Link
             to="/"
             onClick={(e) => {
@@ -106,7 +106,7 @@ export default function Landing() {
                 closeLoginHero();
               }
             }}
-            className="flex min-w-0 max-w-[calc(100%-8rem)] items-center gap-2.5 group sm:max-w-none sm:gap-3"
+            className="flex min-w-0 items-center gap-2.5 group min-[480px]:max-w-none sm:max-w-none sm:gap-3"
           >
             <img
               src={adHubLogo}
@@ -117,16 +117,18 @@ export default function Landing() {
             />
             <span className="hidden min-w-0 sm:flex sm:flex-col sm:border-l sm:border-white/10 sm:pl-3">
               <span className="font-display text-sm font-bold tracking-[0.08em] text-white leading-tight">AD-HUB</span>
-              <span className="text-[10px] tracking-[0.22em] uppercase text-cyan-400/90">
+              <span className="text-[8px] leading-tight tracking-[0.12em] uppercase text-cyan-400/90">
                 MOVE FASTER · GROW SMARTER
               </span>
             </span>
-            <span className="flex min-w-0 flex-1 flex-col sm:hidden">
+            <span className="flex min-w-0 flex-col sm:hidden">
               <span className="font-display text-xs font-bold tracking-[0.08em] text-white leading-tight">AD-HUB</span>
-              <span className="text-[9px] tracking-[0.18em] uppercase text-cyan-400/90">MOVE FASTER · GROW SMARTER</span>
+              <span className="text-[7px] leading-snug tracking-[0.08em] text-balance uppercase text-cyan-400/90">
+                MOVE FASTER · GROW SMARTER
+              </span>
             </span>
           </Link>
-          <div className="ml-auto flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center justify-self-end gap-2 sm:ml-auto sm:justify-self-auto">
             {showLoginInHero ? (
               <Button
                 type="button"
