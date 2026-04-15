@@ -5,6 +5,32 @@
  */
 declare(strict_types=1);
 
+/**
+ * @return list<string>
+ */
+function adhub_proxy_bind_extra_urls(string $envKey): array
+{
+    $raw = getenv($envKey);
+    if (!is_string($raw) || $raw === '') {
+        $raw = isset($_SERVER[$envKey]) ? (string) $_SERVER[$envKey] : '';
+    }
+    if ($raw === '') {
+        return [];
+    }
+    $out = [];
+    foreach (explode(',', $raw) as $u) {
+        $u = trim($u);
+        if ($u === '' || strlen($u) > 512) {
+            continue;
+        }
+        if (!preg_match('#^https?://#i', $u)) {
+            continue;
+        }
+        $out[] = rtrim($u, '/');
+    }
+    return $out;
+}
+
 $uri = $_SERVER['REQUEST_URI'] ?? '/';
 if (strpos($uri, '/api/ad-hub') !== 0) {
     http_response_code(404);
@@ -28,6 +54,9 @@ if (!is_string($envB) || $envB === '') {
 }
 if (is_string($envB) && $envB !== '') {
     $candidates[] = rtrim($envB, '/');
+}
+foreach (adhub_proxy_bind_extra_urls('ADHUB_GO_BIND_EXTRA') as $u) {
+    $candidates[] = $u;
 }
 $candidates[] = 'http://127.0.0.1:3041';
 $candidates[] = 'http://localhost:3041';
@@ -98,4 +127,5 @@ header('Content-Type: application/json; charset=utf-8');
 echo json_encode([
     'error' => 'proxy: API Go (ad-hub) inacessível. Tentado: ' . implode(', ', $candidates),
     'detail' => $lastErr,
+    'hint' => 'Igual ao IntelliSearch: em public/api/ad-hub/.htaccess use SetEnv ADHUB_GO_BIND_EXTRA http://IP_PUBLICO:3041, ou backend.local.php nesta pasta, ou subdomínio HTTPS e proxy.',
 ], JSON_UNESCAPED_UNICODE);

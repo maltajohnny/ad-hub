@@ -7,7 +7,13 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule . proxy.php [L]
 </IfModule>
 
-# Opcional: se o Go usar outra porta, descomente e ajuste (tem de bater com PORT no .env de minha-api)
-# <IfModule mod_setenvif.c>
+# Opcional: URL única do Go (se diferente do predefinido)
+# <IfModule mod_env.c>
 # SetEnv INTELLISEARCH_BACKEND http://127.0.0.1:3041
+# </IfModule>
+#
+# HostGator / CageFS: o PHP muitas vezes não alcança 127.0.0.1:3041 mas alcança o IP público do VPS
+# na mesma porta (binário Go com Listen :3041 = 0.0.0.0). Substitua pelo IP do teu servidor:
+# <IfModule mod_env.c>
+# SetEnv INTELLISEARCH_BIND_EXTRA http://162.241.2.132:3041
 # </IfModule>

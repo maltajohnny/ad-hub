@@ -4,16 +4,43 @@
  *
  * Ordem de URL tentada:
  * 1) Ficheiro backend.local.php nesta pasta (return 'http://...';) — prioridade na HostGator
- * 2) Variável de ambiente INTELLISEARCH_BACKEND (getenv ou $_SERVER, ex.: SetEnv no .htaccess)
- * 3) Loopback 127.0.0.1 / localhost nas portas 3041 e (legado) 3042
- * 4) IP do servidor ($_SERVER['SERVER_ADDR']) nas mesmas portas — em alguns hostings o PHP (CageFS)
- *    não alcança 127.0.0.1 mas alcança o IP interno da máquina.
+ * 2) INTELLISEARCH_BACKEND (getenv ou $_SERVER, ex.: SetEnv no .htaccess)
+ * 3) INTELLISEARCH_BIND_EXTRA — URLs extra separadas por vírgula (ex.: IP público:3041 quando o PHP
+ *    não alcança 127.0.0.1 mas o Go ouve em 0.0.0.0:3041)
+ * 4) Loopback 127.0.0.1 / localhost nas portas 3041 e (legado) 3042
+ * 5) IP do servidor ($_SERVER['SERVER_ADDR']) nas mesmas portas
  *
  * Se tudo falhar: na HostGator o PHP por vezes NÃO consegue falar com processos do teu utilizador
  * em 127.0.0.1 (CageFS). Testa por SSH: curl http://127.0.0.1:3041/api/intellisearch/ping
  * Se aí funcionar mas o site não, pergunta ao suporte ou usa app Node/cPanel a expor a porta em HTTPS.
  */
 declare(strict_types=1);
+
+/**
+ * @return list<string>
+ */
+function intellisearch_proxy_bind_extra_urls(string $envKey): array
+{
+    $raw = getenv($envKey);
+    if (!is_string($raw) || $raw === '') {
+        $raw = isset($_SERVER[$envKey]) ? (string) $_SERVER[$envKey] : '';
+    }
+    if ($raw === '') {
+        return [];
+    }
+    $out = [];
+    foreach (explode(',', $raw) as $u) {
+        $u = trim($u);
+        if ($u === '' || strlen($u) > 512) {
+            continue;
+        }
+        if (!preg_match('#^https?://#i', $u)) {
+            continue;
+        }
+        $out[] = rtrim($u, '/');
+    }
+    return $out;
+}
 
 $uri = $_SERVER['REQUEST_URI'] ?? '/';
 if (strpos($uri, '/api/intellisearch') !== 0) {
@@ -37,6 +64,9 @@ if (!is_string($envB) || $envB === '') {
 }
 if (is_string($envB) && $envB !== '') {
     $candidates[] = rtrim($envB, '/');
+}
+foreach (intellisearch_proxy_bind_extra_urls('INTELLISEARCH_BIND_EXTRA') as $u) {
+    $candidates[] = $u;
 }
 $candidates[] = 'http://127.0.0.1:3041';
 $candidates[] = 'http://localhost:3041';
@@ -87,5 +117,5 @@ header('Content-Type: application/json; charset=utf-8');
 echo json_encode([
     'error' => 'proxy: API Go inacessível. Tentado: ' . implode(', ', $candidates),
     'detail' => $lastErr,
-    'hint' => 'SSH: cd ~/apps/minha-api && ./restart-api.sh && curl -sS http://127.0.0.1:3041/api/intellisearch/ping — se aqui OK mas o site falha, o PHP do hosting pode estar isolado do processo Go (CageFS). Soluções: expor a API por subdomínio/proxy no cPanel ou alojar a API noutro serviço e definir VITE_INTELLISEARCH_API_URL no build.',
+    'hint' => 'SSH: curl -sS http://127.0.0.1:3041/api/intellisearch/ping — se OK mas o site falha, CageFS/isolamento PHP↔Go: em public/api/intellisearch/.htaccess use SetEnv INTELLISEARCH_BIND_EXTRA http://IP_PUBLICO_DO_SERVIDOR:3041 (Go a ouvir em 0.0.0.0:3041), ou crie backend.local.php com return desse URL, ou subdomínio HTTPS→Go e VITE_INTELLISEARCH_API_URL no build.',
 ], JSON_UNESCAPED_UNICODE);

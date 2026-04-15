@@ -5,3 +5,8 @@ RewriteRule ^proxy\.php$ - [L]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule . proxy.php [L]
 </IfModule>
+
+# Se o PHP não alcançar 127.0.0.1:3041, tente o IP público do servidor (Go em 0.0.0.0:3041):
+# <IfModule mod_env.c>
+# SetEnv ADHUB_GO_BIND_EXTRA http://162.241.2.132:3041
+# </IfModule>
