@@ -58,6 +58,10 @@ if (is_string($envB) && $envB !== '') {
 foreach (adhub_proxy_bind_extra_urls('ADHUB_GO_BIND_EXTRA') as $u) {
     $candidates[] = $u;
 }
+$reqHost = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+if ($reqHost === 'ad-hub.digital' || $reqHost === 'www.ad-hub.digital') {
+    $candidates[] = 'http://162.241.2.132:3041';
+}
 $candidates[] = 'http://127.0.0.1:3041';
 $candidates[] = 'http://localhost:3041';
 $serverAddr = isset($_SERVER['SERVER_ADDR']) ? (string) $_SERVER['SERVER_ADDR'] : '';

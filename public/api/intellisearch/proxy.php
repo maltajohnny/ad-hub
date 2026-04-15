@@ -68,6 +68,11 @@ if (is_string($envB) && $envB !== '') {
 foreach (intellisearch_proxy_bind_extra_urls('INTELLISEARCH_BIND_EXTRA') as $u) {
     $candidates[] = $u;
 }
+// VPS HostGator (deploy-hostgator.sh): CageFS costuma bloquear 127.0.0.1 a partir do PHP; o Go ouve em :3041 em 0.0.0.0.
+$reqHost = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+if ($reqHost === 'ad-hub.digital' || $reqHost === 'www.ad-hub.digital') {
+    $candidates[] = 'http://162.241.2.132:3041';
+}
 $candidates[] = 'http://127.0.0.1:3041';
 $candidates[] = 'http://localhost:3041';
 $serverAddr = isset($_SERVER['SERVER_ADDR']) ? (string) $_SERVER['SERVER_ADDR'] : '';
