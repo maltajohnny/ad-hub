@@ -7,8 +7,8 @@
  * 2) INTELLISEARCH_BACKEND (getenv ou $_SERVER, ex.: SetEnv no .htaccess)
  * 3) INTELLISEARCH_BIND_EXTRA — URLs extra separadas por vírgula (ex.: IP público:3041 quando o PHP
  *    não alcança 127.0.0.1 mas o Go ouve em 0.0.0.0:3041)
- * 4) Loopback 127.0.0.1 / localhost nas portas 3041 e (legado) 3042
- * 5) IP do servidor ($_SERVER['SERVER_ADDR']) nas mesmas portas
+ * 4) Loopback 127.0.0.1 / localhost na porta 3041
+ * 5) IP interno ($_SERVER['SERVER_ADDR']):3041
  *
  * Se tudo falhar: na HostGator o PHP por vezes NÃO consegue falar com processos do teu utilizador
  * em 127.0.0.1 (CageFS). Testa por SSH: curl http://127.0.0.1:3041/api/intellisearch/ping
@@ -78,10 +78,7 @@ $candidates[] = 'http://localhost:3041';
 $serverAddr = isset($_SERVER['SERVER_ADDR']) ? (string) $_SERVER['SERVER_ADDR'] : '';
 if ($serverAddr !== '' && filter_var($serverAddr, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
     $candidates[] = 'http://' . $serverAddr . ':3041';
-    $candidates[] = 'http://' . $serverAddr . ':3042';
 }
-$candidates[] = 'http://127.0.0.1:3042';
-$candidates[] = 'http://localhost:3042';
 $candidates = array_values(array_unique($candidates));
 
 if (!function_exists('curl_init')) {
@@ -122,5 +119,5 @@ header('Content-Type: application/json; charset=utf-8');
 echo json_encode([
     'error' => 'proxy: API Go inacessível. Tentado: ' . implode(', ', $candidates),
     'detail' => $lastErr,
-    'hint' => 'SSH: curl -sS http://127.0.0.1:3041/api/intellisearch/ping — se OK mas o site falha, CageFS/isolamento PHP↔Go: em public/api/intellisearch/.htaccess use SetEnv INTELLISEARCH_BIND_EXTRA http://IP_PUBLICO_DO_SERVIDOR:3041 (Go a ouvir em 0.0.0.0:3041), ou crie backend.local.php com return desse URL, ou subdomínio HTTPS→Go e VITE_INTELLISEARCH_API_URL no build.',
+    'hint' => 'Se a lista já inclui o IP público:3041 e ainda falha, o hosting bloqueia o PHP de sair para essa porta. Solução estável: subdomínio HTTPS (ex. api.ad-hub.digital) com reverse proxy para http://127.0.0.1:3041, depois no GitHub → Actions variables defina VITE_INTELLISEARCH_API_URL=https://api.ad-hub.digital (rebuild). O browser chama a API em HTTPS (CORS já aberto no Go); o PHP deixa de ser intermediário.',
 ], JSON_UNESCAPED_UNICODE);

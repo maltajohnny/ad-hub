@@ -67,10 +67,7 @@ $candidates[] = 'http://localhost:3041';
 $serverAddr = isset($_SERVER['SERVER_ADDR']) ? (string) $_SERVER['SERVER_ADDR'] : '';
 if ($serverAddr !== '' && filter_var($serverAddr, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
     $candidates[] = 'http://' . $serverAddr . ':3041';
-    $candidates[] = 'http://' . $serverAddr . ':3042';
 }
-$candidates[] = 'http://127.0.0.1:3042';
-$candidates[] = 'http://localhost:3042';
 $candidates = array_values(array_unique($candidates));
 
 if (!function_exists('curl_init')) {
@@ -131,5 +128,5 @@ header('Content-Type: application/json; charset=utf-8');
 echo json_encode([
     'error' => 'proxy: API Go (ad-hub) inacessível. Tentado: ' . implode(', ', $candidates),
     'detail' => $lastErr,
-    'hint' => 'Igual ao IntelliSearch: em public/api/ad-hub/.htaccess use SetEnv ADHUB_GO_BIND_EXTRA http://IP_PUBLICO:3041, ou backend.local.php nesta pasta, ou subdomínio HTTPS e proxy.',
+    'hint' => 'Se o IP público:3041 já foi tentado e falhou, o PHP não consegue falar com o Go neste alojamento. IntelliSearch: variável de build VITE_INTELLISEARCH_API_URL=https://… (subdomínio HTTPS com proxy para o Go). Auth /api/ad-hub usa o mesmo proxy PHP até o hosting desbloquear ou expor o Go em HTTPS.',
 ], JSON_UNESCAPED_UNICODE);
