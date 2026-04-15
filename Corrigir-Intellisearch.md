@@ -82,6 +82,21 @@ Neste caso o **PHP** do site (HostGator / CageFS) muitas vezes **não consegue**
 
 ---
 
+## 2b) Local: `SERPAPI_KEY ausente` mas a linha existe no `.env` da raiz
+
+Se tens **`~/apps/minha-api/.env`** no Mac (por exemplo cópia do servidor) **sem** `SERPAPI_KEY` ou com valor vazio, versões antigas do backend carregavam esse ficheiro **por último** e apagavam a chave boa da raiz do repo.
+
+O código atual **já não** carrega `~/apps/minha-api/.env` nessa situação; na mesma, apaga ou corrige o ficheiro em `~/apps/minha-api/.env` e **reinicia** a API:
+
+```bash
+# na raiz do repo
+npm run intellisearch-api
+# ou
+npm run dev:with-api
+```
+
+---
+
 ## 3) Checklist rápido
 
 | Verificação | Esperado |

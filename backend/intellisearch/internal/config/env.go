@@ -11,7 +11,8 @@ import (
 )
 
 // LoadDotenv carrega `.env` (vários caminhos relativos ao cwd, típico `backend/intellisearch`).
-// Ordem: pastas mais profundas primeiro; a raiz do repo por último — assim SERPAPI_KEY na raiz prevalece.
+// Ordem: cwd → pais até à raiz do repo; depois ~/ad-hub.digital/.env. Não se carrega ~/apps/minha-api/.env
+// aqui (fora do cwd minha-api) para não sobrescrever SERPAPI_KEY em desenvolvimento local.
 //
 // Nota: godotenv.Overload pode definir SERPAPI_KEY= vazio a partir de um .env intermédio e apagar
 // o valor já injetado por env-cmd; por isso guardamos/restauramos e aplicamos ainda leitura explícita na raiz.
@@ -31,8 +32,9 @@ func LoadDotenv() {
 	}
 	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
 		paths = append(paths, filepath.Join(home, "ad-hub.digital", ".env"))
-		// Último: produção HostGator — `deploy-hostgator.sh` → REMOTE_DIR default ~/apps/minha-api
-		paths = append(paths, filepath.Join(home, "apps", "minha-api", ".env"))
+		// NÃO carregar ~/apps/minha-api/.env aqui quando o cwd não é essa pasta: em Macs de dev esse
+		// ficheiro costuma existir (cópia do servidor) e godotenv.Overload com SERPAPI_KEY vazio apaga
+		// o valor já vindo de env-cmd / .env na raiz do repo.
 	}
 	for _, p := range paths {
 		if err := godotenv.Overload(p); err != nil {
@@ -59,6 +61,7 @@ func applySerpAPIKeyFromRootEnvFiles(wd string) {
 	if strings.TrimSpace(os.Getenv("SERPAPI_KEY")) != "" {
 		return
 	}
+	// Preferir .env do repositório antes de cópias em HOME (minha-api no Mac pode ter SERPAPI_KEY vazio).
 	candidates := []string{
 		filepath.Join(wd, "..", "..", "ad-hub.digital", ".env"),
 		filepath.Join(wd, "..", "..", ".env"),
@@ -67,11 +70,9 @@ func applySerpAPIKeyFromRootEnvFiles(wd string) {
 	}
 	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
 		candidates = append(
-			[]string{
-				filepath.Join(home, "apps", "minha-api", ".env"),
-				filepath.Join(home, "ad-hub.digital", ".env"),
-			},
-			candidates...,
+			candidates,
+			filepath.Join(home, "ad-hub.digital", ".env"),
+			filepath.Join(home, "apps", "minha-api", ".env"),
 		)
 	}
 	for _, p := range candidates {
