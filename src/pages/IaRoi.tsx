@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { Brain, ArrowRight, LayoutDashboard, Users } from "lucide-react";
+import { Brain, ArrowRight, LayoutDashboard, Users, TrendingUp } from "lucide-react";
 
 const flowSteps = [
   { step: 1, title: "Coleta de Dados", desc: "APIs do Meta, Google e Instagram enviam dados de campanhas", input: "Tokens de acesso das plataformas", output: "Impressões, cliques, conversões, gastos" },
@@ -45,6 +45,31 @@ const IaRoi = () => (
         As análises em tempo real estão no <strong>Dashboard</strong> (recomendações) e em{" "}
         <strong>Clientes</strong> (painel de controlo, instruções e insight).
       </p>
+    </Card>
+
+    <Card className="glass-card p-5 border-border/60">
+      <div className="flex items-center gap-2 mb-2">
+        <TrendingUp className="h-5 w-5 text-primary" />
+        <h3 className="font-display font-semibold">Previsão de ROI unificada</h3>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        Projeção multi-canal (Meta, Google, TikTok) com cenários de orçamento — alimentada pelos mesmos dados do Dashboard
+        quando a API e a IA estiverem configuradas.
+      </p>
+      <div className="grid sm:grid-cols-3 gap-3 text-center">
+        <div className="rounded-lg bg-secondary/40 p-3">
+          <p className="text-xs text-muted-foreground">Cenário conservador</p>
+          <p className="text-lg font-bold text-foreground">+4% ROI</p>
+        </div>
+        <div className="rounded-lg bg-primary/10 p-3 border border-primary/25">
+          <p className="text-xs text-muted-foreground">Cenário base (demo)</p>
+          <p className="text-lg font-bold text-primary">+9% ROI</p>
+        </div>
+        <div className="rounded-lg bg-secondary/40 p-3">
+          <p className="text-xs text-muted-foreground">Cenário agressivo</p>
+          <p className="text-lg font-bold text-foreground">+14% ROI</p>
+        </div>
+      </div>
     </Card>
 
     {/* Flow */}

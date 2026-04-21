@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTenant } from "@/contexts/TenantContext";
 import { Card } from "@/components/ui/card";
@@ -33,6 +34,8 @@ import {
   Trash2,
   TrendingUp,
   Eye,
+  BarChart3,
+  MousePointerClick,
 } from "lucide-react";
 import {
   AreaChart,
@@ -358,6 +361,10 @@ export default function SocialPulse() {
             <TrendingUp className="h-3.5 w-3.5" />
             Painel
           </TabsTrigger>
+          <TabsTrigger value="social-performance" className="gap-1.5">
+            <BarChart3 className="h-3.5 w-3.5" />
+            Social + performance
+          </TabsTrigger>
           {isOrgAdmin ? (
             <>
               <TabsTrigger value="contas" className="gap-1.5">
@@ -569,6 +576,56 @@ export default function SocialPulse() {
               </Card>
             </>
           )}
+        </TabsContent>
+
+        <TabsContent value="social-performance" className="space-y-4 mt-2">
+          <Card className="glass-card p-5 border-border/60">
+            <h3 className="font-display font-semibold text-sm mb-2 flex items-center gap-2">
+              <MousePointerClick className="h-4 w-4 text-primary" />
+              Métricas sociais + tráfego pago (visão unificada)
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              Correlação entre conteúdo orgânico e resultados de campanhas — estrutura para cruzar IDs de post com UTMs e
+              conversões quando as APIs estiverem ligadas.
+            </p>
+            <div className="rounded-lg border border-border/50 overflow-x-auto">
+              <table className="w-full text-sm min-w-[520px]">
+                <thead>
+                  <tr className="border-b border-border/50 text-left text-xs text-muted-foreground">
+                    <th className="p-2">Post / criativo</th>
+                    <th className="p-2">Engajamento</th>
+                    <th className="p-2">Leads</th>
+                    <th className="p-2">Campanha ligada</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-border/40">
+                    <td className="p-2">Reel — depoimento cliente</td>
+                    <td className="p-2">4,2%</td>
+                    <td className="p-2">38</td>
+                    <td className="p-2">
+                      <Link to="/campanhas" className="text-primary hover:underline text-xs">
+                        Black Friday - Conversão
+                      </Link>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="p-2">Carrossel — oferta</td>
+                    <td className="p-2">2,8%</td>
+                    <td className="p-2">21</td>
+                    <td className="p-2">
+                      <Link to="/campanhas" className="text-primary hover:underline text-xs">
+                        Remarketing Carrinho
+                      </Link>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-3">
+              Dados de demonstração. Em produção: sincronizar Meta Insights + Ads API e Google / TikTok para atribuição.
+            </p>
+          </Card>
         </TabsContent>
 
         {isOrgAdmin ? (

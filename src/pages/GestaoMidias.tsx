@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTenant } from "@/contexts/TenantContext";
 import { isPlatformOperator } from "@/lib/saasTypes";
@@ -69,6 +69,9 @@ import {
   Percent,
   Target,
   Link2,
+  Plug,
+  Copy,
+  Layers,
   Bot,
   Loader2,
   WandSparkles,
@@ -1619,15 +1622,33 @@ const GestaoMidias = () => {
 
             <Card className="p-5 border-border/60">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Ações finais</p>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={() => toast.success("Texto aplicado ao anúncio atual.")}>
+              {/* Mobile: coluna full-width; sm+: linha única, compacto, sem quebra */}
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-nowrap sm:items-stretch sm:gap-1.5 md:gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="w-full shrink-0 whitespace-nowrap text-xs h-8 px-2.5 sm:w-auto sm:min-w-0"
+                  onClick={() => toast.success("Texto aplicado ao anúncio atual.")}
+                >
                   Usar neste anúncio
                 </Button>
-                <Button type="button" variant="outline" onClick={() => toast.success("Texto enviado para o fluxo de campanha.")}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full shrink-0 whitespace-nowrap text-xs h-8 px-2.5 sm:w-auto sm:min-w-0"
+                  onClick={() => toast.success("Texto enviado para o fluxo de campanha.")}
+                >
                   Enviar para campanha
                 </Button>
-                <Button type="button" variant="outline" className="gap-2" onClick={() => toast.success("Versão do texto salva.")}>
-                  <Save className="h-4 w-4" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full shrink-0 gap-1.5 whitespace-nowrap text-xs h-8 px-2.5 sm:w-auto sm:min-w-0"
+                  onClick={() => toast.success("Versão do texto salva.")}
+                >
+                  <Save className="h-3.5 w-3.5 shrink-0" />
                   Salvar versão
                 </Button>
               </div>
@@ -1783,6 +1804,72 @@ const GestaoMidias = () => {
           </Button>
         </div>
       </Card>
+
+      {activeSubmenu === "operacao" ? (
+        <Card className="p-4 border-primary/20 bg-primary/[0.02]">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <Layers className="h-4 w-4 text-primary shrink-0" />
+                Operações centralizadas (API + fallback)
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                Objetivo: criar, editar e duplicar campanhas via API das redes, com iframe como alternativa quando o token
+                ainda não estiver disponível. As ações abaixo registam intenção e auditoria (demo).
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button
+              type="button"
+              size="sm"
+              className="gap-1.5 w-full sm:w-auto"
+              variant="secondary"
+              onClick={() => {
+                if (!orgId || !user) return;
+                setState(appendAudit(orgId, user.username, "Campanha — criar via hub", "Pedido API unificado (demo)"));
+                toast.success("Pedido de criação de campanha enfileirado para a API.");
+              }}
+            >
+              <Megaphone className="h-3.5 w-3.5" />
+              Nova campanha (API)
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5 w-full sm:w-auto"
+              onClick={() => {
+                if (!orgId || !user) return;
+                setState(appendAudit(orgId, user.username, "Campanha — editar via hub", "Edição API (demo)"));
+                toast.message("Modo edição: sincronizar alterações com a rede quando a sessão estiver ativa.");
+              }}
+            >
+              <Plug className="h-3.5 w-3.5" />
+              Editar na rede
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5 w-full sm:w-auto"
+              onClick={() => {
+                if (!orgId || !user) return;
+                setState(appendAudit(orgId, user.username, "Campanha — duplicar", "Duplicação API (demo)"));
+                toast.success("Campanha duplicada no rascunho local; envio à API ao confirmar.");
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Duplicar
+            </Button>
+            <Button type="button" size="sm" variant="ghost" className="gap-1.5 w-full sm:w-auto" asChild>
+              <Link to="/campanhas/nova-campanha">
+                Assistente IA — nova campanha
+              </Link>
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       {activeSubmenu === "operacao"
         ? isOrgAdmin
