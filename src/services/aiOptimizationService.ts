@@ -47,6 +47,21 @@ export type CampaignOptimizationResult = {
   tiles: CampaignOptimizationTile[];
 };
 
+export type CopyChatMessage = {
+  role: "manager" | "assistant";
+  content: string;
+};
+
+export type CopyCopyrightGuidanceResult = {
+  answer: string;
+  structureAssessment: string;
+  conversionAssessment: string;
+  suggestedDecision: string;
+  suggestedAdjustments: string[];
+  strengths: string[];
+  improvedCopyExample?: string;
+};
+
 export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash" as const;
 
 /** Path sem query (modelo fallback); em runtime: `?key=` + `GEMINI_API_KEY`. */
@@ -346,6 +361,144 @@ ${modeBlock}
 `;
 
   return callGeminiGenerate(`${buildUserPrompt(data)}${extra}`);
+}
+
+function parseCopyGuidanceJson(content: string): CopyCopyrightGuidanceResult {
+  const trimmed = content.trim();
+  const tryParse = (s: string) => {
+    const parsed = JSON.parse(s) as unknown;
+    return normalizeCopyGuidanceResult(parsed);
+  };
+  try {
+    return tryParse(trimmed);
+  } catch {
+    const m = trimmed.match(/\{[\s\S]*\}/);
+    if (m) return tryParse(m[0]);
+    throw new Error("A resposta da IA para copyright não é JSON válido.");
+  }
+}
+
+function normalizeStringArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((x): x is string => typeof x === "string")
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0);
+}
+
+function normalizeCopyGuidanceResult(raw: unknown): CopyCopyrightGuidanceResult {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Formato inválido na resposta de copyright.");
+  }
+  const o = raw as Record<string, unknown>;
+
+  const answer = typeof o.answer === "string" ? o.answer.trim() : "";
+  const structureAssessment = typeof o.structureAssessment === "string" ? o.structureAssessment.trim() : "";
+  const conversionAssessment = typeof o.conversionAssessment === "string" ? o.conversionAssessment.trim() : "";
+  const suggestedDecision = typeof o.suggestedDecision === "string" ? o.suggestedDecision.trim() : "";
+  const suggestedAdjustments = normalizeStringArray(o.suggestedAdjustments);
+  const strengths = normalizeStringArray(o.strengths);
+  const improvedCopyExample =
+    typeof o.improvedCopyExample === "string" && o.improvedCopyExample.trim()
+      ? o.improvedCopyExample.trim()
+      : undefined;
+
+  if (!answer || !structureAssessment || !conversionAssessment || !suggestedDecision) {
+    throw new Error("A IA não retornou todos os campos de análise de copyright.");
+  }
+
+  return {
+    answer,
+    structureAssessment,
+    conversionAssessment,
+    suggestedDecision,
+    suggestedAdjustments,
+    strengths,
+    improvedCopyExample,
+  };
+}
+
+export async function askCopyCopyrightGuidance(options: {
+  question: string;
+  currentCopy?: string;
+  context?: string;
+  history?: CopyChatMessage[];
+}): Promise<CopyCopyrightGuidanceResult> {
+  const question = options.question.trim();
+  if (!question) {
+    throw new Error("Escreva uma pergunta para a IA.");
+  }
+
+  const systemPrompt = `Você é um estrategista sênior de copy para anúncios digitais.
+Avalie qualidade persuasiva, estrutura, clareza, proposta de valor, prova, urgência, chamada para ação e aderência a boas práticas de conversão.
+Responda APENAS com JSON válido (sem markdown, sem texto extra), no formato:
+{
+  "answer": "resposta principal em português (pt-BR), objetiva e personalizada",
+  "structureAssessment": "avaliação da estrutura do copy",
+  "conversionAssessment": "avaliação de boas práticas de conversão",
+  "suggestedDecision": "melhor tomada de decisão para o gestor agora",
+  "suggestedAdjustments": ["ajuste 1", "ajuste 2"],
+  "strengths": ["ponto forte 1", "ponto forte 2"],
+  "improvedCopyExample": "versão de copy sugerida (opcional)"
+}
+Regras:
+- Seja prático e orientado à execução.
+- Se o copy estiver bom, reforce boas práticas e o que manter.
+- Se houver riscos, priorize os ajustes por impacto.
+- Nunca invente dados factuais sobre marca/produto.`;
+
+  const historyBlock = (options.history ?? [])
+    .slice(-8)
+    .map((msg, idx) => `${idx + 1}. ${msg.role === "manager" ? "Gestor" : "IA"}: ${msg.content}`)
+    .join("\n");
+
+  const userPrompt = `Contexto do módulo:
+${options.context?.trim() || "Sem contexto adicional."}
+
+Copy atual (opcional):
+${options.currentCopy?.trim() || "Não informado."}
+
+Histórico recente (para continuidade da iteração):
+${historyBlock || "Sem histórico anterior."}
+
+Pergunta atual do gestor:
+${question}`;
+
+  const apiKey = geminiApiKey();
+  if (!apiKey) {
+    throw new Error("O serviço de IA não está disponível no momento.");
+  }
+
+  const url = geminiGenerateUrl(apiKey);
+  const body = {
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+    generationConfig: {
+      temperature: 0.35,
+      responseMimeType: "application/json",
+    },
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const rawText = await res.text();
+  if (!res.ok) {
+    throw new Error(formatGeminiHttpError(res.status, rawText));
+  }
+
+  let parsed: GeminiGenerateResponse;
+  try {
+    parsed = JSON.parse(rawText) as GeminiGenerateResponse;
+  } catch {
+    throw new Error("Resposta Gemini inválida (não é JSON).");
+  }
+
+  const content = extractGeminiText(parsed);
+  return parseCopyGuidanceJson(content);
 }
 
 /** Alias de `GEMINI_GENERATE_CONTENT_PATH` (path sem `?key=`). */

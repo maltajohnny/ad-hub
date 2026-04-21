@@ -40,10 +40,14 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
   Select,
@@ -65,7 +69,18 @@ import {
   Percent,
   Target,
   Link2,
+  Bot,
+  Loader2,
+  WandSparkles,
+  CheckCheck,
+  Save,
 } from "lucide-react";
+import {
+  askCopyCopyrightGuidance,
+  isAiOptimizationConfigured,
+  type CopyChatMessage,
+  type CopyCopyrightGuidanceResult,
+} from "@/services/aiOptimizationService";
 
 function currency(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -87,6 +102,19 @@ function defaultCaps(platformId: MediaPlatformId): PlatformCapability {
   };
 }
 
+type GestaoMidiasSubmenu = "operacao" | "copy";
+
+type CopyObjective = "awareness" | "consideration" | "conversion";
+type CopyPlatform = "meta-ads" | "google-ads" | "tiktok-ads";
+type CopyAiAction = "generate" | "analyze" | "improve" | "rewrite";
+
+type CopyAiRunItem = {
+  id: string;
+  action: CopyAiAction;
+  response: CopyCopyrightGuidanceResult;
+  runAt: string;
+};
+
 const GestaoMidias = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, listUsers } = useAuth();
@@ -95,6 +123,24 @@ const GestaoMidias = () => {
   const [selectedManagerId, setSelectedManagerId] = useState<string>("");
   const [newManagerUsername, setNewManagerUsername] = useState<string>("");
   const [adminMainTab, setAdminMainTab] = useState("visao");
+  const [copyObjective, setCopyObjective] = useState<CopyObjective>("awareness");
+  const [copyAudience, setCopyAudience] = useState("");
+  const [copyPainDesire, setCopyPainDesire] = useState("");
+  const [copyOffer, setCopyOffer] = useState("");
+  const [copyPlatform, setCopyPlatform] = useState<CopyPlatform>("meta-ads");
+  const [copyExtraInstruction, setCopyExtraInstruction] = useState("");
+  const [copyDraft, setCopyDraft] = useState("");
+  const [copyPrimaryText, setCopyPrimaryText] = useState("");
+  const [copyHeadline, setCopyHeadline] = useState("");
+  const [copyDescription, setCopyDescription] = useState("");
+  const [copyGoogleHeadlines, setCopyGoogleHeadlines] = useState("");
+  const [copyGoogleDescriptions, setCopyGoogleDescriptions] = useState("");
+  const [copyTiktokHook, setCopyTiktokHook] = useState("");
+  const [copyTiktokScript, setCopyTiktokScript] = useState("");
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [copyLastResult, setCopyLastResult] = useState<CopyCopyrightGuidanceResult | null>(null);
+  const [copyRuns, setCopyRuns] = useState<CopyAiRunItem[]>([]);
 
   const connectionBadgeLabel = (status: MediaConnectionStatus): string => {
     if (status === "connected") return "Autorizado";
@@ -162,7 +208,6 @@ const GestaoMidias = () => {
     );
     setState(getOrgMediaState(orgId));
     clearParams();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- callback OAuth na query
   }, [searchParams, orgId, setSearchParams, user?.username]);
 
   useEffect(() => {
@@ -239,6 +284,8 @@ const GestaoMidias = () => {
   }, [currentManager, state]);
 
   const mc = searchParams.get("mc");
+  const rawSubmenu = searchParams.get("sub");
+  const activeSubmenu: GestaoMidiasSubmenu = rawSubmenu === "copy" || rawSubmenu === "copyright" ? "copy" : "operacao";
   const selectableClients = useMemo(() => {
     if (!state) return [];
     if (isOrgAdmin) return state.mediaClients;
@@ -264,6 +311,22 @@ const GestaoMidias = () => {
       );
     }
   }, [selectedClient, mc, setSearchParams]);
+
+  useEffect(() => {
+    setCopyError(null);
+  }, [activeSubmenu]);
+
+  const setSubmenu = (next: GestaoMidiasSubmenu) => {
+    setSearchParams(
+      (prev) => {
+        const n = new URLSearchParams(prev);
+        if (next === "operacao") n.delete("sub");
+        else n.set("sub", next);
+        return n;
+      },
+      { replace: true },
+    );
+  };
 
   if (!user) return null;
 
@@ -1237,6 +1300,416 @@ const GestaoMidias = () => {
     );
   };
 
+  const copyAiHistory: CopyChatMessage[] = copyRuns.flatMap((item) => [
+    {
+      role: "manager",
+      content: `Ação: ${item.action} | Resultado anterior solicitado pelo gestor.`,
+    },
+    {
+      role: "assistant",
+      content: item.response.answer,
+    },
+  ]);
+
+  const copyStepsDone = (() => {
+    let done = 1; // objetivo sempre selecionado
+    if (copyAudience.trim()) done += 1;
+    if (copyPainDesire.trim()) done += 1;
+    if (copyOffer.trim()) done += 1;
+    if (copyPlatform) done += 1;
+    return done;
+  })();
+
+  const stepProgress = Math.round((copyStepsDone / 5) * 100);
+
+  const actionLabel = (action: CopyAiAction): string => {
+    if (action === "generate") return "Gerar texto com IA";
+    if (action === "analyze") return "Analisar texto";
+    if (action === "improve") return "Melhorar texto";
+    return "Reescrever para mais conversão";
+  };
+
+  const objectiveLabel = (objective: CopyObjective): string => {
+    if (objective === "awareness") return "Reconhecimento (Topo de funil)";
+    if (objective === "consideration") return "Consideração (Meio de funil)";
+    return "Conversão (Fundo de funil)";
+  };
+
+  const platformLabel = (platform: CopyPlatform): string => {
+    if (platform === "meta-ads") return "Meta Ads";
+    if (platform === "google-ads") return "Google Ads";
+    return "TikTok Ads";
+  };
+
+  const buildPlatformCopyContext = (): string => {
+    if (copyPlatform === "meta-ads") {
+      return `Meta Ads | Texto principal: ${copyPrimaryText || "não informado"} | Título: ${copyHeadline || "não informado"} | Descrição: ${copyDescription || "não informado"}`;
+    }
+    if (copyPlatform === "google-ads") {
+      return `Google Ads | Títulos: ${copyGoogleHeadlines || "não informado"} | Descrições: ${copyGoogleDescriptions || "não informado"}`;
+    }
+    return `TikTok Ads | Gancho: ${copyTiktokHook || "não informado"} | Copy em estilo roteiro: ${copyTiktokScript || "não informado"}`;
+  };
+
+  const applyGeneratedCopyToPlatform = (copyText: string) => {
+    if (copyPlatform === "meta-ads") {
+      if (!copyPrimaryText.trim()) setCopyPrimaryText(copyText);
+      if (!copyHeadline.trim()) setCopyHeadline("Título sugerido pela IA");
+    } else if (copyPlatform === "google-ads") {
+      if (!copyGoogleHeadlines.trim()) setCopyGoogleHeadlines("Título 1\nTítulo 2\nTítulo 3");
+      if (!copyGoogleDescriptions.trim()) setCopyGoogleDescriptions(copyText);
+    } else {
+      if (!copyTiktokHook.trim()) setCopyTiktokHook("Gancho sugerido pela IA");
+      if (!copyTiktokScript.trim()) setCopyTiktokScript(copyText);
+    }
+  };
+
+  const runCopyAiAction = async (action: CopyAiAction) => {
+    if (!isAiOptimizationConfigured()) {
+      toast.error("O serviço de IA não está disponível no momento.");
+      return;
+    }
+    if (!copyAudience.trim() || !copyPainDesire.trim() || !copyOffer.trim()) {
+      toast.error("Preencha objetivo, público, dor/desejo e oferta antes de usar a IA.");
+      return;
+    }
+
+    const actionPrompt: Record<CopyAiAction, string> = {
+      generate:
+        "Com base nos campos do construtor, gere um copy inicial com título, texto principal e CTA, adaptado ao estágio do funil e à plataforma selecionada.",
+      analyze:
+        "Analise o texto atual e avalie estrutura, clareza e potencial de conversão. Não reescreva completo, foque em diagnóstico objetivo.",
+      improve:
+        "Melhore o texto atual mantendo a proposta principal, refinando persuasão, clareza e chamada para ação.",
+      rewrite:
+        "Reescreva o texto para maximizar conversão, com gancho mais forte, oferta mais clara e CTA mais direto.",
+    };
+
+    const contextBits = [
+      `Tenant: ${tenant.slug}`,
+      selectedClient ? `Cliente selecionado: ${selectedClient.name}` : "Cliente selecionado: não definido",
+      `Perfil: ${isOrgAdmin ? "Administrador" : "Gestor"}`,
+      `Objetivo: ${objectiveLabel(copyObjective)}`,
+      `Público-alvo: ${copyAudience}`,
+      `Dor/Desejo: ${copyPainDesire}`,
+      `Oferta: ${copyOffer}`,
+      `Plataforma: ${platformLabel(copyPlatform)}`,
+      `Campos por plataforma: ${buildPlatformCopyContext()}`,
+      copyExtraInstruction.trim() ? `Instrução adicional: ${copyExtraInstruction.trim()}` : "",
+    ].filter(Boolean);
+
+    const currentCopy =
+      copyDraft.trim() ||
+      copyPrimaryText.trim() ||
+      copyGoogleDescriptions.trim() ||
+      copyTiktokScript.trim() ||
+      undefined;
+
+    setCopyLoading(true);
+    setCopyError(null);
+    try {
+      const response = await askCopyCopyrightGuidance({
+        question: actionPrompt[action],
+        currentCopy,
+        context: contextBits.join(" | "),
+        history: copyAiHistory,
+      });
+
+      const suggestedCopy = response.improvedCopyExample?.trim() || response.answer.trim();
+      if (suggestedCopy) {
+        setCopyDraft(suggestedCopy);
+        applyGeneratedCopyToPlatform(suggestedCopy);
+      }
+
+      setCopyLastResult(response);
+      setCopyRuns((prev) => [
+        { id: crypto.randomUUID(), action, response, runAt: new Date().toISOString() },
+        ...prev,
+      ]);
+      toast.success(`${actionLabel(action)} concluído.`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setCopyError(msg);
+      toast.error(msg.length > 120 ? `${msg.slice(0, 120)}…` : msg);
+    } finally {
+      setCopyLoading(false);
+    }
+  };
+
+  const renderCopyExperience = () => (
+    <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+      <Card className="p-4 border-border/60 h-fit lg:sticky lg:top-4">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Navegação</p>
+        <p className="mt-2 text-sm font-medium">Gestão de Mídias -&gt; Copy</p>
+        <Separator className="my-3" />
+        <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Construção guiada</p>
+        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+          <p>1. Objetivo</p>
+          <p>2. Público-alvo</p>
+          <p>3. Dor / Desejo</p>
+          <p>4. Oferta</p>
+          <p>5. Plataforma</p>
+        </div>
+        <div className="mt-4">
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="text-muted-foreground">Progresso</span>
+            <span className="font-medium">{stepProgress}%</span>
+          </div>
+          <Progress value={stepProgress} />
+        </div>
+      </Card>
+
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold">Criação de Copy</h2>
+          <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+            Copy é o texto estratégico que conduz atenção, desperta desejo e leva à ação. Aqui você cria, valida e melhora
+            seus anúncios com apoio da IA.
+          </p>
+        </div>
+        <Card className="p-4 border-primary/20 bg-primary/[0.03]">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Fluxo guiado para criar anúncios de alta conversão com sugestões práticas da IA em cada etapa.
+          </p>
+        </Card>
+
+        <Card className="p-5 border-border/60 space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Passo 1: Objetivo</Label>
+              <Select value={copyObjective} onValueChange={(v) => setCopyObjective(v as CopyObjective)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="awareness">Reconhecimento (Topo de funil)</SelectItem>
+                  <SelectItem value="consideration">Consideração (Meio de funil)</SelectItem>
+                  <SelectItem value="conversion">Conversão (Fundo de funil)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="copy-audience">Passo 2: Público-alvo</Label>
+              <Input
+                id="copy-audience"
+                value={copyAudience}
+                onChange={(e) => setCopyAudience(e.target.value)}
+                placeholder="Descreva a persona que você deseja atingir"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="copy-pain">Passo 3: Dor / Desejo</Label>
+              <Input
+                id="copy-pain"
+                value={copyPainDesire}
+                onChange={(e) => setCopyPainDesire(e.target.value)}
+                placeholder="Qual principal problema ou desejo desse público?"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="copy-offer">Passo 4: Oferta</Label>
+              <Input
+                id="copy-offer"
+                value={copyOffer}
+                onChange={(e) => setCopyOffer(e.target.value)}
+                placeholder="O que você está oferecendo e qual seu diferencial?"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Passo 5: Plataforma</Label>
+            <Tabs value={copyPlatform} onValueChange={(v) => setCopyPlatform(v as CopyPlatform)}>
+              <TabsList className="flex flex-wrap h-auto gap-1">
+                <TabsTrigger value="meta-ads">Meta Ads</TabsTrigger>
+                <TabsTrigger value="google-ads">Google Ads</TabsTrigger>
+                <TabsTrigger value="tiktok-ads">TikTok Ads</TabsTrigger>
+              </TabsList>
+              <TabsContent value="meta-ads" className="mt-3 space-y-2">
+                <Label htmlFor="meta-primary">Texto principal</Label>
+                <Textarea id="meta-primary" value={copyPrimaryText} onChange={(e) => setCopyPrimaryText(e.target.value)} />
+                <Label htmlFor="meta-headline">Título</Label>
+                <Input id="meta-headline" value={copyHeadline} onChange={(e) => setCopyHeadline(e.target.value)} />
+                <Label htmlFor="meta-desc">Descrição</Label>
+                <Input id="meta-desc" value={copyDescription} onChange={(e) => setCopyDescription(e.target.value)} />
+              </TabsContent>
+              <TabsContent value="google-ads" className="mt-3 space-y-2">
+                <Label htmlFor="google-headlines">Títulos (múltiplos)</Label>
+                <Textarea
+                  id="google-headlines"
+                  value={copyGoogleHeadlines}
+                  onChange={(e) => setCopyGoogleHeadlines(e.target.value)}
+                  placeholder="Um título por linha"
+                />
+                <Label htmlFor="google-descriptions">Descrições</Label>
+                <Textarea
+                  id="google-descriptions"
+                  value={copyGoogleDescriptions}
+                  onChange={(e) => setCopyGoogleDescriptions(e.target.value)}
+                  placeholder="Uma descrição por linha"
+                />
+              </TabsContent>
+              <TabsContent value="tiktok-ads" className="mt-3 space-y-2">
+                <Label htmlFor="tiktok-hook">Gancho</Label>
+                <Input id="tiktok-hook" value={copyTiktokHook} onChange={(e) => setCopyTiktokHook(e.target.value)} />
+                <Label htmlFor="tiktok-script">Copy em estilo roteiro</Label>
+                <Textarea id="tiktok-script" value={copyTiktokScript} onChange={(e) => setCopyTiktokScript(e.target.value)} />
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="copy-extra">Contexto adicional para IA (opcional)</Label>
+            <Input
+              id="copy-extra"
+              value={copyExtraInstruction}
+              onChange={(e) => setCopyExtraInstruction(e.target.value)}
+            placeholder="Ex: manter tom premium e evitar promessas agressivas"
+            />
+          </div>
+        </Card>
+
+        <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+          <div className="space-y-4">
+            <Card className="p-5 border-border/60 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Assistente de Copy com IA</p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" disabled={copyLoading} onClick={() => void runCopyAiAction("generate")} className="gap-2">
+                  {copyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}
+                  Gerar copy com IA
+                </Button>
+                <Button type="button" variant="outline" disabled={copyLoading} onClick={() => void runCopyAiAction("analyze")}>
+                  Analisar copy
+                </Button>
+                <Button type="button" variant="outline" disabled={copyLoading} onClick={() => void runCopyAiAction("improve")}>
+                  Melhorar copy
+                </Button>
+                <Button type="button" variant="outline" disabled={copyLoading} onClick={() => void runCopyAiAction("rewrite")}>
+                  Reescrever para mais conversão
+                </Button>
+              </div>
+              {copyError ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{copyError}</AlertDescription>
+                </Alert>
+              ) : null}
+            </Card>
+
+            <Card className="p-5 border-border/60 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Editor de copy</p>
+              <Textarea
+                value={copyDraft}
+                onChange={(e) => setCopyDraft(e.target.value)}
+                className="min-h-40"
+                placeholder="A IA gera o copy aqui. Edite manualmente e rode novas ações."
+              />
+              {copyLastResult?.suggestedAdjustments?.length ? (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-1">Sugestões inline para ajuste</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {copyLastResult.suggestedAdjustments.map((s, i) => (
+                      <Badge key={i} variant="secondary">
+                        {s}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </Card>
+
+            <Card className="p-5 border-border/60">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Ações finais</p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={() => toast.success("Texto aplicado ao anúncio atual.")}>
+                  Usar neste anúncio
+                </Button>
+                <Button type="button" variant="outline" onClick={() => toast.success("Texto enviado para o fluxo de campanha.")}>
+                  Enviar para campanha
+                </Button>
+                <Button type="button" variant="outline" className="gap-2" onClick={() => toast.success("Versão do texto salva.")}>
+                  <Save className="h-4 w-4" />
+                  Salvar versão
+                </Button>
+              </div>
+            </Card>
+          </div>
+
+          <Card className="p-4 border-border/60 h-fit xl:sticky xl:top-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+              <Bot className="h-4 w-4 text-primary" />
+              Insight de performance
+            </p>
+            {copyLastResult ? (
+              <div className="mt-3 space-y-3">
+                <Badge
+                  variant={
+                    copyLastResult.suggestedAdjustments.length >= 3
+                      ? "secondary"
+                      : copyLastResult.suggestedAdjustments.length >= 1
+                        ? "outline"
+                        : "default"
+                  }
+                >
+                  {copyLastResult.suggestedAdjustments.length >= 3
+                    ? "Este copy está médio"
+                    : copyLastResult.suggestedAdjustments.length >= 1
+                      ? "Este copy está bom"
+                      : "Este copy está forte"}
+                </Badge>
+                <p className="text-sm leading-relaxed">{copyLastResult.structureAssessment}</p>
+                <p className="text-sm leading-relaxed">{copyLastResult.conversionAssessment}</p>
+                <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+                  <p className="text-xs font-semibold text-primary mb-1">Direção recomendada</p>
+                  <p className="text-sm leading-relaxed">{copyLastResult.suggestedDecision}</p>
+                </div>
+                {copyLastResult.suggestedAdjustments.length > 0 ? (
+                  <ul className="list-disc pl-4 text-sm space-y-1">
+                    {copyLastResult.suggestedAdjustments.map((line, idx) => (
+                      <li key={idx}>{line}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {copyLastResult.strengths.length > 0 ? (
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-muted-foreground">Pontos fortes</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {copyLastResult.strengths.map((line, idx) => (
+                        <Badge key={idx} variant="secondary" className="gap-1">
+                          <CheckCheck className="h-3 w-3" />
+                          {line}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Preencha os passos e execute uma acao da IA para ver diagnostico de persuasao, clareza e potencial de
+                conversao.
+              </p>
+            )}
+            {copyRuns.length > 0 ? (
+              <div className="mt-4 pt-3 border-t border-border/50">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Histórico rápido</p>
+                <div className="space-y-1.5">
+                  {copyRuns.slice(0, 4).map((run) => (
+                    <div key={run.id} className="rounded-md border border-border/50 bg-secondary/20 px-2.5 py-2">
+                      <p className="text-xs font-medium">{actionLabel(run.action)}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {new Date(run.runAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <Card className="p-6 border-primary/25">
@@ -1292,7 +1765,30 @@ const GestaoMidias = () => {
         </div>
       </Card>
 
-      {isOrgAdmin ? renderAdminExperience() : renderManagerExperience()}
+      <Card className="p-2 border-border/60">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant={activeSubmenu === "operacao" ? "default" : "outline"}
+            onClick={() => setSubmenu("operacao")}
+          >
+            Operação de Mídias
+          </Button>
+          <Button
+            type="button"
+            variant={activeSubmenu === "copy" ? "default" : "outline"}
+            onClick={() => setSubmenu("copy")}
+          >
+            Copy
+          </Button>
+        </div>
+      </Card>
+
+      {activeSubmenu === "operacao"
+        ? isOrgAdmin
+          ? renderAdminExperience()
+          : renderManagerExperience()
+        : renderCopyExperience()}
     </div>
   );
 };
