@@ -16,7 +16,19 @@ import Dashboard from "@/pages/Dashboard";
 import Board from "@/pages/Board";
 import Clientes from "@/pages/Clientes";
 import ClientesFavoritos from "@/pages/ClientesFavoritos";
-import Campanhas from "@/pages/Campanhas";
+import CampanhasLayout from "@/pages/campanhas/CampanhasLayout";
+import CampanhasHome from "@/pages/campanhas/CampanhasHome";
+import CampanhasSegmentacaoGeografica from "@/pages/campanhas/CampanhasSegmentacaoGeografica";
+import CampanhasNovaCampanhaAssistente from "@/pages/campanhas/CampanhasNovaCampanhaAssistente";
+import CampanhasEstrategiaFormVsLp from "@/pages/campanhas/CampanhasEstrategiaFormVsLp";
+import CampanhasLeadsFormularios from "@/pages/campanhas/CampanhasLeadsFormularios";
+import CampanhasBibliotecaAnuncios from "@/pages/campanhas/CampanhasBibliotecaAnuncios";
+import Experimentacao from "@/pages/Experimentacao";
+import SchedulingPage from "@/pages/scheduling/SchedulingPage";
+import AutomationPage from "@/pages/automation/AutomationPage";
+import ProspectingPage from "@/pages/prospecting/ProspectingPage";
+import LeadsCenterPage from "@/pages/leads/LeadsCenterPage";
+import PublicBooking from "@/pages/PublicBooking";
 import GestaoMidias from "@/pages/GestaoMidias";
 import IaRoi from "@/pages/IaRoi";
 import Configuracoes from "@/pages/Configuracoes";
@@ -45,6 +57,8 @@ import IntelliSearchRankingPage from "@/pages/intelli-search/IntelliSearchRankin
 import IntelliSearchHistoryPage from "@/pages/intelli-search/IntelliSearchHistoryPage";
 import IntelliSearchEvolutionPage from "@/pages/intelli-search/IntelliSearchEvolutionPage";
 import IntelliSearchPerformanceReport from "@/pages/intelli-search/IntelliSearchPerformanceReport";
+import IntelliSearchBusinessOverview from "@/pages/intelli-search/IntelliSearchBusinessOverview";
+import IntelliSearchDomainIntelligence from "@/pages/intelli-search/IntelliSearchDomainIntelligence";
 import { TenantProvider, useTenant } from "@/contexts/TenantContext";
 import { DocumentBrandingSync } from "@/components/DocumentBrandingSync";
 import SocialPulse from "@/pages/SocialPulse";
@@ -177,6 +191,7 @@ const App = () => (
                     <Route path="/forgot-password" element={<ForgotPasswordRoute />} />
                     <Route path="/reset-password" element={<ResetPasswordRoute />} />
                     <Route path="/oauth/popup-callback" element={<OAuthPopupCallback />} />
+                    <Route path="/book/:token" element={<PublicBooking />} />
                     <Route path="/planos" element={<Planos />} />
 
                     <Route element={<ProtectedLayout />}>
@@ -184,7 +199,14 @@ const App = () => (
                       <Route path="/board" element={<Board />} />
                       <Route path="/clientes/favoritos" element={<ClientesFavoritos />} />
                       <Route path="/clientes" element={<Clientes />} />
-                      <Route path="/campanhas" element={<Campanhas />} />
+                      <Route path="/campanhas" element={<CampanhasLayout />}>
+                        <Route index element={<CampanhasHome />} />
+                        <Route path="segmentacao-geografica" element={<CampanhasSegmentacaoGeografica />} />
+                        <Route path="nova-campanha" element={<CampanhasNovaCampanhaAssistente />} />
+                        <Route path="estrategia" element={<CampanhasEstrategiaFormVsLp />} />
+                        <Route path="leads" element={<CampanhasLeadsFormularios />} />
+                        <Route path="biblioteca-anuncios" element={<CampanhasBibliotecaAnuncios />} />
+                      </Route>
                       <Route path="/gestao-midias" element={<GestaoMidias />} />
                       <Route path="/intelli-search" element={<IntelliSearchLayout />}>
                         <Route index element={<Navigate to="health/complete" replace />} />
@@ -205,9 +227,16 @@ const App = () => (
                         <Route path="manager/qa" element={<IntelliSearchManagerQAPage />} />
                         <Route path="manager/posts" element={<IntelliSearchManagerPostsPage />} />
                         <Route path="tools/performance-report" element={<IntelliSearchPerformanceReport />} />
+                        <Route path="business/overview" element={<IntelliSearchBusinessOverview />} />
+                        <Route path="intelligence/domain" element={<IntelliSearchDomainIntelligence />} />
                       </Route>
                       <Route path="/saude-google" element={<Navigate to="/intelli-search/health/complete" replace />} />
                       <Route path="/ia-roi" element={<IaRoi />} />
+                      <Route path="/experimentacao" element={<Experimentacao />} />
+                      <Route path="/scheduling" element={<SchedulingPage />} />
+                      <Route path="/automation" element={<AutomationPage />} />
+                      <Route path="/prospecting" element={<ProspectingPage />} />
+                      <Route path="/leads" element={<LeadsCenterPage />} />
                       <Route
                         path="/social-pulse"
                         element={

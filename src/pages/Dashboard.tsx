@@ -8,7 +8,7 @@ import { clientsData, getClientDetail, type Client, type RoiTableRow } from "@/p
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FavoriteButton } from "@/components/FavoriteButton";
-import { TrendingUp, DollarSign, Eye, MousePointerClick, Target, ArrowUpRight, Loader2, Sparkles } from "lucide-react";
+import { TrendingUp, DollarSign, Eye, MousePointerClick, Target, ArrowUpRight, Loader2, Sparkles, LineChart, Pause, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import { buildTrafficPerformanceReport } from "@/services/slackReportService";
 import {
@@ -18,6 +18,7 @@ import {
   type CampaignOptimizationTile,
 } from "@/services/aiOptimizationService";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from "recharts";
+import { leadsGet } from "@/services/growthHubApi";
 
 function parseRoiStr(roi: string): number {
   return parseFloat(roi.replace(/x/gi, "").replace(",", ".").trim()) || 0;
@@ -181,10 +182,32 @@ const Dashboard = () => {
 
   const [aiLiveRecs, setAiLiveRecs] = useState<ReturnType<typeof tilesToDashboardRecs> | null>(null);
   const [aiLiveLoading, setAiLiveLoading] = useState(false);
+  const [leadBuckets, setLeadBuckets] = useState<{
+    organic: number;
+    paid: number;
+    prospecting: number;
+  } | null>(null);
 
   useEffect(() => {
     setAiLiveRecs(null);
   }, [currentClient?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = (await leadsGet()) as {
+          stats?: { buckets?: { organic: number; paid: number; prospecting: number } };
+        };
+        if (!cancelled && data.stats?.buckets) setLeadBuckets(data.stats.buckets);
+      } catch {
+        if (!cancelled) setLeadBuckets(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const aiRecommendationsDisplay = useMemo(() => {
     if (aiLiveRecs && aiLiveRecs.length > 0) return aiLiveRecs;
@@ -382,8 +405,75 @@ const Dashboard = () => {
           </Card>
         </div>
 
+        {leadBuckets ? (
+          <Card className="order-4 glass-card p-5 border-border/60">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+              <div>
+                <h3 className="font-display font-semibold text-sm sm:text-base">Leads por origem (Growth Hub)</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Orgânico e formulários · pago e campanhas · prospecção, agendamento e automação.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-lg bg-secondary/50 py-3">
+                <p className="text-xs text-muted-foreground">Orgânico</p>
+                <p className="text-xl font-bold tabular-nums">{leadBuckets.organic}</p>
+              </div>
+              <div className="rounded-lg bg-secondary/50 py-3">
+                <p className="text-xs text-muted-foreground">Pago</p>
+                <p className="text-xl font-bold tabular-nums">{leadBuckets.paid}</p>
+              </div>
+              <div className="rounded-lg bg-secondary/50 py-3">
+                <p className="text-xs text-muted-foreground">Prospecção</p>
+                <p className="text-xl font-bold tabular-nums">{leadBuckets.prospecting}</p>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
+        {/* Central de análise inteligente — insights automáticos (demo) */}
+        <Card className="order-5 glass-card p-5 border-primary/15">
+          <div className="flex items-center gap-2 mb-3">
+            <LineChart className="h-5 w-5 text-primary shrink-0" />
+            <h3 className="font-display font-semibold">Central de análise inteligente</h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            Alertas e sugestões práticas com base em tendências das suas campanhas (estrutura pronta para API + IA).
+          </p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+              <p className="text-xs font-medium text-amber-800 dark:text-amber-200 flex items-center gap-1">
+                <Pause className="h-3.5 w-3.5" />
+                Saturação
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Campanha «Remarketing Carrinho» com frequência alta — considere refrescar criativo ou reduzir alcance.
+              </p>
+            </div>
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm">
+              <p className="text-xs font-medium text-emerald-800 dark:text-emerald-200 flex items-center gap-1">
+                <Lightbulb className="h-3.5 w-3.5" />
+                Público em alta
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Segmento «Interesse X» com CPA 14% abaixo da média — candidato a aumento de orçamento teste.
+              </p>
+            </div>
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm sm:col-span-2 lg:col-span-1">
+              <p className="text-xs font-medium text-primary flex items-center gap-1">
+                <Sparkles className="h-3.5 w-3.5" />
+                Previsão de ROI (demo)
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Próximos 30 dias: tendência estável com +6% ROI se mantiver mix atual (modelo simplificado).
+              </p>
+            </div>
+          </div>
+        </Card>
+
         {/* AI Recommendations */}
-        <Card className="order-4 glass-card p-5">
+        <Card className="order-6 glass-card p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-2 h-2 rounded-full gradient-brand animate-pulse-glow shrink-0" />

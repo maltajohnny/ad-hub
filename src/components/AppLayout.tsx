@@ -23,6 +23,11 @@ import {
   Clapperboard,
   Activity,
   Menu,
+  FlaskConical,
+  Calendar,
+  Zap,
+  UserSearch,
+  Contact,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import norterSymbol from "@/assets/norter-symbol.png";
@@ -156,6 +161,11 @@ const menuAfterClientes: MenuItem[] = [
   },
   { icon: TrendingUp, label: "IA & ROI", path: "/ia-roi", module: "ia-roi" },
   { icon: Activity, label: "Social Pulse", path: "/social-pulse", module: "social-pulse" },
+  { icon: FlaskConical, label: "Experimentação", path: "/experimentacao", module: "experimentacao" },
+  { icon: Calendar, label: "Agendamento", path: "/scheduling", module: "scheduling" },
+  { icon: Zap, label: "Automação", path: "/automation", module: "automation" },
+  { icon: UserSearch, label: "Prospecção", path: "/prospecting", module: "prospecting" },
+  { icon: Contact, label: "Centro de leads", path: "/leads", module: "leads" },
   { icon: UsersRound, label: "Usuários", path: "/usuarios", adminOnly: true, module: "usuarios" },
   { icon: Settings, label: "Configurações", path: "/configuracoes", module: "configuracoes" },
 ];

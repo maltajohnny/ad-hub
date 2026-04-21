@@ -1,5 +1,4 @@
-import type { AppModule } from "@/lib/saasTypes";
-import { RESERVED_TENANT_SLUGS } from "@/lib/saasTypes";
+import { APP_MODULES, RESERVED_TENANT_SLUGS, type AppModule } from "@/lib/saasTypes";
 
 const STORAGE_KEY = "norter_saas_tenants";
 
@@ -23,12 +22,33 @@ export type TenantRecord = {
   createdAt: string;
 };
 
-/** Migra módulos antigos (ex.: saude-google → intelli-search). */
+/** Lista completa antes dos módulos Growth Hub — orgs com este conjunto passam a receber os novos módulos. */
+const LEGACY_FULL_MODULES: AppModule[] = [
+  "dashboard",
+  "board",
+  "clientes",
+  "clientes-favoritos",
+  "campanhas",
+  "gestao-midias",
+  "intelli-search",
+  "ia-roi",
+  "social-pulse",
+  "experimentacao",
+  "usuarios",
+  "configuracoes",
+];
+
+/** Migra módulos antigos (ex.: saude-google → intelli-search) e acrescenta novos módulos às orgs com lista “cheia” legada. */
 function migrateTenantModules(mods: AppModule[]): AppModule[] {
   const mapped = (mods as unknown as string[]).map((m) =>
     m === "saude-google" ? "intelli-search" : m,
   ) as AppModule[];
-  return [...new Set(mapped)];
+  const uniq = [...new Set(mapped)];
+  const set = new Set(uniq);
+  if (uniq.length === LEGACY_FULL_MODULES.length && LEGACY_FULL_MODULES.every((m) => set.has(m))) {
+    return [...APP_MODULES];
+  }
+  return uniq;
 }
 
 function withTenantDefaults(t: TenantRecord): TenantRecord {
