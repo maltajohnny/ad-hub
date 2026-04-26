@@ -49,6 +49,10 @@ interface ImportMetaEnv {
   readonly VITE_SOCIAL_PULSE_IG_PROXY_URL?: string;
   /** Token central do Graph API para Social Pulse (sem input por utilizador). */
   readonly VITE_SOCIAL_PULSE_GRAPH_ACCESS_TOKEN?: string;
+  /** Alias de token central para Social Pulse (caso use este nome no .env). */
+  readonly VITE_INSTAGRAM_GRAPH_API_TOKEN?: string;
+  /** Token central sem prefixo VITE_ (exposto no cliente via envPrefix em vite.config.ts). */
+  readonly INSTAGRAM_GRAPH_API_TOKEN?: string;
 }
 
 interface ImportMeta {

@@ -71,7 +71,12 @@ import { cn } from "@/lib/utils";
 const PLATFORMS: SocialPulsePlatform[] = ["youtube", "instagram", "twitter", "tiktok"];
 
 const LEGACY_GRAPH_TOKEN_STORAGE_KEY = "social_pulse_graph_user_token";
-const SHARED_GRAPH_TOKEN = (import.meta.env.VITE_SOCIAL_PULSE_GRAPH_ACCESS_TOKEN ?? "").trim();
+const SHARED_GRAPH_TOKEN = (
+  import.meta.env.INSTAGRAM_GRAPH_API_TOKEN ??
+  import.meta.env.VITE_SOCIAL_PULSE_GRAPH_ACCESS_TOKEN ??
+  import.meta.env.VITE_INSTAGRAM_GRAPH_API_TOKEN ??
+  ""
+).trim();
 
 function extractInstagramUsername(account: MonitoredAccount): string {
   return suggestLabelFromProfileUrl(account.profileUrl, "instagram").replace(/^@/, "") || account.label.replace(/^@/, "");
