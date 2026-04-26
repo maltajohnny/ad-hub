@@ -122,7 +122,6 @@ export default function SocialPulse() {
   const { tenant } = useTenant();
   const orgId = user?.organizationId ?? tenant?.id ?? null;
   const isOrgAdmin = user?.role === "admin";
-  const actorUsername = typeof user?.username === "string" ? user.username.trim() : "";
 
   const [platformFilter, setPlatformFilter] = useState<SocialPulsePlatform | "all">("all");
   const [selectedAccountId, setSelectedAccountId] = useState<string>("__all__");
@@ -147,9 +146,9 @@ export default function SocialPulse() {
   }, [orgId, version]);
 
   const visibleIds = useMemo(() => {
-    if (!orgId || !user || !actorUsername) return [];
-    return getVisibleAccountIdsForUser(orgId, actorUsername, isOrgAdmin);
-  }, [orgId, user, actorUsername, isOrgAdmin, version]);
+    if (!orgId || !user) return [];
+    return getVisibleAccountIdsForUser(orgId, user.username, isOrgAdmin);
+  }, [orgId, user, isOrgAdmin, version]);
 
   const visibleAccounts = useMemo(() => {
     return allOrgAccounts.filter((a) => visibleIds.includes(a.id));
@@ -160,22 +159,9 @@ export default function SocialPulse() {
     return visibleAccounts.filter((a) => a.platform === platformFilter);
   }, [visibleAccounts, platformFilter]);
 
-  const safeSelectedAccountId = useMemo(() => {
-    if (selectedAccountId === "__all__") return "__all__";
-    return filteredByPlatform.some((a) => a.id === selectedAccountId) ? selectedAccountId : "__all__";
-  }, [filteredByPlatform, selectedAccountId]);
-
   const chartAccounts = useMemo(() => {
-    if (safeSelectedAccountId === "__all__") return filteredByPlatform;
-    return filteredByPlatform.filter((a) => a.id === safeSelectedAccountId);
-  }, [filteredByPlatform, safeSelectedAccountId]);
-
-  useEffect(() => {
-    if (selectedAccountId === "__all__") return;
-    const stillVisible = filteredByPlatform.some((a) => a.id === selectedAccountId);
-    if (!stillVisible) {
-      setSelectedAccountId("__all__");
-    }
+    if (selectedAccountId === "__all__") return filteredByPlatform;
+    return filteredByPlatform.filter((a) => a.id === selectedAccountId);
   }, [filteredByPlatform, selectedAccountId]);
 
   const refreshMetrics = useCallback(async () => {
@@ -283,7 +269,7 @@ export default function SocialPulse() {
   }, [orgId, version]);
 
   const onAddAccount = () => {
-    if (!orgId || !user || !actorUsername) return;
+    if (!orgId || !user) return;
     const normalized = normalizeProfileUrl(urlInput, addPlatform);
     if (!normalized) {
       toast.error(
@@ -298,7 +284,7 @@ export default function SocialPulse() {
       profileUrl: normalized,
       platform: addPlatform,
       label: friendly,
-      actorUsername,
+      actorUsername: user.username,
     });
     if (!res.ok) {
       toast.error(res.error);
@@ -311,17 +297,14 @@ export default function SocialPulse() {
   };
 
   const onRemoveAccount = (accountId: string) => {
-    if (!orgId || !user || !actorUsername) return;
-    removeMonitoredAccount({ organizationId: orgId, accountId, actorUsername });
-    if (selectedAccountId === accountId) {
-      setSelectedAccountId("__all__");
-    }
+    if (!orgId || !user) return;
+    removeMonitoredAccount({ organizationId: orgId, accountId, actorUsername: user.username });
     toast.success("Conta removida.");
     refresh();
   };
 
   const toggleUserAccount = (targetUsername: string, accountId: string, checked: boolean) => {
-    if (!orgId || !user || !actorUsername) return;
+    if (!orgId || !user) return;
     const key = normalizeLoginKey(targetUsername);
     const current = new Set(assignments[key] ?? []);
     if (checked) current.add(accountId);
@@ -330,7 +313,7 @@ export default function SocialPulse() {
       organizationId: orgId,
       targetUsername,
       accountIds: [...current],
-      actorUsername,
+      actorUsername: user.username,
     });
     toast.success("Permissões atualizadas.");
     refresh();
@@ -347,22 +330,6 @@ export default function SocialPulse() {
           <p className="mt-2 text-sm text-muted-foreground">
             Este módulo está disponível para contas associadas a uma organização. Inicie sessão com um utilizador da
             sua organização.
-          </p>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!actorUsername) {
-    return (
-      <div className="animate-fade-in max-w-lg">
-        <Card className="glass-card border-border/60 p-6">
-          <div className="flex items-center gap-2 text-lg font-display font-semibold">
-            <Radio className="h-5 w-5 text-primary" />
-            Social Pulse
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Não foi possível identificar o login da conta atual. Refaça o login para carregar o módulo.
           </p>
         </Card>
       </div>
@@ -463,24 +430,6 @@ export default function SocialPulse() {
                 </p>
               </Card>
 
-              {isOrgAdmin ? (
-                <Card className="glass-card p-5 border-border/60 space-y-4">
-                  <h3 className="font-display font-semibold">Adicionar perfil</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Fluxo direto no painel: adicione o perfil e ele aparece em «Contas monitoradas» logo abaixo.
-                  </p>
-                  <AddProfileFields
-                    addPlatform={addPlatform}
-                    onPlatformChange={setAddPlatform}
-                    urlInput={urlInput}
-                    onUrlChange={setUrlInput}
-                    labelInput={labelInput}
-                    onLabelChange={setLabelInput}
-                    onAdd={onAddAccount}
-                  />
-                </Card>
-              ) : null}
-
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
                 <div className="space-y-1.5 min-w-[160px]">
                   <Label className="text-xs">Plataforma</Label>
@@ -503,7 +452,7 @@ export default function SocialPulse() {
                 </div>
                 <div className="space-y-1.5 min-w-[200px] flex-1">
                   <Label className="text-xs">Conta no gráfico</Label>
-                    <Select value={safeSelectedAccountId} onValueChange={setSelectedAccountId}>
+                    <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -602,13 +551,7 @@ export default function SocialPulse() {
                 <ScrollArea className="max-h-[220px] pr-3">
                   <div className="space-y-2">
                     {visibleAccounts.map((a) => (
-                      <AccountRow
-                        key={a.id}
-                        account={a}
-                        metrics={metricsByAccountId[a.id]}
-                        canRemove={isOrgAdmin}
-                        onRemove={() => onRemoveAccount(a.id)}
-                      />
+                      <AccountRow key={a.id} account={a} metrics={metricsByAccountId[a.id]} />
                     ))}
                   </div>
                 </ScrollArea>
@@ -955,17 +898,7 @@ function ProjectionBlock({ accounts }: { accounts: MonitoredAccount[] }) {
   );
 }
 
-function AccountRow({
-  account,
-  metrics,
-  canRemove,
-  onRemove,
-}: {
-  account: MonitoredAccount;
-  metrics?: SocialMetricsPayload;
-  canRemove?: boolean;
-  onRemove?: () => void;
-}) {
+function AccountRow({ account, metrics }: { account: MonitoredAccount; metrics?: SocialMetricsPayload }) {
   if (account.platform !== "instagram") {
     return (
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-border/40 px-3 py-2">
@@ -975,24 +908,7 @@ function AccountRow({
             {platformLabel(account.platform)}
           </Badge>
         </div>
-        <div className="flex items-center gap-2">
-          <p className="text-xs text-muted-foreground">Integração real ainda não ligada para esta rede.</p>
-          {canRemove ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-destructive hover:text-destructive"
-              onClick={() => {
-                if (!window.confirm(`Excluir conta ${account.label}?`)) return;
-                onRemove?.();
-              }}
-              aria-label={`Excluir ${account.label}`}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          ) : null}
-        </div>
+        <p className="text-xs text-muted-foreground">Integração real ainda não ligada para esta rede.</p>
       </div>
     );
   }
@@ -1023,23 +939,6 @@ function AccountRow({
         </div>
         {m?.error ? (
           <div className="text-[10px] text-amber-600 dark:text-amber-400 max-w-[220px] sm:ml-auto">{m.error}</div>
-        ) : null}
-        {canRemove ? (
-          <div className="pt-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-destructive hover:text-destructive"
-              onClick={() => {
-                if (!window.confirm(`Excluir conta ${account.label}?`)) return;
-                onRemove?.();
-              }}
-              aria-label={`Excluir ${account.label}`}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
         ) : null}
       </div>
     </div>
