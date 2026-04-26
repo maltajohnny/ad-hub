@@ -35,6 +35,7 @@ import {
   Eye,
   BarChart3,
   MousePointerClick,
+  LineChart,
 } from "lucide-react";
 import {
   AreaChart,
@@ -68,6 +69,7 @@ import type { SocialMetricsPayload } from "@/social-pulse/models/social-metrics.
 import { getFollowerSnapshots } from "@/social-pulse/storage/metrics-snapshots";
 import { cn } from "@/lib/utils";
 import { getPlatformModulesConfig } from "@/lib/apiModulesConfigStore";
+import { SocialAnalyticsPanel } from "@/components/social-pulse/SocialAnalyticsPanel";
 
 const PLATFORMS: SocialPulsePlatform[] = ["youtube", "instagram", "twitter", "tiktok"];
 
@@ -371,6 +373,10 @@ export default function SocialPulse() {
             <BarChart3 className="h-3.5 w-3.5" />
             Social + performance
           </TabsTrigger>
+          <TabsTrigger value="social-analytics" className="gap-1.5">
+            <LineChart className="h-3.5 w-3.5" />
+            Social Analytics
+          </TabsTrigger>
           {isOrgAdmin ? (
             <>
               <TabsTrigger value="contas" className="gap-1.5">
@@ -602,6 +608,13 @@ export default function SocialPulse() {
               Dados de demonstração. Em produção: sincronizar Meta Insights + Ads API e Google / TikTok para atribuição.
             </p>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="social-analytics" className="space-y-4 mt-2">
+          <SocialAnalyticsPanel
+            tenantId={orgId}
+            instagramGraphToken={SHARED_GRAPH_TOKEN || getPlatformModulesConfig().instagramGraphApiToken}
+          />
         </TabsContent>
 
         {isOrgAdmin ? (
