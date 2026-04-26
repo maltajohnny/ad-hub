@@ -37,6 +37,7 @@ import NotFound from "./pages/NotFound";
 import OAuthPopupCallback from "@/pages/OAuthPopupCallback";
 import Landing from "@/pages/Landing";
 import Planos from "@/pages/Planos";
+import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import Organizacoes from "@/pages/Organizacoes";
 import IntelliSearchLayout from "@/pages/IntelliSearch";
 import IntelliSearchCompleteAnalysis from "@/pages/intelli-search/IntelliSearchCompleteAnalysis";
@@ -193,6 +194,8 @@ const App = () => (
                     <Route path="/oauth/popup-callback" element={<OAuthPopupCallback />} />
                     <Route path="/book/:token" element={<PublicBooking />} />
                     <Route path="/planos" element={<Planos />} />
+                    <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                    <Route path="/politica-de-privacidade" element={<Navigate to="/privacy-policy" replace />} />
 
                     <Route element={<ProtectedLayout />}>
                       <Route path="/dashboard" element={<Dashboard />} />
