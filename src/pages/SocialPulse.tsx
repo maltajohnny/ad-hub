@@ -65,6 +65,7 @@ import { getInstagramMetrics } from "@/social-pulse/services/instagram.service";
 import type { SocialMetricsPayload } from "@/social-pulse/models/social-metrics.model";
 import { getFollowerSnapshots } from "@/social-pulse/storage/metrics-snapshots";
 import { cn } from "@/lib/utils";
+import { getPlatformModulesConfig } from "@/lib/apiModulesConfigStore";
 
 const PLATFORMS: SocialPulsePlatform[] = ["youtube", "instagram", "twitter", "tiktok"];
 
@@ -126,13 +127,6 @@ export default function SocialPulse() {
   const [version, setVersion] = useState(0);
   const [metricsByAccountId, setMetricsByAccountId] = useState<Record<string, SocialMetricsPayload>>({});
   const [loadingMetrics, setLoadingMetrics] = useState(false);
-  const [graphTokenInput, setGraphTokenInput] = useState(() => {
-    try {
-      return localStorage.getItem(GRAPH_TOKEN_STORAGE_KEY) ?? "";
-    } catch {
-      return "";
-    }
-  });
   const [snapshotTick, setSnapshotTick] = useState(0);
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
@@ -168,7 +162,8 @@ export default function SocialPulse() {
 
   const refreshMetrics = useCallback(async () => {
     if (!visibleAccounts.length) return;
-    const token = graphTokenInput.trim() || localStorage.getItem(GRAPH_TOKEN_STORAGE_KEY) || "";
+    const cfgToken = getPlatformModulesConfig().instagramGraphApiToken.trim();
+    const token = SHARED_GRAPH_TOKEN || cfgToken || localStorage.getItem(GRAPH_TOKEN_STORAGE_KEY) || "";
     setLoadingMetrics(true);
     try {
       const entries = await Promise.all(
@@ -212,7 +207,7 @@ export default function SocialPulse() {
     } finally {
       setLoadingMetrics(false);
     }
-  }, [visibleAccounts, graphTokenInput]);
+  }, [visibleAccounts]);
 
   useEffect(() => {
     if (visibleAccounts.length === 0) return;
@@ -412,39 +407,9 @@ export default function SocialPulse() {
               <Card className="glass-card p-4 border-border/60 space-y-3">
                 <h3 className="font-display font-semibold text-sm">Instagram — Instagram Graph API (Meta)</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Token de utilizador com permissões para <code className="text-[10px]">me/accounts</code> e conta
-                  Instagram Business ligada à página. O token fica só neste browser (localStorage). Para produção,
-                  prefira backend OAuth.
+                  Este módulo usa token central da plataforma (configurado pelo administrador) para consultas Graph
+                  API. Os utilizadores não precisam inserir token nesta tela.
                 </p>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <Label className="text-xs">Token de acesso (Graph API)</Label>
-                    <Input
-                      type="password"
-                      autoComplete="off"
-                      value={graphTokenInput}
-                      onChange={(e) => setGraphTokenInput(e.target.value)}
-                      placeholder="EAAB… (não commite)"
-                      className="bg-secondary/50 border-border/50 font-mono text-xs"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      try {
-                        localStorage.setItem(GRAPH_TOKEN_STORAGE_KEY, graphTokenInput.trim());
-                        toast.success("Token guardado neste dispositivo.");
-                        void refreshMetrics();
-                      } catch {
-                        toast.error("Não foi possível guardar o token.");
-                      }
-                    }}
-                  >
-                    Salvar e atualizar
-                  </Button>
-                </div>
               </Card>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
