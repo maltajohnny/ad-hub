@@ -37,7 +37,8 @@ const GROUPS: Array<{ title: string; fields: Field[] }> = [
     fields: [
       { key: "metaAppId", label: "Meta App ID" },
       { key: "metaAppSecret", label: "Meta App Secret" },
-      { key: "tiktokAppId", label: "TikTok App ID (Client key)" },
+      { key: "tiktokAppId", label: "TikTok App ID" },
+      { key: "tiktokClientKey", label: "TikTok Client key" },
       { key: "tiktokAppSecret", label: "TikTok App Secret (Client secret)" },
       { key: "googleOauthClientId", label: "Google OAuth Client ID" },
       { key: "instagramGraphApiToken", label: "Instagram Graph API Token" },

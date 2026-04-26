@@ -551,7 +551,13 @@ export default function SocialPulse() {
                 <ScrollArea className="max-h-[220px] pr-3">
                   <div className="space-y-2">
                     {visibleAccounts.map((a) => (
-                      <AccountRow key={a.id} account={a} metrics={metricsByAccountId[a.id]} />
+                      <AccountRow
+                        key={a.id}
+                        account={a}
+                        metrics={metricsByAccountId[a.id]}
+                        canRemove={isOrgAdmin}
+                        onRemove={() => onRemoveAccount(a.id)}
+                      />
                     ))}
                   </div>
                 </ScrollArea>
@@ -898,7 +904,17 @@ function ProjectionBlock({ accounts }: { accounts: MonitoredAccount[] }) {
   );
 }
 
-function AccountRow({ account, metrics }: { account: MonitoredAccount; metrics?: SocialMetricsPayload }) {
+function AccountRow({
+  account,
+  metrics,
+  canRemove,
+  onRemove,
+}: {
+  account: MonitoredAccount;
+  metrics?: SocialMetricsPayload;
+  canRemove?: boolean;
+  onRemove?: () => void;
+}) {
   if (account.platform !== "instagram") {
     return (
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-border/40 px-3 py-2">
@@ -908,7 +924,24 @@ function AccountRow({ account, metrics }: { account: MonitoredAccount; metrics?:
             {platformLabel(account.platform)}
           </Badge>
         </div>
-        <p className="text-xs text-muted-foreground">Integração real ainda não ligada para esta rede.</p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-muted-foreground">Integração real ainda não ligada para esta rede.</p>
+          {canRemove ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-destructive hover:text-destructive"
+              onClick={() => {
+                if (!window.confirm(`Excluir conta ${account.label}?`)) return;
+                onRemove?.();
+              }}
+              aria-label={`Excluir ${account.label}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -939,6 +972,23 @@ function AccountRow({ account, metrics }: { account: MonitoredAccount; metrics?:
         </div>
         {m?.error ? (
           <div className="text-[10px] text-amber-600 dark:text-amber-400 max-w-[220px] sm:ml-auto">{m.error}</div>
+        ) : null}
+        {canRemove ? (
+          <div className="pt-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-destructive hover:text-destructive"
+              onClick={() => {
+                if (!window.confirm(`Excluir conta ${account.label}?`)) return;
+                onRemove?.();
+              }}
+              aria-label={`Excluir ${account.label}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         ) : null}
       </div>
     </div>
