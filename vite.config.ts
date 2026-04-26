@@ -68,8 +68,8 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-  /** Expõe `VITE_*`, `SLACK_*`, `OPENAI_*` e `GEMINI_*` ao cliente (ex.: chaves no `.env`). */
-  envPrefix: ["VITE_", "SLACK_", "OPENAI_", "GEMINI_"],
+  /** Expõe `VITE_*`, `SLACK_*`, `OPENAI_*`, `GEMINI_*` e `INSTAGRAM_*` ao cliente (ex.: chaves no `.env`). */
+  envPrefix: ["VITE_", "SLACK_", "OPENAI_", "GEMINI_", "INSTAGRAM_"],
   plugins: [react(), slackWebhookRelayPlugin(), mode === "development" && componentTagger()].filter(Boolean),
   server: {
     host: "::",
