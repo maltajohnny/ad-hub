@@ -1,4 +1,5 @@
 import { normalizeLoginKey } from "@/lib/loginUsername";
+import { clearFollowerSnapshots } from "@/social-pulse/storage/metrics-snapshots";
 
 export type SocialPulsePlatform = "youtube" | "instagram" | "twitter" | "tiktok";
 
@@ -285,6 +286,7 @@ export function removeMonitoredAccount(input: {
   };
   data = appendAudit(data, input.organizationId, input.actorUsername, "account_removed", `Removida: ${acc.label}`);
   persist(data);
+  clearFollowerSnapshots(input.accountId);
   return { ok: true };
 }
 

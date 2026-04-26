@@ -13,12 +13,34 @@ export type SnapshotPoint = {
 
 type Store = Record<string, SnapshotPoint[]>;
 
+function sanitizeSnapshotPoint(value: unknown): SnapshotPoint | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Partial<SnapshotPoint>;
+  if (typeof v.at !== "string") return null;
+  if (!Number.isFinite(v.followers) || (v.followers ?? 0) < 0) return null;
+  if (v.source !== "graph_api" && v.source !== "scraper") return null;
+  return {
+    at: v.at,
+    followers: Number(v.followers),
+    source: v.source,
+  };
+}
+
 function load(): Store {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return {};
-    const p = JSON.parse(raw) as Store;
-    return p && typeof p === "object" ? p : {};
+    const p = JSON.parse(raw) as unknown;
+    if (!p || typeof p !== "object") return {};
+    const clean: Store = {};
+    for (const [accountId, points] of Object.entries(p as Record<string, unknown>)) {
+      if (!Array.isArray(points)) continue;
+      const normalized = points.map(sanitizeSnapshotPoint).filter((x): x is SnapshotPoint => x !== null);
+      if (normalized.length) {
+        clean[accountId] = normalized.slice(-MAX_POINTS);
+      }
+    }
+    return clean;
   } catch {
     return {};
   }
@@ -48,11 +70,20 @@ export function appendFollowerSnapshot(
 }
 
 export function getFollowerSnapshots(accountId: string): SnapshotPoint[] {
-  return load()[accountId] ?? [];
+  const value = load()[accountId];
+  return Array.isArray(value) ? value : [];
 }
 
 export function getLastFollowersFromSnapshots(accountId: string): number | null {
   const arr = getFollowerSnapshots(accountId);
   const last = arr[arr.length - 1];
   return last ? last.followers : null;
+}
+
+export function clearFollowerSnapshots(accountId: string): void {
+  if (!accountId) return;
+  const data = load();
+  if (!(accountId in data)) return;
+  delete data[accountId];
+  persist(data);
 }
