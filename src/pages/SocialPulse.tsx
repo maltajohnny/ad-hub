@@ -159,10 +159,15 @@ export default function SocialPulse() {
     return visibleAccounts.filter((a) => a.platform === platformFilter);
   }, [visibleAccounts, platformFilter]);
 
-  const chartAccounts = useMemo(() => {
-    if (selectedAccountId === "__all__") return filteredByPlatform;
-    return filteredByPlatform.filter((a) => a.id === selectedAccountId);
+  const safeSelectedAccountId = useMemo(() => {
+    if (selectedAccountId === "__all__") return "__all__";
+    return filteredByPlatform.some((a) => a.id === selectedAccountId) ? selectedAccountId : "__all__";
   }, [filteredByPlatform, selectedAccountId]);
+
+  const chartAccounts = useMemo(() => {
+    if (safeSelectedAccountId === "__all__") return filteredByPlatform;
+    return filteredByPlatform.filter((a) => a.id === safeSelectedAccountId);
+  }, [filteredByPlatform, safeSelectedAccountId]);
 
   useEffect(() => {
     if (selectedAccountId === "__all__") return;
@@ -463,7 +468,7 @@ export default function SocialPulse() {
                 </div>
                 <div className="space-y-1.5 min-w-[200px] flex-1">
                   <Label className="text-xs">Conta no gráfico</Label>
-                    <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                    <Select value={safeSelectedAccountId} onValueChange={setSelectedAccountId}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
