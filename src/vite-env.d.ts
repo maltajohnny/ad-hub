@@ -47,8 +47,6 @@ interface ImportMetaEnv {
    * Pode usar `{user}` no path em vez de query se preferir.
    */
   readonly VITE_SOCIAL_PULSE_IG_PROXY_URL?: string;
-  /** Token central do Graph API para Social Pulse (sem input por utilizador). */
-  readonly VITE_SOCIAL_PULSE_GRAPH_ACCESS_TOKEN?: string;
 }
 
 interface ImportMeta {

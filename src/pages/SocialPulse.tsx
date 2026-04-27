@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTenant } from "@/contexts/TenantContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -70,8 +71,7 @@ import { cn } from "@/lib/utils";
 
 const PLATFORMS: SocialPulsePlatform[] = ["youtube", "instagram", "twitter", "tiktok"];
 
-const LEGACY_GRAPH_TOKEN_STORAGE_KEY = "social_pulse_graph_user_token";
-const SHARED_GRAPH_TOKEN = (import.meta.env.VITE_SOCIAL_PULSE_GRAPH_ACCESS_TOKEN ?? "").trim();
+const GRAPH_TOKEN_STORAGE_KEY = "social_pulse_graph_user_token";
 
 function extractInstagramUsername(account: MonitoredAccount): string {
   return suggestLabelFromProfileUrl(account.profileUrl, "instagram").replace(/^@/, "") || account.label.replace(/^@/, "");
@@ -123,6 +123,13 @@ export default function SocialPulse() {
   const [version, setVersion] = useState(0);
   const [metricsByAccountId, setMetricsByAccountId] = useState<Record<string, SocialMetricsPayload>>({});
   const [loadingMetrics, setLoadingMetrics] = useState(false);
+  const [graphTokenInput, setGraphTokenInput] = useState(() => {
+    try {
+      return localStorage.getItem(GRAPH_TOKEN_STORAGE_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [snapshotTick, setSnapshotTick] = useState(0);
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
@@ -158,13 +165,7 @@ export default function SocialPulse() {
 
   const refreshMetrics = useCallback(async () => {
     if (!visibleAccounts.length) return;
-    let legacyToken = "";
-    try {
-      legacyToken = localStorage.getItem(LEGACY_GRAPH_TOKEN_STORAGE_KEY) ?? "";
-    } catch {
-      legacyToken = "";
-    }
-    const token = SHARED_GRAPH_TOKEN || legacyToken.trim();
+    const token = graphTokenInput.trim() || localStorage.getItem(GRAPH_TOKEN_STORAGE_KEY) || "";
     setLoadingMetrics(true);
     try {
       const entries = await Promise.all(
@@ -208,7 +209,7 @@ export default function SocialPulse() {
     } finally {
       setLoadingMetrics(false);
     }
-  }, [visibleAccounts]);
+  }, [visibleAccounts, graphTokenInput]);
 
   useEffect(() => {
     if (visibleAccounts.length === 0) return;
@@ -412,15 +413,39 @@ export default function SocialPulse() {
               <Card className="glass-card p-4 border-border/60 space-y-3">
                 <h3 className="font-display font-semibold text-sm">Instagram — Instagram Graph API (Meta)</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Este módulo usa token central da plataforma (configurado pelo administrador) para consultas Graph API.
-                  Os utilizadores não precisam inserir token nesta tela.
+                  Token de utilizador com permissões para <code className="text-[10px]">me/accounts</code> e conta
+                  Instagram Business ligada à página. O token fica só neste browser (localStorage). Para produção,
+                  prefira backend OAuth.
                 </p>
-                {!SHARED_GRAPH_TOKEN ? (
-                  <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
-                    Token central não configurado. Defina{" "}
-                    <code className="text-[10px]">VITE_SOCIAL_PULSE_GRAPH_ACCESS_TOKEN</code> no ambiente de execução.
-                  </p>
-                ) : null}
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <Label className="text-xs">Token de acesso (Graph API)</Label>
+                    <Input
+                      type="password"
+                      autoComplete="off"
+                      value={graphTokenInput}
+                      onChange={(e) => setGraphTokenInput(e.target.value)}
+                      placeholder="EAAB… (não commite)"
+                      className="bg-secondary/50 border-border/50 font-mono text-xs"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      try {
+                        localStorage.setItem(GRAPH_TOKEN_STORAGE_KEY, graphTokenInput.trim());
+                        toast.success("Token guardado neste dispositivo.");
+                        void refreshMetrics();
+                      } catch {
+                        toast.error("Não foi possível guardar o token.");
+                      }
+                    }}
+                  >
+                    Salvar e atualizar
+                  </Button>
+                </div>
               </Card>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
