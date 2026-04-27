@@ -9,7 +9,6 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { FavoritesProvider } from "@/contexts/FavoritesContext";
 import { KanbanProvider } from "@/contexts/KanbanContext";
 import AppLayout from "@/components/AppLayout";
-import Login from "@/pages/Login";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
@@ -133,7 +132,7 @@ const LoginRoute = () => {
   const { user, orgBilling } = useAuth();
   const { tenant } = useTenant();
   if (user) return <Navigate to={defaultPathAfterLogin(user, tenant?.enabledModules, orgBilling)} replace />;
-  return <Login />;
+  return <Navigate to="/" replace state={{ openLogin: true }} />;
 };
 
 const ForgotPasswordRoute = () => {

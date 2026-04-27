@@ -66,14 +66,12 @@ export function clearPlatformModulesConfig(): void {
 
 export async function loadPlatformModulesConfig(): Promise<PlatformModulesConfig> {
   const token = getAdHubToken();
-  if (!token) return getPlatformModulesConfig();
   try {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(API_ENDPOINT, {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
       cache: "no-store",
     });
     if (!res.ok) return getPlatformModulesConfig();
@@ -89,15 +87,15 @@ export async function loadPlatformModulesConfig(): Promise<PlatformModulesConfig
 export async function savePlatformModulesConfig(next: PlatformModulesConfig): Promise<{ ok: boolean; error?: string }> {
   setPlatformModulesConfig(next);
   const token = getAdHubToken();
-  if (!token) return { ok: false, error: "Sessão inválida para guardar no servidor." };
   try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(API_ENDPOINT, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
       body: JSON.stringify(next),
       cache: "no-store",
     });
@@ -108,6 +106,9 @@ export async function savePlatformModulesConfig(next: PlatformModulesConfig): Pr
         if (j?.error) msg = j.error;
       } catch {
         // ignore
+      }
+      if (!token && (res.status === 401 || res.status === 403)) {
+        msg = "Sessão sem token JWT. Faça logout e login novamente para salvar no banco.";
       }
       return { ok: false, error: msg };
     }
