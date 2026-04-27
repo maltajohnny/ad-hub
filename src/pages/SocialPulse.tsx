@@ -164,14 +164,6 @@ export default function SocialPulse() {
     return filteredByPlatform.filter((a) => a.id === selectedAccountId);
   }, [filteredByPlatform, selectedAccountId]);
 
-  useEffect(() => {
-    if (selectedAccountId === "__all__") return;
-    const stillVisible = filteredByPlatform.some((a) => a.id === selectedAccountId);
-    if (!stillVisible) {
-      setSelectedAccountId("__all__");
-    }
-  }, [filteredByPlatform, selectedAccountId]);
-
   const refreshMetrics = useCallback(async () => {
     if (!visibleAccounts.length) return;
     let legacyToken = "";
