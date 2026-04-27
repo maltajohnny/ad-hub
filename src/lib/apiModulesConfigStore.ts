@@ -2,8 +2,10 @@ export type PlatformModulesConfig = {
   metaAppId: string;
   metaAppSecret: string;
   tiktokAppId: string;
+  tiktokClientKey: string;
   tiktokAppSecret: string;
   googleOauthClientId: string;
+  googleOauthClientSecret: string;
   instagramGraphApiToken: string;
   serpApiKey: string;
   dataForSeoLogin: string;
@@ -23,8 +25,10 @@ const EMPTY: PlatformModulesConfig = {
   metaAppId: "",
   metaAppSecret: "",
   tiktokAppId: "",
+  tiktokClientKey: "",
   tiktokAppSecret: "",
   googleOauthClientId: "",
+  googleOauthClientSecret: "",
   instagramGraphApiToken: "",
   serpApiKey: "",
   dataForSeoLogin: "",

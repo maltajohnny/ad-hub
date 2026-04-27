@@ -14,6 +14,7 @@ import {
 const SECRET_KEYS: Array<keyof PlatformModulesConfig> = [
   "metaAppSecret",
   "tiktokAppSecret",
+  "googleOauthClientSecret",
   "instagramGraphApiToken",
   "serpApiKey",
   "dataForSeoPassword",
@@ -38,8 +39,10 @@ const GROUPS: Array<{ title: string; fields: Field[] }> = [
       { key: "metaAppId", label: "Meta App ID" },
       { key: "metaAppSecret", label: "Meta App Secret" },
       { key: "tiktokAppId", label: "TikTok App ID" },
+      { key: "tiktokClientKey", label: "TikTok Client Key" },
       { key: "tiktokAppSecret", label: "TikTok App Secret" },
       { key: "googleOauthClientId", label: "Google OAuth Client ID" },
+      { key: "googleOauthClientSecret", label: "Google OAuth Client Secret" },
       { key: "instagramGraphApiToken", label: "Instagram Graph API Token" },
     ],
   },
