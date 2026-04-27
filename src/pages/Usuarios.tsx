@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -39,11 +38,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { ModulesSettingsPanel } from "@/components/users/ModulesSettingsPanel";
 
 const Usuarios = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
   const {
     user,
     orgBilling,
@@ -61,14 +57,6 @@ const Usuarios = () => {
   const { tenant } = useTenant();
   const scopeTenantId = tenant?.id ?? null;
   const platformOp = isPlatformOperator(user?.username);
-  const [activeSubmenu, setActiveSubmenu] = useState<"usuarios" | "modulos">(() =>
-    location.pathname.startsWith("/usuarios/modulos") ? "modulos" : "usuarios",
-  );
-
-  useEffect(() => {
-    if (location.pathname.startsWith("/usuarios/modulos")) setActiveSubmenu("modulos");
-    else setActiveSubmenu("usuarios");
-  }, [location.pathname]);
 
   /** Carteira de clientes da app é da org Norter; operadores AD-Hub só gerem organizações/contas, não esta tabela. */
   const showNorterClientAssignments =
@@ -461,40 +449,6 @@ const Usuarios = () => {
           </p>
         )}
       </div>
-
-      <Card className="glass-card p-2 border-border/60">
-        <div className="flex flex-wrap gap-1">
-          <Button
-            type="button"
-            size="sm"
-            variant={activeSubmenu === "usuarios" ? "default" : "secondary"}
-            className="h-8 text-xs"
-            onClick={() => {
-              setActiveSubmenu("usuarios");
-              navigate("/usuarios");
-            }}
-          >
-            Usuários
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={activeSubmenu === "modulos" ? "default" : "secondary"}
-            className="h-8 text-xs"
-            onClick={() => {
-              setActiveSubmenu("modulos");
-              navigate("/usuarios/modulos");
-            }}
-          >
-            Módulos
-          </Button>
-        </div>
-      </Card>
-
-      {activeSubmenu === "modulos" ? (
-        <ModulesSettingsPanel canEdit={platformOp} />
-      ) : (
-        <>
 
       <Card className="glass-card p-5 border-border/60">
         <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
@@ -1147,8 +1101,6 @@ const Usuarios = () => {
       <p className="text-xs text-muted-foreground">
         O login <strong className="text-foreground">{OWNER_USERNAME}</strong> é a conta proprietária e não pode ser removida.
       </p>
-        </>
-      )}
     </div>
   );
 };

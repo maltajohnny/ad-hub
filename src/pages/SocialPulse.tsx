@@ -67,7 +67,6 @@ import { getInstagramMetrics } from "@/social-pulse/services/instagram.service";
 import type { SocialMetricsPayload } from "@/social-pulse/models/social-metrics.model";
 import { getFollowerSnapshots } from "@/social-pulse/storage/metrics-snapshots";
 import { cn } from "@/lib/utils";
-import { getPlatformModulesConfig } from "@/lib/apiModulesConfigStore";
 
 const PLATFORMS: SocialPulsePlatform[] = ["youtube", "instagram", "twitter", "tiktok"];
 
@@ -170,8 +169,7 @@ export default function SocialPulse() {
     } catch {
       legacyToken = "";
     }
-    const cfgToken = getPlatformModulesConfig().instagramGraphApiToken.trim();
-    const token = SHARED_GRAPH_TOKEN || cfgToken || legacyToken.trim();
+    const token = SHARED_GRAPH_TOKEN || legacyToken.trim();
     setLoadingMetrics(true);
     try {
       const entries = await Promise.all(
@@ -422,6 +420,12 @@ export default function SocialPulse() {
                   Este módulo usa token central da plataforma (configurado pelo administrador) para consultas Graph API.
                   Os utilizadores não precisam inserir token nesta tela.
                 </p>
+                {!SHARED_GRAPH_TOKEN ? (
+                  <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+                    Token central não configurado. Defina{" "}
+                    <code className="text-[10px]">VITE_SOCIAL_PULSE_GRAPH_ACCESS_TOKEN</code> no ambiente de execução.
+                  </p>
+                ) : null}
               </Card>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">

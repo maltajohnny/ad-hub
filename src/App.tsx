@@ -258,14 +258,6 @@ const App = () => (
                         }
                       />
                       <Route
-                        path="/usuarios/modulos"
-                        element={
-                          <AdminModuleRoute module="usuarios">
-                            <Usuarios />
-                          </AdminModuleRoute>
-                        }
-                      />
-                      <Route
                         path="/organizacoes"
                         element={
                           <OrbixTeamAdminRoute>
