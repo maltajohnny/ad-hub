@@ -16,13 +16,6 @@ type NavGroup = { title: string; items: NavLeaf[] };
 
 const GROUPS: NavGroup[] = [
   {
-    title: "Negócio",
-    items: [
-      { to: "/intelli-search/business/overview", label: "Visão do negócio (avançado)" },
-      { to: "/intelli-search/intelligence/domain", label: "Inteligência de domínio (mercado)" },
-    ],
-  },
-  {
     title: "Análise de saúde",
     items: [
       { to: "/intelli-search/health/complete", label: "Análise completa" },

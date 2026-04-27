@@ -9,11 +9,6 @@ export const APP_MODULES = [
   "intelli-search",
   "ia-roi",
   "social-pulse",
-  "experimentacao",
-  "scheduling",
-  "automation",
-  "prospecting",
-  "leads",
   "usuarios",
   "configuracoes",
 ] as const;
@@ -30,11 +25,6 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   "intelli-search": "IntelliSearch",
   "ia-roi": "IA & ROI",
   "social-pulse": "Social Pulse",
-  experimentacao: "Experimentação",
-  scheduling: "Agendamento",
-  automation: "Automação",
-  prospecting: "Prospecção",
-  leads: "Centro de leads",
   usuarios: "Usuários",
   configuracoes: "Configurações",
 };
@@ -135,16 +125,11 @@ export function pathToModule(pathname: string): AppModule | null {
   if (pathname === "/board") return "board";
   if (pathname === "/clientes") return "clientes";
   if (pathname === "/clientes/favoritos") return "clientes-favoritos";
-  if (pathname === "/campanhas" || pathname.startsWith("/campanhas/")) return "campanhas";
+  if (pathname === "/campanhas") return "campanhas";
   if (pathname === "/gestao-midias") return "gestao-midias";
   if (pathname === "/intelli-search" || pathname.startsWith("/intelli-search/")) return "intelli-search";
   if (pathname === "/ia-roi") return "ia-roi";
   if (pathname === "/social-pulse" || pathname.startsWith("/social-pulse/")) return "social-pulse";
-  if (pathname === "/experimentacao" || pathname.startsWith("/experimentacao/")) return "experimentacao";
-  if (pathname === "/scheduling" || pathname.startsWith("/scheduling/")) return "scheduling";
-  if (pathname === "/automation" || pathname.startsWith("/automation/")) return "automation";
-  if (pathname === "/prospecting" || pathname.startsWith("/prospecting/")) return "prospecting";
-  if (pathname === "/leads" || pathname.startsWith("/leads/")) return "leads";
   if (pathname === "/usuarios") return "usuarios";
   if (pathname.startsWith("/configuracoes")) return "configuracoes";
   return null;
@@ -170,16 +155,6 @@ export function moduleToDefaultPath(m: AppModule): string {
       return "/ia-roi";
     case "social-pulse":
       return "/social-pulse";
-    case "experimentacao":
-      return "/experimentacao";
-    case "scheduling":
-      return "/scheduling";
-    case "automation":
-      return "/automation";
-    case "prospecting":
-      return "/prospecting";
-    case "leads":
-      return "/leads";
     case "usuarios":
       return "/usuarios";
     case "configuracoes":
