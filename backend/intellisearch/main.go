@@ -10,6 +10,7 @@ import (
 	"norter/intellisearch/internal/db"
 	"norter/intellisearch/internal/handlers"
 	"norter/intellisearch/internal/middleware"
+	"norter/intellisearch/internal/repo"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -22,6 +23,11 @@ func main() {
 		log.Printf("MySQL (OAuth persist): %v — API a correr sem base para tokens", err)
 	} else if err := adhubseed.SeedDefaultsIfEmpty(context.Background()); err != nil {
 		log.Printf("adhub seed utilizadores: %v", err)
+	}
+	if db.DB != nil {
+		if err := repo.EnsureAdsAPIKeysTable(context.Background(), db.DB); err != nil {
+			log.Printf("adhub: tabela ads_api_keys indisponível: %v", err)
+		}
 	}
 
 	port := os.Getenv("PORT")
@@ -70,6 +76,7 @@ func main() {
 	hub.Post("/password", handlers.AdHubChangePassword)
 	hub.Get("/registry", handlers.AdHubRegistry)
 	hub.Get("/organization/subscription", handlers.AdHubOrgSubscription)
+	hub.All("/platform/modules-config", handlers.AdHubPlatformModulesConfig)
 	hub.Post("/users", handlers.AdHubCreateUser)
 	hub.Patch("/users/:login", handlers.AdHubPatchUser)
 	hub.Delete("/users/:login", handlers.AdHubDeleteUser)

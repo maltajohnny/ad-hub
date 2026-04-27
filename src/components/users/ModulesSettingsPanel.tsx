@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,8 @@ import { toast } from "sonner";
 import {
   clearPlatformModulesConfig,
   getPlatformModulesConfig,
-  setPlatformModulesConfig,
+  loadPlatformModulesConfig,
+  savePlatformModulesConfig,
   type PlatformModulesConfig,
 } from "@/lib/apiModulesConfigStore";
 
@@ -75,11 +76,26 @@ const GROUPS: Array<{ title: string; fields: Field[] }> = [
 
 export function ModulesSettingsPanel({ canEdit }: { canEdit: boolean }) {
   const [cfg, setCfg] = useState<PlatformModulesConfig>(() => getPlatformModulesConfig());
+  const [loadingServerConfig, setLoadingServerConfig] = useState(true);
   const completeness = useMemo(() => {
     const total = GROUPS.flatMap((g) => g.fields).length;
     const filled = GROUPS.flatMap((g) => g.fields).filter((f) => cfg[f.key].trim().length > 0).length;
     return { total, filled };
   }, [cfg]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const fromServer = await loadPlatformModulesConfig();
+      if (!cancelled) {
+        setCfg(fromServer);
+        setLoadingServerConfig(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <Card className="glass-card p-5 border-border/60 space-y-5">
@@ -92,6 +108,7 @@ export function ModulesSettingsPanel({ canEdit }: { canEdit: boolean }) {
         <p className="text-xs text-muted-foreground mt-1">
           Preenchimento: {completeness.filled}/{completeness.total}
         </p>
+        {loadingServerConfig ? <p className="text-xs text-muted-foreground mt-1">A carregar configuração do banco...</p> : null}
       </div>
 
       {!canEdit ? (
@@ -126,9 +143,13 @@ export function ModulesSettingsPanel({ canEdit }: { canEdit: boolean }) {
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
-            onClick={() => {
-              setPlatformModulesConfig(cfg);
-              toast.success("Configuração de módulos salva.");
+            onClick={async () => {
+              const result = await savePlatformModulesConfig(cfg);
+              if (!result.ok) {
+                toast.error(`Falha ao salvar no banco: ${result.error ?? "erro desconhecido"}`);
+                return;
+              }
+              toast.success("Configuração de módulos salva no banco.");
             }}
           >
             Salvar configuração
@@ -136,10 +157,16 @@ export function ModulesSettingsPanel({ canEdit }: { canEdit: boolean }) {
           <Button
             type="button"
             variant="outline"
-            onClick={() => {
+            onClick={async () => {
               clearPlatformModulesConfig();
-              setCfg(getPlatformModulesConfig());
-              toast.success("Configuração central limpa.");
+              const empty = getPlatformModulesConfig();
+              setCfg(empty);
+              const result = await savePlatformModulesConfig(empty);
+              if (!result.ok) {
+                toast.error(`Falha ao limpar no banco: ${result.error ?? "erro desconhecido"}`);
+                return;
+              }
+              toast.success("Configuração central limpa no banco.");
             }}
           >
             Limpar tudo

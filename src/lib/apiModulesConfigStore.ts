@@ -1,3 +1,5 @@
+import { getAdHubToken } from "@/lib/adhubAuthApi";
+
 export type PlatformModulesConfig = {
   metaAppId: string;
   metaAppSecret: string;
@@ -20,6 +22,7 @@ export type PlatformModulesConfig = {
 };
 
 const STORAGE_KEY = "adhub_platform_modules_config_v1";
+const API_ENDPOINT = "/api/ad-hub/auth/platform/modules-config";
 
 const EMPTY: PlatformModulesConfig = {
   metaAppId: "",
@@ -59,5 +62,58 @@ export function setPlatformModulesConfig(next: PlatformModulesConfig): void {
 
 export function clearPlatformModulesConfig(): void {
   localStorage.removeItem(STORAGE_KEY);
+}
+
+export async function loadPlatformModulesConfig(): Promise<PlatformModulesConfig> {
+  const token = getAdHubToken();
+  if (!token) return getPlatformModulesConfig();
+  try {
+    const res = await fetch(API_ENDPOINT, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return getPlatformModulesConfig();
+    const data = (await res.json()) as Partial<PlatformModulesConfig>;
+    const merged = { ...EMPTY, ...data };
+    setPlatformModulesConfig(merged);
+    return merged;
+  } catch {
+    return getPlatformModulesConfig();
+  }
+}
+
+export async function savePlatformModulesConfig(next: PlatformModulesConfig): Promise<{ ok: boolean; error?: string }> {
+  setPlatformModulesConfig(next);
+  const token = getAdHubToken();
+  if (!token) return { ok: false, error: "Sessão inválida para guardar no servidor." };
+  try {
+    const res = await fetch(API_ENDPOINT, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(next),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try {
+        const j = (await res.json()) as { error?: string };
+        if (j?.error) msg = j.error;
+      } catch {
+        // ignore
+      }
+      return { ok: false, error: msg };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Falha de rede ao guardar no servidor." };
+  }
 }
 
