@@ -795,7 +795,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const listUsers = useCallback((): User[] => {
     return Object.values(registry)
       .map((e) => e.user)
-      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+      .sort((a, b) => {
+        const aLabel = (a.name ?? a.username ?? "").trim();
+        const bLabel = (b.name ?? b.username ?? "").trim();
+        return aLabel.localeCompare(bLabel, "pt-BR");
+      });
   }, [registry]);
 
   const setUserAllowedModules = useCallback(
