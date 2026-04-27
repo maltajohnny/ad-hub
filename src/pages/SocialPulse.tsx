@@ -463,24 +463,6 @@ export default function SocialPulse() {
                 </p>
               </Card>
 
-              {isOrgAdmin ? (
-                <Card className="glass-card p-5 border-border/60 space-y-4">
-                  <h3 className="font-display font-semibold">Adicionar perfil</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Fluxo direto no painel: adicione o perfil e ele aparece em «Contas monitoradas» logo abaixo.
-                  </p>
-                  <AddProfileFields
-                    addPlatform={addPlatform}
-                    onPlatformChange={setAddPlatform}
-                    urlInput={urlInput}
-                    onUrlChange={setUrlInput}
-                    labelInput={labelInput}
-                    onLabelChange={setLabelInput}
-                    onAdd={onAddAccount}
-                  />
-                </Card>
-              ) : null}
-
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
                 <div className="space-y-1.5 min-w-[160px]">
                   <Label className="text-xs">Plataforma</Label>
