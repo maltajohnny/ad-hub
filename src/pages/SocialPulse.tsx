@@ -122,7 +122,6 @@ export default function SocialPulse() {
   const { tenant } = useTenant();
   const orgId = user?.organizationId ?? tenant?.id ?? null;
   const isOrgAdmin = user?.role === "admin";
-  const actorUsername = typeof user?.username === "string" ? user.username.trim() : "";
 
   const [platformFilter, setPlatformFilter] = useState<SocialPulsePlatform | "all">("all");
   const [selectedAccountId, setSelectedAccountId] = useState<string>("__all__");
@@ -147,9 +146,9 @@ export default function SocialPulse() {
   }, [orgId, version]);
 
   const visibleIds = useMemo(() => {
-    if (!orgId || !user || !actorUsername) return [];
-    return getVisibleAccountIdsForUser(orgId, actorUsername, isOrgAdmin);
-  }, [orgId, user, actorUsername, isOrgAdmin, version]);
+    if (!orgId || !user) return [];
+    return getVisibleAccountIdsForUser(orgId, user.username, isOrgAdmin);
+  }, [orgId, user, isOrgAdmin, version]);
 
   const visibleAccounts = useMemo(() => {
     return allOrgAccounts.filter((a) => visibleIds.includes(a.id));
@@ -283,7 +282,7 @@ export default function SocialPulse() {
   }, [orgId, version]);
 
   const onAddAccount = () => {
-    if (!orgId || !user || !actorUsername) return;
+    if (!orgId || !user) return;
     const normalized = normalizeProfileUrl(urlInput, addPlatform);
     if (!normalized) {
       toast.error(
@@ -298,7 +297,7 @@ export default function SocialPulse() {
       profileUrl: normalized,
       platform: addPlatform,
       label: friendly,
-      actorUsername,
+      actorUsername: user.username,
     });
     if (!res.ok) {
       toast.error(res.error);
@@ -311,8 +310,8 @@ export default function SocialPulse() {
   };
 
   const onRemoveAccount = (accountId: string) => {
-    if (!orgId || !user || !actorUsername) return;
-    removeMonitoredAccount({ organizationId: orgId, accountId, actorUsername });
+    if (!orgId || !user) return;
+    removeMonitoredAccount({ organizationId: orgId, accountId, actorUsername: user.username });
     if (selectedAccountId === accountId) {
       setSelectedAccountId("__all__");
     }
@@ -321,7 +320,7 @@ export default function SocialPulse() {
   };
 
   const toggleUserAccount = (targetUsername: string, accountId: string, checked: boolean) => {
-    if (!orgId || !user || !actorUsername) return;
+    if (!orgId || !user) return;
     const key = normalizeLoginKey(targetUsername);
     const current = new Set(assignments[key] ?? []);
     if (checked) current.add(accountId);
@@ -330,7 +329,7 @@ export default function SocialPulse() {
       organizationId: orgId,
       targetUsername,
       accountIds: [...current],
-      actorUsername,
+      actorUsername: user.username,
     });
     toast.success("Permissões atualizadas.");
     refresh();
@@ -347,22 +346,6 @@ export default function SocialPulse() {
           <p className="mt-2 text-sm text-muted-foreground">
             Este módulo está disponível para contas associadas a uma organização. Inicie sessão com um utilizador da
             sua organização.
-          </p>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!actorUsername) {
-    return (
-      <div className="animate-fade-in max-w-lg">
-        <Card className="glass-card border-border/60 p-6">
-          <div className="flex items-center gap-2 text-lg font-display font-semibold">
-            <Radio className="h-5 w-5 text-primary" />
-            Social Pulse
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Não foi possível identificar o login da conta atual. Refaça o login para carregar o módulo.
           </p>
         </Card>
       </div>
