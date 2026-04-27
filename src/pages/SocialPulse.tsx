@@ -299,9 +299,6 @@ export default function SocialPulse() {
   const onRemoveAccount = (accountId: string) => {
     if (!orgId || !user) return;
     removeMonitoredAccount({ organizationId: orgId, accountId, actorUsername: user.username });
-    if (selectedAccountId === accountId) {
-      setSelectedAccountId("__all__");
-    }
     toast.success("Conta removida.");
     refresh();
   };
