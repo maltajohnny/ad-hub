@@ -131,5 +131,6 @@ if ($slackBody === false) {
 }
 
 $ok = $code >= 200 && $code < 300;
-http_response_code($code > 0 ? $code : 502);
+/** 200 sempre que o relay contactou o Slack; o código real vem em `ok` / corpo `slack`. Evita confundir 404 do Slack (webhook revogado) com relay indisponível. */
+http_response_code(200);
 echo json_encode(['ok' => $ok, 'slack' => $slackBody], JSON_UNESCAPED_UNICODE);

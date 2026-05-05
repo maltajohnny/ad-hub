@@ -29,9 +29,9 @@ RewriteRule ^ - [L]
 RewriteCond %{REQUEST_URI} ^/api/social/ [NC]
 RewriteRule ^ - [L]
 
-# Relay Slack (POST) — CORS-safe; ficheiro em api/slack-webhook.php
-RewriteCond %{REQUEST_URI} ^/api/slack-webhook/?$ [NC]
-RewriteRule ^api/slack-webhook/?$ api/slack-webhook.php [L,QSA]
+# Relay Slack (POST) — CORS-safe; /api/slack-webhook e /api/slack-webhook.php → api/slack-webhook.php
+RewriteCond %{REQUEST_URI} ^/api/slack-webhook(\.php)?/?$ [NC]
+RewriteRule ^api/slack-webhook(?:\.php)?/?$ api/slack-webhook.php [L,QSA]
 
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d

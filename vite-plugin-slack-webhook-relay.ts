@@ -168,7 +168,8 @@ function createRelayMiddleware(store: PngStore): Connect.NextHandleFunction {
             body: JSON.stringify({ text: body.text, blocks }),
           });
           const slackBody = await r.text();
-          res.statusCode = r.status;
+          /** HTTP 200 sempre que o relay correu: o cliente usa `ok`/`slack`. Slack pode devolver 404 (webhook inválido) — não confundir com relay em falta. */
+          res.statusCode = 200;
           res.setHeader("Content-Type", "application/json; charset=utf-8");
           res.end(JSON.stringify({ ok: r.ok, slack: slackBody }));
         } catch (e) {

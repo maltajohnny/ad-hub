@@ -313,8 +313,8 @@ function slackRelayUrls(): string[] {
   if (import.meta.env.DEV) {
     return ["/api/slack-webhook"];
   }
-  // Apache: ficheiro em dist/api/slack-webhook.php funciona sem depender do rewrite de /api/slack-webhook
-  return ["/api/slack-webhook.php", "/api/slack-webhook"];
+  // Mesma origem: URL sem extensão passa sempre pelo rewrite; .php como fallback se o ficheiro existir no docroot
+  return ["/api/slack-webhook", "/api/slack-webhook.php"];
 }
 
 /**

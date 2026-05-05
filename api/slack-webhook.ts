@@ -79,7 +79,8 @@ async function slackWebhookHandler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({ text: body.text, blocks }),
     });
     const slackBody = await r.text();
-    sendJson(res, r.status, { ok: r.ok, slack: slackBody });
+    /** 200: o cliente distingue falha do Slack em `ok`; não repassar 404 do Slack como “relay indisponível”. */
+    sendJson(res, 200, { ok: r.ok, slack: slackBody });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     sendJson(res, 500, { error: msg });

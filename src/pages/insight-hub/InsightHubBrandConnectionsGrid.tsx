@@ -223,7 +223,7 @@ export function InsightHubBrandConnectionsGrid({ brands }: { brands: InsightHubB
                     <Button
                       size="sm"
                       variant="secondary"
-                      className="mt-4 w-full gap-1.5 bg-white/95 text-foreground hover:bg-white"
+                      className="mt-4 w-full gap-1.5 bg-white/95 text-slate-900 hover:bg-white [&_svg]:text-slate-900"
                       asChild
                     >
                       <Link to="/clientes/insight-hub/conexoes">
@@ -286,7 +286,7 @@ export function InsightHubBrandConnectionsGrid({ brands }: { brands: InsightHubB
                         <Button
                           size="sm"
                           variant="secondary"
-                          className="w-full gap-1.5 bg-white/95 text-foreground hover:bg-white"
+                          className="w-full gap-1.5 bg-white/95 text-slate-900 hover:bg-white [&_svg]:text-slate-900"
                           onClick={() => setPickConnId(googleConn.id)}
                         >
                           <Plug className="h-3.5 w-3.5" />
@@ -297,7 +297,7 @@ export function InsightHubBrandConnectionsGrid({ brands }: { brands: InsightHubB
                         <Button
                           size="sm"
                           variant="secondary"
-                          className="w-full gap-1.5 bg-white/95 text-foreground hover:bg-white"
+                          className="w-full gap-1.5 bg-white/95 text-slate-900 hover:bg-white [&_svg]:text-slate-900"
                           disabled={!brandId || adsMut.isPending}
                           onClick={() => adsMut.mutate()}
                         >
