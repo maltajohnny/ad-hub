@@ -212,12 +212,29 @@ export function createTenant(input: {
 export function updateTenant(
   id: string,
   patch: Partial<
-    Pick<TenantRecord, "displayName" | "logoDataUrl" | "accentHex" | "enabledModules" | "browserTabTitle" | "faviconDataUrl">
+    Pick<
+      TenantRecord,
+      "slug" | "displayName" | "logoDataUrl" | "accentHex" | "enabledModules" | "browserTabTitle" | "faviconDataUrl"
+    >
   >,
 ): { ok: boolean; error?: string } {
   const list = loadRaw();
   const i = list.findIndex((t) => t.id === id);
   if (i < 0) return { ok: false, error: "Organização não encontrada." };
+  const current = list[i];
+  const nextSlugRaw = patch.slug?.trim().toLowerCase();
+  let nextSlug = current.slug;
+  if (nextSlugRaw !== undefined && nextSlugRaw !== current.slug) {
+    if (current.id === BUILTIN_NORTER_ID || current.id === BUILTIN_QTRAFFIC_ID) {
+      return { ok: false, error: "O slug das organizações padrão não pode ser alterado." };
+    }
+    const v = validateTenantSlug(nextSlugRaw);
+    if (!v.ok) return v;
+    if (list.some((t, idx) => idx !== i && t.slug === nextSlugRaw)) {
+      return { ok: false, error: "Já existe outra organização com este slug." };
+    }
+    nextSlug = nextSlugRaw;
+  }
   const enabled =
     patch.enabledModules !== undefined
       ? migrateTenantModules([...patch.enabledModules])
@@ -225,6 +242,7 @@ export function updateTenant(
   list[i] = {
     ...list[i],
     ...patch,
+    slug: nextSlug,
     enabledModules: enabled,
   };
   persist(list);
