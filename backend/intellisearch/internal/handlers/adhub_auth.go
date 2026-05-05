@@ -22,6 +22,26 @@ import (
 	"norter/intellisearch/internal/repo"
 )
 
+func authSecurityIdentifier(raw string) string {
+	v := strings.TrimSpace(strings.ToLower(raw))
+	if strings.Contains(v, "@") {
+		return repo.NormalizeEmail(v)
+	}
+	return repo.NormalizeLoginKey(v)
+}
+
+func authLockedResponse(c *fiber.Ctx, lockUntil time.Time) error {
+	retryAfterSec := int(time.Until(lockUntil).Seconds())
+	if retryAfterSec < 1 {
+		retryAfterSec = 1
+	}
+	c.Set("Retry-After", fmt.Sprintf("%d", retryAfterSec))
+	return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+		"error":      "Muitas tentativas. Tente novamente mais tarde.",
+		"retryAfter": retryAfterSec,
+	})
+}
+
 func isPlatformOperatorLogin(loginKey string) bool {
 	k := strings.ToLower(strings.TrimSpace(loginKey))
 	return k == "admin" || k == "qtrafficadmin"
@@ -107,6 +127,16 @@ func AdHubLogin(c *fiber.Ctx) error {
 	if id == "" || body.Password == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Credenciais em falta"})
 	}
+	ip := clientIP(c)
+	identifier := authSecurityIdentifier(id)
+	ua := strings.TrimSpace(c.Get("User-Agent"))
+	if identifier != "" {
+		state, err := repo.GetAuthLockState(c.Context(), "login", ip, identifier)
+		if err == nil && state.LockUntil.Valid && state.LockUntil.Time.After(time.Now().UTC()) {
+			_ = repo.RecordAuthEvent(c.Context(), "login", ip, identifier, "blocked", "active_lock", ua)
+			return authLockedResponse(c, state.LockUntil.Time)
+		}
+	}
 	var row *repo.Row
 	var err error
 	if strings.Contains(id, "@") {
@@ -116,10 +146,16 @@ func AdHubLogin(c *fiber.Ctx) error {
 		row, err = repo.GetByLoginKey(c.Context(), key)
 	}
 	if err != nil {
+		if identifier != "" {
+			_, _, _ = repo.RecordAuthFailure(c.Context(), "login", ip, identifier, "invalid_credentials", ua)
+		}
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Credenciais inválidas"})
 	}
 	key := row.LoginKey
 	if err := bcrypt.CompareHashAndPassword([]byte(row.PasswordHash), []byte(body.Password)); err != nil {
+		if identifier != "" {
+			_, _, _ = repo.RecordAuthFailure(c.Context(), "login", ip, identifier, "invalid_credentials", ua)
+		}
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Credenciais inválidas"})
 	}
 	var u map[string]interface{}
@@ -137,6 +173,7 @@ func AdHubLogin(c *fiber.Ctx) error {
 			"error": "Servidor sem ADHUB_JWT_SECRET — configure no .env",
 		})
 	}
+	_ = repo.RecordAuthSuccess(c.Context(), "login", ip, authSecurityIdentifier(key), ua)
 	return c.JSON(fiber.Map{
 		"token": token,
 		"user":  json.RawMessage(row.UserJSON),
@@ -162,14 +199,24 @@ func AdHubChangePassword(c *fiber.Ctx) error {
 	if key == "" || body.CurrentPassword == "" || body.NewPassword == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Dados em falta"})
 	}
+	ip := clientIP(c)
+	ua := strings.TrimSpace(c.Get("User-Agent"))
+	state, err := repo.GetAuthLockState(c.Context(), "change_password", ip, key)
+	if err == nil && state.LockUntil.Valid && state.LockUntil.Time.After(time.Now().UTC()) {
+		_ = repo.RecordAuthEvent(c.Context(), "change_password", ip, key, "blocked", "active_lock", ua)
+		return authLockedResponse(c, state.LockUntil.Time)
+	}
 	if len(body.NewPassword) < 6 {
+		_, _, _ = repo.RecordAuthFailure(c.Context(), "change_password", ip, key, "weak_password", ua)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Senha nova demasiado curta"})
 	}
 	row, err := repo.GetByLoginKey(c.Context(), key)
 	if err != nil {
+		_, _, _ = repo.RecordAuthFailure(c.Context(), "change_password", ip, key, "invalid_credentials", ua)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Credenciais inválidas"})
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(row.PasswordHash), []byte(body.CurrentPassword)); err != nil {
+		_, _, _ = repo.RecordAuthFailure(c.Context(), "change_password", ip, key, "invalid_credentials", ua)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Senha atual incorreta"})
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(body.NewPassword), bcrypt.DefaultCost)
@@ -186,6 +233,7 @@ func AdHubChangePassword(c *fiber.Ctx) error {
 	u["mustChangePassword"] = false
 	nextJSON, _ := json.Marshal(u)
 	_ = repo.UpdateUserJSON(c.Context(), key, nextJSON)
+	_ = repo.RecordAuthSuccess(c.Context(), "change_password", ip, key, ua)
 	return c.JSON(fiber.Map{"ok": true})
 }
 
@@ -210,11 +258,20 @@ func AdHubForgotPassword(c *fiber.Ctx) error {
 	if em == "" || !strings.Contains(em, "@") {
 		return c.JSON(okMsg)
 	}
+	ip := clientIP(c)
+	ua := strings.TrimSpace(c.Get("User-Agent"))
+	state, err := repo.GetAuthLockState(c.Context(), "forgot_password", ip, em)
+	if err == nil && state.LockUntil.Valid && state.LockUntil.Time.After(time.Now().UTC()) {
+		_ = repo.RecordAuthEvent(c.Context(), "forgot_password", ip, em, "blocked", "active_lock", ua)
+		return c.JSON(okMsg)
+	}
 	row, err := repo.GetByEmail(c.Context(), em)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			_, _, _ = repo.RecordAuthFailure(c.Context(), "forgot_password", ip, em, "unknown_email", ua)
 			return c.JSON(okMsg)
 		}
+		_, _, _ = repo.RecordAuthFailure(c.Context(), "forgot_password", ip, em, "lookup_error", ua)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao processar"})
 	}
 	var u map[string]interface{}
@@ -222,16 +279,19 @@ func AdHubForgotPassword(c *fiber.Ctx) error {
 		return c.JSON(okMsg)
 	}
 	if dis, ok := u["disabled"].(bool); ok && dis {
+		_, _, _ = repo.RecordAuthFailure(c.Context(), "forgot_password", ip, em, "disabled_user", ua)
 		return c.JSON(okMsg)
 	}
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
+		_, _, _ = repo.RecordAuthFailure(c.Context(), "forgot_password", ip, em, "token_generation_failed", ua)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao gerar token"})
 	}
 	token := hex.EncodeToString(buf)
 	exp := time.Now().UTC().Add(1 * time.Hour)
 	if err := repo.SetPasswordResetToken(c.Context(), row.LoginKey, token, exp); err != nil {
 		log.Printf("adhub forgot-password: SetPasswordResetToken: %v — execute a migração 003_password_reset.sql?", err)
+		_, _, _ = repo.RecordAuthFailure(c.Context(), "forgot_password", ip, em, "set_token_failed", ua)
 		return c.JSON(okMsg)
 	}
 	base := strings.TrimRight(strings.TrimSpace(os.Getenv("ADHUB_PUBLIC_APP_URL")), "/")
@@ -244,11 +304,13 @@ func AdHubForgotPassword(c *fiber.Ctx) error {
 	sent, mErr := mail.SendPlain(subject, bodyText, []string{em})
 	if mErr != nil {
 		log.Printf("adhub: envio SMTP falhou (%v). Link para %s: %s", mErr, em, link)
+		_ = repo.RecordAuthSuccess(c.Context(), "forgot_password", ip, em, ua)
 		return c.JSON(okMsg)
 	}
 	if !sent {
 		log.Printf("adhub: SMTP não configurado — link de recuperação para %s: %s", em, link)
 	}
+	_ = repo.RecordAuthSuccess(c.Context(), "forgot_password", ip, em, ua)
 	return c.JSON(okMsg)
 }
 
@@ -269,16 +331,27 @@ func AdHubResetPassword(c *fiber.Ctx) error {
 	if strings.TrimSpace(body.Token) == "" || body.NewPassword == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Token e nova senha são obrigatórios"})
 	}
+	ip := clientIP(c)
+	ua := strings.TrimSpace(c.Get("User-Agent"))
+	tokenID := strings.TrimSpace(body.Token)
+	state, err := repo.GetAuthLockState(c.Context(), "reset_password", ip, tokenID)
+	if err == nil && state.LockUntil.Valid && state.LockUntil.Time.After(time.Now().UTC()) {
+		_ = repo.RecordAuthEvent(c.Context(), "reset_password", ip, tokenID, "blocked", "active_lock", ua)
+		return authLockedResponse(c, state.LockUntil.Time)
+	}
 	if !adHubStrongPassword(body.NewPassword) {
+		_, _, _ = repo.RecordAuthFailure(c.Context(), "reset_password", ip, tokenID, "weak_password", ua)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Senha inválida: mínimo 6 caracteres, com maiúscula, minúscula e símbolo",
 		})
 	}
-	row, err := repo.GetByPasswordResetToken(c.Context(), body.Token)
+	row, err := repo.GetByPasswordResetToken(c.Context(), tokenID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			_, _, _ = repo.RecordAuthFailure(c.Context(), "reset_password", ip, tokenID, "invalid_token", ua)
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Link inválido ou expirado — peça um novo."})
 		}
+		_, _, _ = repo.RecordAuthFailure(c.Context(), "reset_password", ip, tokenID, "lookup_error", ua)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao validar token"})
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(body.NewPassword), bcrypt.DefaultCost)
@@ -287,6 +360,7 @@ func AdHubResetPassword(c *fiber.Ctx) error {
 	}
 	key := row.LoginKey
 	if err := repo.UpdatePassword(c.Context(), key, string(hash)); err != nil {
+		_, _, _ = repo.RecordAuthFailure(c.Context(), "reset_password", ip, tokenID, "update_failed", ua)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao gravar senha"})
 	}
 	_ = repo.ClearPasswordResetToken(c.Context(), key)
@@ -295,6 +369,7 @@ func AdHubResetPassword(c *fiber.Ctx) error {
 	u["mustChangePassword"] = false
 	nextJSON, _ := json.Marshal(u)
 	_ = repo.UpdateUserJSON(c.Context(), key, nextJSON)
+	_ = repo.RecordAuthSuccess(c.Context(), "reset_password", ip, tokenID, ua)
 	return c.JSON(fiber.Map{"ok": true})
 }
 

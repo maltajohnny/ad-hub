@@ -1,4 +1,5 @@
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import TurndownService from "turndown";
 
 marked.setOptions({ gfm: true, breaks: true });
@@ -14,7 +15,13 @@ export function markdownToHtml(md: string): string {
   const s = (md ?? "").trim();
   if (!s) return "<p></p>";
   const out = marked.parse(s) as string;
-  return out || "<p></p>";
+  if (!out) return "<p></p>";
+  const safe = DOMPurify.sanitize(out, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ["script", "iframe", "object", "embed"],
+    FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover"],
+  });
+  return safe || "<p></p>";
 }
 
 /** Converte HTML do editor para Markdown ao salvar. */

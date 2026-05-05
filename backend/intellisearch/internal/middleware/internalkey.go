@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"crypto/subtle"
 	"os"
 	"strings"
 
@@ -16,7 +17,7 @@ func RequireInternalAPIKey(c *fiber.Ctx) error {
 		return c.Next()
 	}
 	got := strings.TrimSpace(c.Get(headerInternalKey))
-	if got != want {
+	if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Defina o cabeçalho X-AdHub-Internal-Key igual a ADHUB_INTERNAL_API_KEY no servidor",
 		})

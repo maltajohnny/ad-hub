@@ -22,6 +22,7 @@ func LoadDotenv() {
 		wd = "."
 	}
 	snapshotSerp := strings.TrimSpace(os.Getenv("SERPAPI_KEY"))
+	snapshotPort := strings.TrimSpace(os.Getenv("PORT"))
 
 	paths := []string{
 		filepath.Join(wd, ".env"),
@@ -46,6 +47,12 @@ func LoadDotenv() {
 	if strings.TrimSpace(os.Getenv("SERPAPI_KEY")) == "" && snapshotSerp != "" {
 		os.Setenv("SERPAPI_KEY", snapshotSerp)
 		log.Print("intellisearch: SERPAPI_KEY restaurada (evitada sobrescrita vazia por .env intermédio)")
+	}
+	if snapshotPort != "" {
+		// Permite override de porta em runtime (ex.: restart de emergência noutra porta),
+		// mesmo quando o .env define PORT fixo.
+		os.Setenv("PORT", snapshotPort)
+		log.Printf("intellisearch: PORT preservada do ambiente (%s)", snapshotPort)
 	}
 
 	applySerpAPIKeyFromRootEnvFiles(wd)

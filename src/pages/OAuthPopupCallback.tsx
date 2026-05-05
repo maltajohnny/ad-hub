@@ -32,8 +32,12 @@ const OAuthPopupCallback = () => {
     window.setTimeout(() => {
       window.close();
       if (!hasOpener) {
-        document.body.innerHTML =
-          '<p style="font-family:system-ui;padding:2rem;text-align:center">Pode fechar esta janela e voltar à plataforma.</p>';
+        const message = document.createElement("p");
+        message.style.fontFamily = "system-ui";
+        message.style.padding = "2rem";
+        message.style.textAlign = "center";
+        message.textContent = "Pode fechar esta janela e voltar à plataforma.";
+        document.body.replaceChildren(message);
       }
     }, 80);
   }, []);

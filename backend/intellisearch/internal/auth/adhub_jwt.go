@@ -53,9 +53,13 @@ func ParseToken(token string) (*Claims, error) {
 	if err != nil {
 		return nil, err
 	}
-	tok, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (interface{}, error) {
-		return sec, nil
-	})
+	tok, err := jwt.ParseWithClaims(
+		token,
+		&Claims{},
+		func(t *jwt.Token) (interface{}, error) { return sec, nil },
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		jwt.WithIssuer(issuer),
+	)
 	if err != nil {
 		return nil, err
 	}

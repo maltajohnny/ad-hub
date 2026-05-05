@@ -15,6 +15,10 @@ import Dashboard from "@/pages/Dashboard";
 import Board from "@/pages/Board";
 import Clientes from "@/pages/Clientes";
 import ClientesFavoritos from "@/pages/ClientesFavoritos";
+import InsightHubLayout from "@/pages/insight-hub/InsightHubLayout";
+import InsightHubHome from "@/pages/insight-hub/InsightHubHome";
+import InsightHubMarcas from "@/pages/insight-hub/InsightHubMarcas";
+import InsightHubPlanos from "@/pages/insight-hub/InsightHubPlanos";
 import Campanhas from "@/pages/Campanhas";
 import GestaoMidias from "@/pages/GestaoMidias";
 import IaRoi from "@/pages/IaRoi";
@@ -184,6 +188,11 @@ const App = () => (
                     <Route element={<ProtectedLayout />}>
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/board" element={<Board />} />
+                      <Route path="/clientes/insight-hub" element={<InsightHubLayout />}>
+                        <Route index element={<InsightHubHome />} />
+                        <Route path="marcas" element={<InsightHubMarcas />} />
+                        <Route path="planos" element={<InsightHubPlanos />} />
+                      </Route>
                       <Route path="/clientes/favoritos" element={<ClientesFavoritos />} />
                       <Route path="/clientes" element={<Clientes />} />
                       <Route path="/campanhas" element={<Campanhas />} />

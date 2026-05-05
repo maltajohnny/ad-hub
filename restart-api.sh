@@ -43,6 +43,11 @@ if [ -f ".env" ]; then
   fi
 fi
 
+# Override explícito (ex.: PORT_OVERRIDE=3043 ./restart-api.sh api).
+if [ -n "${PORT_OVERRIDE:-}" ]; then
+  PORT="${PORT_OVERRIDE}"
+fi
+
 # Junta PIDs que estao em LISTEN na porta TCP (varias ferramentas — jailshell muitas vezes nao tem lsof).
 pids_listening_on_tcp_port() {
   local p="$1"
@@ -197,7 +202,25 @@ if ! free_port "$PORT"; then
   log "Segunda sequência de libertação da porta ${PORT}..."
   sleep 3
   if ! free_port "$PORT"; then
-    if [ "${SKIP_PORT_CHECK:-0}" = "1" ]; then
+    # Fallback automático opcional para portas alternativas.
+    # Ex.: PORT_FALLBACKS=3042,3043 ./restart-api.sh api
+    if [ -n "${PORT_FALLBACKS:-}" ]; then
+      old_port="$PORT"
+      for alt in $(echo "$PORT_FALLBACKS" | tr ',' ' '); do
+        alt="$(echo "$alt" | tr -d '[:space:]')"
+        [ -z "$alt" ] && continue
+        [ "$alt" = "$old_port" ] && continue
+        log "Tentando porta alternativa: ${alt}"
+        if free_port "$alt" || [ "${SKIP_PORT_CHECK:-0}" = "1" ]; then
+          PORT="$alt"
+          log "Fallback ativado: ${old_port} -> ${PORT}"
+          break
+        fi
+      done
+    fi
+    if [ "$PORT" != "${old_port:-$PORT}" ]; then
+      :
+    elif [ "${SKIP_PORT_CHECK:-0}" = "1" ]; then
       log "AVISO: porta ${PORT} não confirmada como livre — SKIP_PORT_CHECK=1, continuo na mesma."
     else
       fail "Porta ${PORT} ainda ocupada. Por SSH: cd ${APP_DIR} && fuser -k ${PORT}/tcp && fuser -k ./${BIN_NAME} && sleep 2 && ./restart-api.sh — ou SKIP_PORT_CHECK=1 ./restart-api.sh ${BIN_NAME}"
@@ -216,8 +239,8 @@ if pgrep -f "$MATCH_EXPR" >/dev/null 2>&1; then
   fail "Nao foi possivel parar o processo antigo."
 fi
 
-log "Iniciando nova instancia em background..."
-nohup "./${BIN_NAME}" >"$LOG_FILE" 2>&1 &
+log "Iniciando nova instancia em background (PORT=${PORT})..."
+nohup env PORT="${PORT}" "./${BIN_NAME}" >"$LOG_FILE" 2>&1 &
 NEW_PID=$!
 sleep 1
 

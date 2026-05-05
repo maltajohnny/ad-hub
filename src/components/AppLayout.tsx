@@ -23,6 +23,7 @@ import {
   Clapperboard,
   Activity,
   Menu,
+  LineChart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import norterSymbol from "@/assets/norter-symbol.png";
@@ -233,7 +234,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   }, [path]);
 
   const showDashSection = canSee("dashboard") || canSee("board");
-  const showClientesSection = canSee("clientes") || canSee("clientes-favoritos");
+  const showClientesSection = canSee("clientes") || canSee("clientes-favoritos") || canSee("insight-hub");
 
   useEffect(() => {
     if (!user || eff === "all") return;
@@ -248,8 +249,10 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     setActiveSlug(null);
     logout();
   };
+  const clientesAreaActive = path.startsWith("/clientes");
   const clientesListActive = path === "/clientes";
   const favoritosActive = path === "/clientes/favoritos";
+  const insightHubActive = path === "/clientes/insight-hub" || path.startsWith("/clientes/insight-hub/");
   const dashboardActive = path === "/dashboard";
   const boardActive = path === "/board";
 
@@ -258,7 +261,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   }, [path]);
 
   useEffect(() => {
-    if (path === "/clientes" || path === "/clientes/favoritos") setClientesSubOpen(true);
+    if (path.startsWith("/clientes")) setClientesSubOpen(true);
   }, [path]);
 
   return (
@@ -460,13 +463,19 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                   if (t.closest("[data-submenu-toggle]")) {
                     setClientesSubOpen((o) => !o);
                   } else {
-                    navigate(canSee("clientes") ? "/clientes" : "/clientes/favoritos");
+                    navigate(
+                      canSee("clientes")
+                        ? "/clientes"
+                        : canSee("insight-hub")
+                          ? "/clientes/insight-hub"
+                          : "/clientes/favoritos",
+                    );
                     setClientesSubOpen(true);
                   }
                 }}
                 className={cn(
                   "flex w-full min-w-0 items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all text-left",
-                  clientesListActive
+                  clientesAreaActive
                     ? "gradient-brand text-primary-foreground font-medium"
                     : "text-sidebar-foreground hover:bg-sidebar-accent",
                 )}
@@ -479,14 +488,14 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                       data-submenu-toggle
                       className={cn(
                         "inline-flex shrink-0 rounded p-0.5 -m-0.5 transition-colors",
-                        clientesListActive ? "hover:bg-primary-foreground/15" : "hover:bg-sidebar-accent/80",
+                        clientesAreaActive ? "hover:bg-primary-foreground/15" : "hover:bg-sidebar-accent/80",
                       )}
                       title={clientesSubOpen ? "Recolher submenu" : "Expandir submenu"}
                     >
                       <Layers2
                         className={cn(
                           "h-3.5 w-3.5 opacity-90",
-                          clientesListActive ? "text-primary-foreground/85" : "text-muted-foreground",
+                          clientesAreaActive ? "text-primary-foreground/85" : "text-muted-foreground",
                         )}
                         aria-hidden
                       />
@@ -495,21 +504,39 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                 )}
               </button>
             </div>
-            {clientesSubOpen && !compact && canSee("clientes-favoritos") && (
-              <button
-                id="sidebar-clientes-sub"
-                type="button"
-                onClick={() => navigate("/clientes/favoritos")}
-                className={cn(
-                  "w-full flex items-center gap-3 pl-8 pr-3 py-2 rounded-lg text-xs transition-all",
-                  favoritosActive
-                    ? "bg-sidebar-accent text-foreground font-medium"
-                    : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
+            {clientesSubOpen && !compact && (
+              <div id="sidebar-clientes-sub" className="space-y-0.5">
+                {canSee("clientes-favoritos") && (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/clientes/favoritos")}
+                    className={cn(
+                      "w-full flex items-center gap-3 pl-8 pr-3 py-2 rounded-lg text-xs transition-all",
+                      favoritosActive
+                        ? "bg-sidebar-accent text-foreground font-medium"
+                        : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
+                    )}
+                  >
+                    <Star size={15} className="flex-shrink-0 opacity-90" />
+                    <span>Favoritos</span>
+                  </button>
                 )}
-              >
-                <Star size={15} className="flex-shrink-0 opacity-90" />
-                <span>Favoritos</span>
-              </button>
+                {canSee("insight-hub") && (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/clientes/insight-hub")}
+                    className={cn(
+                      "w-full flex items-center gap-3 pl-8 pr-3 py-2 rounded-lg text-xs transition-all",
+                      insightHubActive
+                        ? "bg-sidebar-accent text-foreground font-medium"
+                        : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
+                    )}
+                  >
+                    <LineChart size={15} className="flex-shrink-0 opacity-90" />
+                    <span>Insight Hub</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
           ) : null}
