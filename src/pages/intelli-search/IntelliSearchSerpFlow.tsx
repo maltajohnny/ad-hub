@@ -216,7 +216,8 @@ export function IntelliSearchSerpFlow({ preset }: { preset: SerpFlowPreset }) {
   };
 
   const b = analysis?.business;
-  const heroImage = b?.photo_urls?.[0] ?? b?.thumbnail;
+  // Thumbnail vem do backend com prioridade a serpapi_thumbnail (URLs Google gps-proxy quebram no browser).
+  const heroImage = b?.thumbnail ?? b?.photo_urls?.[0];
 
   const showDashboard =
     cfg.layout === "dashboard" ||
@@ -515,7 +516,6 @@ export function IntelliSearchSerpFlow({ preset }: { preset: SerpFlowPreset }) {
                     alt=""
                     className="h-full w-full object-cover"
                     loading="lazy"
-                    referrerPolicy="no-referrer"
                   />
                 ) : (
                   <span className="text-xs text-muted-foreground px-4 text-center">Sem imagem na resposta da API</span>

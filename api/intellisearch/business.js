@@ -135,7 +135,8 @@ export default async function handler(req, res) {
 
     const first = results[0];
     const photos = [];
-    const thumb = str(first, "thumbnail", "");
+    const thumb =
+      str(first, "serpapi_thumbnail", "") || str(first, "thumbnail", "") || str(first, "img", "");
     if (thumb) photos.push(thumb);
 
     const business = {

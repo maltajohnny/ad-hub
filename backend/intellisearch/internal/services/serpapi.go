@@ -199,9 +199,17 @@ func mergeBusiness(local map[string]interface{}, place map[string]interface{}) m
 	if b.Category == "" {
 		b.Category = categoryText(local)
 	}
-	b.Thumbnail = str(local, "thumbnail", "img")
+	// Prefer serpapi_thumbnail: Google often returns lh3 …/gps-proxy/… URLs that 403/block
+	// in browsers; SerpAPI’s proxy URL stays embeddable.
+	b.Thumbnail = str(local, "serpapi_thumbnail")
 	if b.Thumbnail == "" {
-		b.Thumbnail = str(src, "thumbnail")
+		b.Thumbnail = str(local, "thumbnail", "img")
+	}
+	if b.Thumbnail == "" {
+		b.Thumbnail = str(src, "serpapi_thumbnail")
+	}
+	if b.Thumbnail == "" {
+		b.Thumbnail = str(src, "thumbnail", "img")
 	}
 	b.GoogleMapsURL = str(src, "link", "maps_uri", "google_maps_url", "search_link")
 	if b.GoogleMapsURL == "" {
