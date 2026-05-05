@@ -8,8 +8,15 @@ const TOKEN_KEY = "adhub_jwt";
 
 export const SERVER_MANAGED_PASSWORD = "\u0000server\u0000";
 
-function base(): string {
-  return "";
+/** Em dev, URLs relativas (proxy Vite → Go). Em build de produção, use VITE_ADHUB_API_URL se a API for noutro host. */
+export function adHubPublicApiBase(): string {
+  if (import.meta.env.DEV) return "";
+  return (import.meta.env.VITE_ADHUB_API_URL ?? "").replace(/\/$/, "");
+}
+
+export function adHubApiUrl(path: string): string {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${adHubPublicApiBase()}${p}`;
 }
 
 export function getAdHubToken(): string | null {
@@ -29,11 +36,24 @@ export function setAdHubToken(token: string | null): void {
   }
 }
 
-export async function adHubAuthPing(): Promise<{ ok: boolean; db: boolean; jwt_ready: boolean } | null> {
+/** Resposta de GET /api/ad-hub/auth/ping (campos extra são opcionais). */
+export type AdHubAuthPingResult = {
+  ok: boolean;
+  db: boolean;
+  jwt_ready: boolean;
+  hint?: string;
+  mysql_dsn_set?: boolean;
+  database?: string;
+};
+
+export async function adHubAuthPing(): Promise<AdHubAuthPingResult | null> {
   try {
-    const res = await fetch(`${base()}/api/ad-hub/auth/ping`, { cache: "no-store" });
+    const res = await fetch(adHubApiUrl("/api/ad-hub/auth/ping"), {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
     if (!res.ok) return null;
-    return (await res.json()) as { ok: boolean; db: boolean; jwt_ready: boolean };
+    return (await res.json()) as AdHubAuthPingResult;
   } catch {
     return null;
   }
@@ -65,7 +85,7 @@ export async function adHubRegister(
   | { ok: true; token: string; user: User; organization: { id: string; slug: string; displayName: string } }
   | { ok: false; error: string }
 > {
-  const res = await fetch(`${base()}/api/ad-hub/auth/register`, {
+  const res = await fetch(adHubApiUrl("/api/ad-hub/auth/register"), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(input),
@@ -98,7 +118,7 @@ export async function adHubBillingAsaasCheckout(
   | { ok: true; paymentId: string; status?: string; invoiceUrl?: string }
   | { ok: false; error: string }
 > {
-  const res = await fetch(`${base()}/api/ad-hub/billing/asaas-checkout`, {
+  const res = await fetch(adHubApiUrl("/api/ad-hub/billing/asaas-checkout"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -132,7 +152,7 @@ export async function adHubLogin(
   usernameOrEmail: string,
   password: string,
 ): Promise<{ token: string; user: User } | null> {
-  const res = await fetch(`${base()}/api/ad-hub/auth/login`, {
+  const res = await fetch(adHubApiUrl("/api/ad-hub/auth/login"), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ username: usernameOrEmail, password }),
@@ -145,7 +165,7 @@ export async function adHubLogin(
 }
 
 export async function adHubForgotPassword(email: string): Promise<{ ok: boolean; message?: string; error?: string }> {
-  const res = await fetch(`${base()}/api/ad-hub/auth/forgot-password`, {
+  const res = await fetch(adHubApiUrl("/api/ad-hub/auth/forgot-password"), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ email: email.trim() }),
@@ -161,7 +181,7 @@ export async function adHubForgotPassword(email: string): Promise<{ ok: boolean;
 }
 
 export async function adHubResetPassword(token: string, newPassword: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch(`${base()}/api/ad-hub/auth/reset-password`, {
+  const res = await fetch(adHubApiUrl("/api/ad-hub/auth/reset-password"), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ token: token.trim(), newPassword }),
@@ -181,7 +201,7 @@ export async function adHubChangePassword(
   currentPassword: string,
   newPassword: string,
 ): Promise<boolean> {
-  const res = await fetch(`${base()}/api/ad-hub/auth/password`, {
+  const res = await fetch(adHubApiUrl("/api/ad-hub/auth/password"), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ username, currentPassword, newPassword }),
@@ -193,7 +213,7 @@ export async function adHubChangePassword(
 export type RegistryEntriesPayload = Record<string, { user: User }>;
 
 export async function adHubFetchRegistry(token: string): Promise<RegistryEntriesPayload | null> {
-  const res = await fetch(`${base()}/api/ad-hub/auth/registry`, {
+  const res = await fetch(adHubApiUrl("/api/ad-hub/auth/registry"), {
     headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
@@ -204,7 +224,7 @@ export async function adHubFetchRegistry(token: string): Promise<RegistryEntries
 
 /** Plano e estado de faturação da organização (JWT). */
 export async function adHubFetchOrgSubscription(token: string): Promise<OrgBillingInfo | null> {
-  const res = await fetch(`${base()}/api/ad-hub/auth/organization/subscription`, {
+  const res = await fetch(adHubApiUrl("/api/ad-hub/auth/organization/subscription"), {
     headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
@@ -241,7 +261,7 @@ export async function adHubCreateUser(
   password: string,
   user: User,
 ): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch(`${base()}/api/ad-hub/auth/users`, {
+  const res = await fetch(adHubApiUrl("/api/ad-hub/auth/users"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -257,7 +277,7 @@ export async function adHubCreateUser(
 
 export async function adHubDeleteUser(token: string, login: string): Promise<boolean> {
   const enc = encodeURIComponent(login);
-  const res = await fetch(`${base()}/api/ad-hub/auth/users/${enc}`, {
+  const res = await fetch(adHubApiUrl(`/api/ad-hub/auth/users/${enc}`), {
     method: "DELETE",
     headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
     cache: "no-store",
@@ -271,7 +291,7 @@ export async function adHubPatchUser(
   patch: { user?: Partial<User>; newPassword?: string },
 ): Promise<boolean> {
   const enc = encodeURIComponent(login);
-  const res = await fetch(`${base()}/api/ad-hub/auth/users/${enc}`, {
+  const res = await fetch(adHubApiUrl(`/api/ad-hub/auth/users/${enc}`), {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",

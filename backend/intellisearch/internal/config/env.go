@@ -57,6 +57,10 @@ func LoadDotenv() {
 
 	applySerpAPIKeyFromRootEnvFiles(wd)
 
+	// HostGator / deploy: se JWT ou MYSQL ainda vazios, ler só estas chaves de caminhos fixos
+	// (evita godotenv.Overload no .env inteiro de minha-api e sobrescritas indesejadas).
+	applyMysqlAndJWTFromDeployEnvFiles(wd)
+
 	if strings.TrimSpace(os.Getenv("SERPAPI_KEY")) == "" {
 		log.Print("intellisearch: SERPAPI_KEY vazia — confirme a linha no .env na raiz do repositório e reinicie a API")
 	}
@@ -64,6 +68,59 @@ func LoadDotenv() {
 
 // applySerpAPIKeyFromRootEnvFiles define SERPAPI_KEY a partir do ficheiro .env na raiz do repo
 // (parse explícito), útil quando o cwd ou a ordem de Overload não refletem a chave.
+// applyMysqlAndJWTFromDeployEnvFiles preenche ADHUB_JWT_SECRET e MYSQL_DSN quando o processo
+// não arrancou com cwd em ~/apps/minha-api ou o primeiro Overload não apanhou o .env do servidor.
+func applyMysqlAndJWTFromDeployEnvFiles(wd string) {
+	jwtMissing := strings.TrimSpace(os.Getenv("ADHUB_JWT_SECRET")) == ""
+	dsnMissing := strings.TrimSpace(os.Getenv("MYSQL_DSN")) == ""
+	if !jwtMissing && !dsnMissing {
+		return
+	}
+
+	var candidates []string
+	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
+		// Ordem: deploy real primeiro
+		candidates = append(candidates,
+			filepath.Join(home, "apps", "minha-api", ".env"),
+			filepath.Join(home, "ad-hub.digital", ".env"),
+		)
+	}
+	candidates = append(candidates,
+		filepath.Join(wd, ".env"),
+		filepath.Join(wd, "..", ".env"),
+		filepath.Join(wd, "..", "..", ".env"),
+		filepath.Join(wd, "..", "..", "ad-hub.digital", ".env"),
+	)
+
+	for _, p := range candidates {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		m, err := godotenv.Parse(bytes.NewReader(data))
+		if err != nil {
+			continue
+		}
+		if jwtMissing {
+			if v := strings.TrimSpace(m["ADHUB_JWT_SECRET"]); v != "" {
+				os.Setenv("ADHUB_JWT_SECRET", v)
+				jwtMissing = false
+				log.Printf("adhub: ADHUB_JWT_SECRET carregada de %s", p)
+			}
+		}
+		if dsnMissing {
+			if v := strings.TrimSpace(m["MYSQL_DSN"]); v != "" {
+				os.Setenv("MYSQL_DSN", v)
+				dsnMissing = false
+				log.Printf("adhub: MYSQL_DSN carregada de %s", p)
+			}
+		}
+		if !jwtMissing && !dsnMissing {
+			return
+		}
+	}
+}
+
 func applySerpAPIKeyFromRootEnvFiles(wd string) {
 	if strings.TrimSpace(os.Getenv("SERPAPI_KEY")) != "" {
 		return

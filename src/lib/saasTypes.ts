@@ -5,6 +5,7 @@ export const APP_MODULES = [
   "clientes",
   "clientes-favoritos",
   "insight-hub",
+  "meu-plano",
   "campanhas",
   "gestao-midias",
   "intelli-search",
@@ -22,6 +23,7 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   clientes: "Clientes",
   "clientes-favoritos": "Clientes · Favoritos",
   "insight-hub": "Insight Hub",
+  "meu-plano": "Meu Plano",
   campanhas: "Campanhas",
   "gestao-midias": "Gestão de Mídias",
   "intelli-search": "IntelliSearch",
@@ -128,6 +130,7 @@ export function pathToModule(pathname: string): AppModule | null {
   if (pathname === "/clientes") return "clientes";
   if (pathname === "/clientes/favoritos") return "clientes-favoritos";
   if (pathname === "/clientes/insight-hub" || pathname.startsWith("/clientes/insight-hub/")) return "insight-hub";
+  if (pathname === "/meu-plano" || pathname.startsWith("/meu-plano/")) return "meu-plano";
   if (pathname === "/campanhas") return "campanhas";
   if (pathname === "/gestao-midias") return "gestao-midias";
   if (pathname === "/intelli-search" || pathname.startsWith("/intelli-search/")) return "intelli-search";
@@ -150,6 +153,8 @@ export function moduleToDefaultPath(m: AppModule): string {
       return "/clientes/favoritos";
     case "insight-hub":
       return "/clientes/insight-hub";
+    case "meu-plano":
+      return "/meu-plano";
     case "campanhas":
       return "/campanhas";
     case "gestao-midias":

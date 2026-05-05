@@ -22,6 +22,7 @@ import InsightHubPlanos from "@/pages/insight-hub/InsightHubPlanos";
 import Campanhas from "@/pages/Campanhas";
 import GestaoMidias from "@/pages/GestaoMidias";
 import IaRoi from "@/pages/IaRoi";
+import MeuPlano from "@/pages/MeuPlano";
 import Configuracoes from "@/pages/Configuracoes";
 import Usuarios from "@/pages/Usuarios";
 import NotFound from "./pages/NotFound";
@@ -228,6 +229,14 @@ const App = () => (
                         }
                       />
                       <Route path="/configuracoes" element={<Configuracoes />} />
+                      <Route
+                        path="/meu-plano"
+                        element={
+                          <AdminModuleRoute module="meu-plano">
+                            <MeuPlano />
+                          </AdminModuleRoute>
+                        }
+                      />
                       <Route
                         path="/usuarios"
                         element={

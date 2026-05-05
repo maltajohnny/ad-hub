@@ -11,6 +11,7 @@ import { Building2, Copy, Trash2, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ModuleCheckboxLabel } from "@/components/ModuleCheckboxLabel";
+import { calcModuleAddonMonthly, formatBRL } from "@/lib/moduleBilling";
 
 export default function Organizacoes() {
   const { user } = useAuth();
@@ -30,6 +31,7 @@ export default function Organizacoes() {
     () => APP_MODULES.filter((m) => mod[m]),
     [mod],
   );
+  const selectedAddon = useMemo(() => calcModuleAddonMonthly(enabledModulesList), [enabledModulesList]);
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -152,6 +154,11 @@ export default function Organizacoes() {
               </label>
             ))}
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            Estimativa de extras de módulos premium para esta org:{" "}
+            <strong className="text-foreground">{formatBRL(selectedAddon.total)}/mês</strong>. Quando um módulo já estiver
+            incluído no pacote contratado, não há custo adicional.
+          </p>
         </div>
         <Button type="button" onClick={handleCreate} className="gradient-brand text-primary-foreground">
           Criar organização

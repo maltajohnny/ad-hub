@@ -24,6 +24,7 @@ import {
   Activity,
   Menu,
   LineChart,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import norterSymbol from "@/assets/norter-symbol.png";
@@ -157,6 +158,7 @@ const menuAfterClientes: MenuItem[] = [
   },
   { icon: TrendingUp, label: "IA & ROI", path: "/ia-roi", module: "ia-roi" },
   { icon: Activity, label: "Social Pulse", path: "/social-pulse", module: "social-pulse" },
+  { icon: Receipt, label: "Meu Plano", path: "/meu-plano", module: "meu-plano", adminOnly: true },
   { icon: UsersRound, label: "Usuários", path: "/usuarios", adminOnly: true, module: "usuarios" },
   { icon: Settings, label: "Configurações", path: "/configuracoes", module: "configuracoes" },
 ];
