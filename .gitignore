@@ -38,4 +38,8 @@ card_aberto_files/
 
 # Binários de build local (Go)
 .deploy/
+
+# Dumps SQL locais (não versionar)
+dump.sql
+dump-bkp.sql
 backend/intellisearch/api
