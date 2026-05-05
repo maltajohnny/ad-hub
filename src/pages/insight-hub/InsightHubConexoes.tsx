@@ -8,6 +8,7 @@ import {
   fetchInsightHubBrands,
   fetchInsightHubConnections,
   selectConnectionAccount,
+  startGoogleAdsAuthorize,
   startMetaAuthorize,
   type GoogleAdsAccountOption,
   type InsightHubConnection,
@@ -46,7 +47,9 @@ export default function InsightHubConexoes() {
   const { search } = useLocation();
   const [open, setOpen] = useState(false);
   const [brandId, setBrandId] = useState<string>("");
-  const [provider, setProvider] = useState<"facebook_insights" | "meta_ads" | "instagram">("facebook_insights");
+  const [provider, setProvider] = useState<
+    "facebook_insights" | "meta_ads" | "instagram" | "google_ads"
+  >("facebook_insights");
   const [selectingId, setSelectingId] = useState<string | null>(null);
 
   const brandsQ = useQuery({ queryKey: ["insight-hub", "brands"], queryFn: fetchInsightHubBrands });
@@ -65,19 +68,26 @@ export default function InsightHubConexoes() {
     const errMsg = params.get("ih_error");
     if (errMsg) toast.error(`Erro OAuth: ${errMsg}`);
     if (connected) {
-      toast.success("Meta conectado — selecione a página/conta para ativar a sincronização.");
+      toast.success("Conta ligada — selecione a página, conta de anúncios ou conta Google Ads.");
       setSelectingId(connected);
       void connsQ.refetch();
     }
   }, [search, connsQ]);
 
   const startAuthMut = useMutation({
-    mutationFn: () =>
-      startMetaAuthorize({
+    mutationFn: () => {
+      if (provider === "google_ads") {
+        return startGoogleAdsAuthorize({
+          brandId,
+          returnPath: "/clientes/insight-hub/conexoes",
+        });
+      }
+      return startMetaAuthorize({
         brandId,
         provider,
         returnPath: "/clientes/insight-hub/conexoes",
-      }),
+      });
+    },
     onSuccess: (resp) => {
       window.location.assign(resp.authorizeUrl);
     },
@@ -110,7 +120,7 @@ export default function InsightHubConexoes() {
         <div>
           <h1 className="font-display text-2xl font-bold">Conexões</h1>
           <p className="text-sm text-muted-foreground">
-            Ligue contas Meta às marcas para iniciar a sincronização automática (Facebook, Instagram, Meta Ads).
+            Ligue contas Meta e Google Ads às marcas para sincronização (Facebook, Instagram, Meta Ads, Google Ads / MCC).
           </p>
         </div>
         <Button className="gap-2" onClick={() => setOpen(true)} disabled={!brandsQ.data?.length}>
@@ -128,7 +138,8 @@ export default function InsightHubConexoes() {
           <CardHeader>
             <CardTitle>Nenhuma conexão ainda</CardTitle>
             <CardDescription>
-              Clique em <strong>Nova conexão</strong> para abrir o login Meta. Depois selecione a página/Ad Account.
+              Clique em <strong>Nova conexão</strong> para Meta ou Google Ads. Depois selecione página, Ad Account ou conta
+              Google/MCC.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -198,9 +209,11 @@ export default function InsightHubConexoes() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nova conexão Meta</DialogTitle>
+            <DialogTitle>Nova conexão</DialogTitle>
             <DialogDescription>
-              Vamos abrir o consentimento Meta. Após autorizar, você volta aqui para escolher a página/Ad Account.
+              {provider === "google_ads"
+                ? "Abriremos o consentimento Google (Google Ads API). Depois escolha a conta ou cliente MCC."
+                : "Abriremos o consentimento Meta. Depois escolha a página ou Ad Account."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-2">
@@ -229,6 +242,7 @@ export default function InsightHubConexoes() {
                   <SelectItem value="facebook_insights">Facebook (Página + Insights)</SelectItem>
                   <SelectItem value="instagram">Instagram Business</SelectItem>
                   <SelectItem value="meta_ads">Meta Ads</SelectItem>
+                  <SelectItem value="google_ads">Google Ads (MCC / conta)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -241,7 +255,13 @@ export default function InsightHubConexoes() {
               onClick={() => startAuthMut.mutate()}
               disabled={!brandId || startAuthMut.isPending}
             >
-              {startAuthMut.isPending ? "A abrir Meta…" : "Abrir login Meta"}
+              {startAuthMut.isPending
+                ? provider === "google_ads"
+                  ? "A abrir Google…"
+                  : "A abrir Meta…"
+                : provider === "google_ads"
+                  ? "Abrir login Google"
+                  : "Abrir login Meta"}
             </Button>
           </DialogFooter>
         </DialogContent>
