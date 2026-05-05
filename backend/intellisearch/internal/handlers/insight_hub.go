@@ -7,30 +7,24 @@ import (
 
 	adhubjwt "norter/intellisearch/internal/auth"
 	"norter/intellisearch/internal/db"
+	"norter/intellisearch/internal/middleware"
 	"norter/intellisearch/internal/repo"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-func insightHubClaims(c *fiber.Ctx) (*adhubjwt.Claims, error) {
-	v := c.Locals("adhub_claims")
-	cl, ok := v.(*adhubjwt.Claims)
-	if !ok || cl == nil {
-		return nil, c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Sessão inválida"})
-	}
-	return cl, nil
-}
-
 // InsightHubBootstrap GET — estado do módulo, limites e uso; cria workspace quando há direito ativo.
+// Esta rota é especial: não exige direito ativo (responde "active=false" para o front mostrar planos).
 func InsightHubBootstrap(c *fiber.Ctx) error {
 	if db.DB == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "MySQL indisponível"})
 	}
-	claims, err := insightHubClaims(c)
-	if err != nil {
-		return err
+	v := c.Locals("adhub_claims")
+	cl, ok := v.(*adhubjwt.Claims)
+	if !ok || cl == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Sessão inválida"})
 	}
-	orgID := strings.TrimSpace(claims.OrgID)
+	orgID := strings.TrimSpace(cl.OrgID)
 	if orgID == "" {
 		return c.JSON(fiber.Map{"active": false, "reason": "no_organization"})
 	}
@@ -87,32 +81,13 @@ func InsightHubBootstrap(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 
-// InsightHubListBrands GET.
+// InsightHubListBrands GET — protegido por CheckInsightHubAccess (já validou direito).
 func InsightHubListBrands(c *fiber.Ctx) error {
-	if db.DB == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "MySQL indisponível"})
+	access := middleware.MustInsightHubAccess(c)
+	if access == nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Sem acesso"})
 	}
-	claims, err := insightHubClaims(c)
-	if err != nil {
-		return err
-	}
-	orgID := strings.TrimSpace(claims.OrgID)
-	if orgID == "" {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Sem organização"})
-	}
-	ctx := context.Background()
-	ent, err := repo.GetInsightHubEntitlement(ctx, orgID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Insight Hub não contratado"})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao validar módulo"})
-	}
-	if !repo.InsightHubEntitlementActive(ent.Status) {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Subscrição inativa"})
-	}
-
-	list, err := repo.ListInsightHubBrands(ctx, orgID)
+	list, err := repo.ListInsightHubBrands(c.Context(), access.OrgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao listar marcas"})
 	}
@@ -124,18 +99,11 @@ type insightHubCreateBrandBody struct {
 	Email string `json:"email"`
 }
 
-// InsightHubCreateBrand POST — admin ou gestor com módulo (JWT org).
+// InsightHubCreateBrand POST — protegido por CheckInsightHubAccess.
 func InsightHubCreateBrand(c *fiber.Ctx) error {
-	if db.DB == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "MySQL indisponível"})
-	}
-	claims, err := insightHubClaims(c)
-	if err != nil {
-		return err
-	}
-	orgID := strings.TrimSpace(claims.OrgID)
-	if orgID == "" {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Sem organização"})
+	access := middleware.MustInsightHubAccess(c)
+	if access == nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Sem acesso"})
 	}
 
 	var body insightHubCreateBrandBody
@@ -147,20 +115,8 @@ func InsightHubCreateBrand(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Nome obrigatório"})
 	}
 
-	ctx := context.Background()
-	ent, err := repo.GetInsightHubEntitlement(ctx, orgID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Insight Hub não contratado"})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao validar módulo"})
-	}
-	if !repo.InsightHubEntitlementActive(ent.Status) {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Subscrição inativa"})
-	}
-
 	id := repo.NewUUID()
-	if err := repo.InsertInsightHubBrand(ctx, orgID, id, name, body.Email); err != nil {
+	if err := repo.InsertInsightHubBrand(c.Context(), access.OrgID, id, name, body.Email); err != nil {
 		msg := err.Error()
 		if strings.Contains(msg, "limite") {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": msg})

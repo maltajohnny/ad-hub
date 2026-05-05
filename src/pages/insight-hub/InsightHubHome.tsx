@@ -226,9 +226,17 @@ export default function InsightHubHome() {
             <Button asChild variant="secondary" size="sm">
               <Link to="/clientes/insight-hub/marcas">Gerir marcas</Link>
             </Button>
-            <Button size="sm" variant="outline" disabled className={cn("gap-1")}>
-              <Sparkles className="h-3.5 w-3.5" aria-hidden />
-              Novo relatório (breve)
+            <Button asChild variant="outline" size="sm">
+              <Link to="/clientes/insight-hub/conexoes">Conectar Meta</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/clientes/insight-hub/overview" className={cn("gap-1")}>
+                <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                Ver Overview
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/clientes/insight-hub/relatorios">Criar relatório</Link>
             </Button>
           </CardContent>
         </Card>

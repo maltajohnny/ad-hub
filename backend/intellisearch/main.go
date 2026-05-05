@@ -13,6 +13,7 @@ import (
 	"norter/intellisearch/internal/handlers"
 	"norter/intellisearch/internal/middleware"
 	"norter/intellisearch/internal/repo"
+	"norter/intellisearch/internal/services"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -117,6 +118,7 @@ func main() {
 	hub.Post("/password", authLimiter, handlers.AdHubChangePassword)
 	hub.Get("/registry", handlers.AdHubRegistry)
 	hub.Get("/organization/subscription", handlers.AdHubOrgSubscription)
+	hub.Get("/billing/invoices", middleware.RequireAdHubSession, handlers.AdHubBillingInvoices)
 	hub.All("/platform/modules-config", handlers.AdHubPlatformModulesConfig)
 	hub.Post("/users", middleware.RequireAdHubAdmin, handlers.AdHubCreateUser)
 	hub.Patch("/users/:login", middleware.RequireAdHubAdmin, handlers.AdHubPatchUser)
@@ -126,14 +128,50 @@ func main() {
 	bill.Post("/asaas-checkout", handlers.AdHubBillingCheckout)
 	bill.Post("/asaas-webhook", handlers.AdHubBillingWebhook)
 
-	ih := app.Group("/api/ad-hub/insight-hub", middleware.RequireAdHubSession)
-	ih.Get("/bootstrap", handlers.InsightHubBootstrap)
+	// Bootstrap não exige direito ativo — devolve {active:false} para o front mostrar planos.
+	app.Group("/api/ad-hub/insight-hub", middleware.RequireAdHubSession).
+		Get("/bootstrap", handlers.InsightHubBootstrap)
+
+	// Callback OAuth Meta é público (Meta redireciona o browser); valida via state assinado.
+	app.Get("/api/ad-hub/insight-hub/oauth/meta/callback", handlers.InsightHubMetaCallback)
+
+	ih := app.Group("/api/ad-hub/insight-hub", middleware.RequireAdHubSession, middleware.CheckInsightHubAccess)
 	ih.Get("/brands", handlers.InsightHubListBrands)
 	ih.Post("/brands", handlers.InsightHubCreateBrand)
+
+	ih.Get("/connections", handlers.InsightHubListConnections)
+	ih.Delete("/connections/:id", handlers.InsightHubDeleteConnection)
+	ih.Get("/connections/:id/available", handlers.InsightHubMetaListAvailable)
+	ih.Post("/connections/:id/select", handlers.InsightHubMetaSelectAccount)
+
+	ih.Post("/oauth/meta/authorize", handlers.InsightHubMetaAuthorize)
+
+	ih.Get("/overview", handlers.InsightHubOverview)
+	ih.Get("/aggregate/accounts", handlers.InsightHubAggregateAccounts)
+	ih.Get("/posts", handlers.InsightHubListPosts)
+
+	ih.Get("/reports", handlers.InsightHubListReports)
+	ih.Post("/reports", handlers.InsightHubCreateReport)
+	ih.Get("/reports/:id", handlers.InsightHubGetReport)
+	ih.Delete("/reports/:id", handlers.InsightHubDeleteReport)
+
+	ih.Get("/scheduled-reports", handlers.InsightHubListScheduledReports)
+	ih.Post("/scheduled-reports", handlers.InsightHubCreateScheduledReport)
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"ok": true, "service": "intellisearch"})
 	})
+
+	if db.DB != nil {
+		// Scheduler periódico para sync incremental de conexões Insight Hub.
+		interval := 60 * time.Second
+		if v := strings.TrimSpace(os.Getenv("INSIGHT_HUB_SCHEDULER_INTERVAL_SECONDS")); v != "" {
+			if secs, err := time.ParseDuration(v + "s"); err == nil && secs > 0 {
+				interval = secs
+			}
+		}
+		services.StartInsightHubScheduler(interval, 5)
+	}
 
 	log.Printf("API a ouvir em :%s — /api/intellisearch/*, /api/ad-platform/*, /api/ad-hub/auth/*, /api/ad-hub/insight-hub/*", port)
 	log.Fatal(app.Listen(":" + port))

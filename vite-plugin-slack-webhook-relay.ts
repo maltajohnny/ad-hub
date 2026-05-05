@@ -110,7 +110,9 @@ function budgetCompositeGetMiddleware(store: PngStore): Connect.NextHandleFuncti
 function createRelayMiddleware(store: PngStore): Connect.NextHandleFunction {
   return (req, res, next) => {
     const path = req.url?.split("?")[0] ?? "";
-    if (path !== "/api/slack-webhook" || req.method !== "POST") {
+    const isSlackRelay =
+      req.method === "POST" && (path === "/api/slack-webhook" || path === "/api/slack-webhook.php");
+    if (!isSlackRelay) {
       next();
       return;
     }

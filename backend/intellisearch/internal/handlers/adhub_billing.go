@@ -250,6 +250,13 @@ func AdHubBillingCheckout(c *fiber.Ctx) error {
 	}
 	_ = repo.UpdateOrgSubscriptionBilling(ctx, claims.OrgID, body.PlanID, period, "pending", custResp.ID, seatsCol)
 
+	amountCents := int(round2Go(total*100) + 0.5)
+	dueAt := time.Now().UTC()
+	_, _ = repo.UpsertBillingInvoice(
+		ctx, claims.OrgID, payResp.ID, "", truncateStr(body.PlanTitle, 250),
+		amountCents, "BRL", strings.ToLower(strings.TrimSpace(payResp.Status)), &dueAt, nil, payResp.InvoiceURL,
+	)
+
 	return c.JSON(fiber.Map{
 		"ok":         true,
 		"paymentId":  payResp.ID,
@@ -324,6 +331,12 @@ func AdHubBillingWebhook(c *fiber.Ctx) error {
 		seatsUpdate = 0
 	}
 	_ = repo.UpdateOrgSubscriptionBilling(ctx, orgID, planSlug, period, "active", cust, seatsUpdate)
+
+	now := time.Now().UTC()
+	_, _ = repo.UpsertBillingInvoice(
+		ctx, orgID, payload.Payment.ID, "", "Plano "+planSlug,
+		0, "BRL", "paid", nil, &now, "",
+	)
 
 	return c.JSON(fiber.Map{"ok": true})
 }

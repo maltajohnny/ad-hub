@@ -23,6 +23,10 @@ func LoadDotenv() {
 	}
 	snapshotSerp := strings.TrimSpace(os.Getenv("SERPAPI_KEY"))
 	snapshotPort := strings.TrimSpace(os.Getenv("PORT"))
+	// Preserva valores injetados por env-cmd (ex.: `.env.local`) quando o `.env` da PRD
+	// define estas chaves como vazias (o godotenv.Overload sobrescreve por padrão).
+	snapshotMysqlDsn := strings.TrimSpace(os.Getenv("MYSQL_DSN"))
+	snapshotJwtSecret := strings.TrimSpace(os.Getenv("ADHUB_JWT_SECRET"))
 
 	paths := []string{
 		filepath.Join(wd, ".env"),
@@ -47,6 +51,14 @@ func LoadDotenv() {
 	if strings.TrimSpace(os.Getenv("SERPAPI_KEY")) == "" && snapshotSerp != "" {
 		os.Setenv("SERPAPI_KEY", snapshotSerp)
 		log.Print("intellisearch: SERPAPI_KEY restaurada (evitada sobrescrita vazia por .env intermédio)")
+	}
+	if strings.TrimSpace(os.Getenv("MYSQL_DSN")) == "" && snapshotMysqlDsn != "" {
+		os.Setenv("MYSQL_DSN", snapshotMysqlDsn)
+		log.Print("intellisearch: MYSQL_DSN restaurada (evitada sobrescrita vazia por .env intermédio)")
+	}
+	if strings.TrimSpace(os.Getenv("ADHUB_JWT_SECRET")) == "" && snapshotJwtSecret != "" {
+		os.Setenv("ADHUB_JWT_SECRET", snapshotJwtSecret)
+		log.Print("intellisearch: ADHUB_JWT_SECRET restaurada (evitada sobrescrita vazia por .env intermédio)")
 	}
 	if snapshotPort != "" {
 		// Permite override de porta em runtime (ex.: restart de emergência noutra porta),

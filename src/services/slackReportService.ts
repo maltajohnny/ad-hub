@@ -305,9 +305,16 @@ export function buildSlackBlocks(r: TrafficPerformanceReport, options?: BuildSla
 export type SendReportResult = { ok: true } | { ok: false; error: string };
 
 /** No browser o Slack bloqueia CORS; o envio passa pelo relay do Vite ou por `VITE_SLACK_RELAY_URL`. */
-function slackRelayUrl(): string {
+function slackRelayUrls(): string[] {
   const base = import.meta.env.VITE_SLACK_RELAY_URL?.trim().replace(/\/$/, "") ?? "";
-  return `${base}/api/slack-webhook`;
+  if (base) {
+    return [`${base}/api/slack-webhook`];
+  }
+  if (import.meta.env.DEV) {
+    return ["/api/slack-webhook"];
+  }
+  // Apache: ficheiro em dist/api/slack-webhook.php funciona sem depender do rewrite de /api/slack-webhook
+  return ["/api/slack-webhook.php", "/api/slack-webhook"];
 }
 
 /**
@@ -334,18 +341,26 @@ export async function sendReportToSlack(
 
   try {
     if (useBrowserRelay) {
-      const res = await fetch(slackRelayUrl(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ webhookUrl: url, ...body }),
-      });
-      const raw = await res.text().catch(() => "");
+      const urls = slackRelayUrls();
+      let res!: Response;
+      let raw = "";
+      for (let i = 0; i < urls.length; i++) {
+        const relayUrl = urls[i];
+        res = await fetch(relayUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ webhookUrl: url, ...body }),
+        });
+        raw = await res.text().catch(() => "");
+        if (res.ok) break;
+        if (res.status !== 404 || i === urls.length - 1) break;
+      }
       if (!res.ok) {
         if (res.status === 404) {
           return {
             ok: false,
             error:
-              "Relay Slack indisponível (404). Em desenvolvimento use `npm run dev` ou `npm run preview`. Em hospedagem estática, faça deploy de `public/api/slack-webhook.php` e da regra no `.htaccess`, ou defina VITE_SLACK_RELAY_URL com a URL base do relay.",
+              "Relay Slack indisponível (404). Confirme que `dist/api/slack-webhook.php` está no servidor; em dev use `npm run dev`. Opcional: `VITE_SLACK_RELAY_URL` com a URL base do relay (ex.: Vercel).",
           };
         }
         try {

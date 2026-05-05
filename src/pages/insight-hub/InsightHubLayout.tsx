@@ -1,6 +1,17 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Home, Building2, CreditCard, LayoutGrid } from "lucide-react";
+import {
+  Home,
+  Building2,
+  CreditCard,
+  LayoutGrid,
+  LineChart,
+  ImageIcon,
+  Repeat,
+  FileBarChart,
+  CalendarClock,
+  Plug,
+} from "lucide-react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -13,12 +24,20 @@ import {
 const NAV = [
   { to: "/clientes/insight-hub", label: "Início", icon: Home, end: true },
   { to: "/clientes/insight-hub/marcas", label: "Marcas", icon: Building2 },
+  { to: "/clientes/insight-hub/conexoes", label: "Conexões", icon: Plug },
+  { to: "/clientes/insight-hub/overview", label: "Overview", icon: LineChart },
+  { to: "/clientes/insight-hub/posts", label: "Posts", icon: ImageIcon },
+  { to: "/clientes/insight-hub/comparativo", label: "Comparativo", icon: Repeat },
+  { to: "/clientes/insight-hub/relatorios", label: "Relatórios", icon: FileBarChart },
+  { to: "/clientes/insight-hub/agendamentos", label: "Agendamentos", icon: CalendarClock },
   { to: "/clientes/insight-hub/planos", label: "Planos & limites", icon: CreditCard },
 ] as const;
 
 function navSelectValue(pathname: string): string {
-  if (pathname.startsWith("/clientes/insight-hub/planos")) return "/clientes/insight-hub/planos";
-  if (pathname.startsWith("/clientes/insight-hub/marcas")) return "/clientes/insight-hub/marcas";
+  for (const item of NAV) {
+    if (item.to === "/clientes/insight-hub") continue;
+    if (pathname.startsWith(item.to)) return item.to;
+  }
   return "/clientes/insight-hub";
 }
 

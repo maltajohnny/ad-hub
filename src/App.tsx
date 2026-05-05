@@ -19,6 +19,12 @@ import InsightHubLayout from "@/pages/insight-hub/InsightHubLayout";
 import InsightHubHome from "@/pages/insight-hub/InsightHubHome";
 import InsightHubMarcas from "@/pages/insight-hub/InsightHubMarcas";
 import InsightHubPlanos from "@/pages/insight-hub/InsightHubPlanos";
+import InsightHubConexoes from "@/pages/insight-hub/InsightHubConexoes";
+import InsightHubOverview from "@/pages/insight-hub/InsightHubOverview";
+import InsightHubPosts from "@/pages/insight-hub/InsightHubPosts";
+import InsightHubComparativo from "@/pages/insight-hub/InsightHubComparativo";
+import InsightHubRelatorios from "@/pages/insight-hub/InsightHubRelatorios";
+import InsightHubAgendamentos from "@/pages/insight-hub/InsightHubAgendamentos";
 import Campanhas from "@/pages/Campanhas";
 import GestaoMidias from "@/pages/GestaoMidias";
 import IaRoi from "@/pages/IaRoi";
@@ -30,6 +36,7 @@ import OAuthPopupCallback from "@/pages/OAuthPopupCallback";
 import Landing from "@/pages/Landing";
 import Planos from "@/pages/Planos";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
+import DataDeletion from "@/pages/DataDeletion";
 import Organizacoes from "@/pages/Organizacoes";
 import IntelliSearchLayout from "@/pages/IntelliSearch";
 import IntelliSearchCompleteAnalysis from "@/pages/intelli-search/IntelliSearchCompleteAnalysis";
@@ -184,6 +191,7 @@ const App = () => (
                     <Route path="/oauth/popup-callback" element={<OAuthPopupCallback />} />
                     <Route path="/planos" element={<Planos />} />
                     <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                    <Route path="/data-deletion" element={<DataDeletion />} />
                     <Route path="/politica-de-privacidade" element={<Navigate to="/privacy-policy" replace />} />
 
                     <Route element={<ProtectedLayout />}>
@@ -192,6 +200,12 @@ const App = () => (
                       <Route path="/clientes/insight-hub" element={<InsightHubLayout />}>
                         <Route index element={<InsightHubHome />} />
                         <Route path="marcas" element={<InsightHubMarcas />} />
+                        <Route path="conexoes" element={<InsightHubConexoes />} />
+                        <Route path="overview" element={<InsightHubOverview />} />
+                        <Route path="posts" element={<InsightHubPosts />} />
+                        <Route path="comparativo" element={<InsightHubComparativo />} />
+                        <Route path="relatorios" element={<InsightHubRelatorios />} />
+                        <Route path="agendamentos" element={<InsightHubAgendamentos />} />
                         <Route path="planos" element={<InsightHubPlanos />} />
                       </Route>
                       <Route path="/clientes/favoritos" element={<ClientesFavoritos />} />
