@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Link } from "react-router-dom";
 import { Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { InsightHubBrandConnectionsGrid } from "@/pages/insight-hub/InsightHubBrandConnectionsGrid";
 
 export default function InsightHubMarcas() {
   const qc = useQueryClient();
@@ -112,6 +113,8 @@ export default function InsightHubMarcas() {
           )}
         </CardContent>
       </Card>
+
+      {list.data?.length ? <InsightHubBrandConnectionsGrid brands={list.data} /> : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

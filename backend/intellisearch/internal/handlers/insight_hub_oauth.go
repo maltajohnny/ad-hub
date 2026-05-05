@@ -175,6 +175,7 @@ func InsightHubMetaSelectAccount(c *fiber.Ctx) error {
 		ExternalAccountID string `json:"externalAccountId"`
 		DisplayLabel      string `json:"displayLabel"`
 		PageAccessToken   string `json:"pageAccessToken,omitempty"` // se for página, salvar token específico
+		LoginCustomerID   string `json:"loginCustomerId,omitempty"` // Google Ads MCC — cabeçalho login-customer-id
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "JSON inválido"})
@@ -195,7 +196,15 @@ func InsightHubMetaSelectAccount(c *fiber.Ctx) error {
 			}
 		}
 	}
-	if _, err := repo.UpsertInsightHubConnection(ctx, access.OrgID, brandID, provider, body.ExternalAccountID, body.DisplayLabel, finalTokenRef, "", "connected"); err != nil {
+	scopesJSON := ""
+	if strings.TrimSpace(provider) == "google_ads" {
+		lc := strings.TrimSpace(body.LoginCustomerID)
+		if lc == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "loginCustomerId obrigatório para Google Ads (conta MCC ou a própria conta)"})
+		}
+		scopesJSON = services.GoogleAdsScopesJSON(lc)
+	}
+	if _, err := repo.UpsertInsightHubConnection(ctx, access.OrgID, brandID, provider, body.ExternalAccountID, body.DisplayLabel, finalTokenRef, scopesJSON, "connected"); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Erro ao guardar seleção"})
 	}
 	if err := repo.EnsureInsightHubSyncState(ctx, access.OrgID, brandID, id, 30*time.Second); err != nil {
@@ -241,6 +250,12 @@ func InsightHubMetaListAvailable(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": err.Error()})
 		}
 		return c.JSON(fiber.Map{"adAccounts": accs})
+	case "google_ads":
+		accs, err := services.ListAccessibleGoogleAdsCustomers(ctx, token)
+		if err != nil {
+			return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(fiber.Map{"googleAdsAccounts": accs})
 	}
 	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "provider não suportado"})
 }

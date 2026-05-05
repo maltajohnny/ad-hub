@@ -139,6 +139,14 @@ export type MetaAdAccountOption = {
   account_status?: number;
 };
 
+export type GoogleAdsAccountOption = {
+  id: string;
+  name: string;
+  manager: boolean;
+  loginCustomerId: string;
+  hint?: string;
+};
+
 function authHeaders(): HeadersInit {
   const t = getAdHubToken();
   const h: Record<string, string> = { Accept: "application/json" };
@@ -200,14 +208,23 @@ export async function deleteInsightHubConnection(id: string): Promise<void> {
   });
 }
 
-export type ConnectionAvailable = { pages?: MetaPageOption[]; adAccounts?: MetaAdAccountOption[] };
+export type ConnectionAvailable = {
+  pages?: MetaPageOption[];
+  adAccounts?: MetaAdAccountOption[];
+  googleAdsAccounts?: GoogleAdsAccountOption[];
+};
 export async function fetchConnectionAvailable(id: string): Promise<ConnectionAvailable> {
   return ihFetch<ConnectionAvailable>(`/api/ad-hub/insight-hub/connections/${encodeURIComponent(id)}/available`);
 }
 
 export async function selectConnectionAccount(
   id: string,
-  body: { externalAccountId: string; displayLabel: string; pageAccessToken?: string },
+  body: {
+    externalAccountId: string;
+    displayLabel: string;
+    pageAccessToken?: string;
+    loginCustomerId?: string;
+  },
 ): Promise<{ ok: boolean }> {
   return ihFetch<{ ok: boolean }>(`/api/ad-hub/insight-hub/connections/${encodeURIComponent(id)}/select`, {
     method: "POST",
@@ -223,6 +240,18 @@ export async function startMetaAuthorize(body: {
   redirectUri?: string;
 }): Promise<{ state: string; authorizeUrl: string }> {
   return ihFetch<{ state: string; authorizeUrl: string }>("/api/ad-hub/insight-hub/oauth/meta/authorize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function startGoogleAdsAuthorize(body: {
+  brandId: string;
+  returnPath?: string;
+  redirectUri?: string;
+}): Promise<{ state: string; authorizeUrl: string }> {
+  return ihFetch<{ state: string; authorizeUrl: string }>("/api/ad-hub/insight-hub/oauth/google-ads/authorize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

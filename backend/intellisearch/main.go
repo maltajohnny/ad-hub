@@ -134,6 +134,7 @@ func main() {
 
 	// Callback OAuth Meta é público (Meta redireciona o browser); valida via state assinado.
 	app.Get("/api/ad-hub/insight-hub/oauth/meta/callback", handlers.InsightHubMetaCallback)
+	app.Get("/api/ad-hub/insight-hub/oauth/google-ads/callback", handlers.InsightHubGoogleAdsCallback)
 
 	ih := app.Group("/api/ad-hub/insight-hub", middleware.RequireAdHubSession, middleware.CheckInsightHubAccess)
 	ih.Get("/brands", handlers.InsightHubListBrands)
@@ -145,6 +146,7 @@ func main() {
 	ih.Post("/connections/:id/select", handlers.InsightHubMetaSelectAccount)
 
 	ih.Post("/oauth/meta/authorize", handlers.InsightHubMetaAuthorize)
+	ih.Post("/oauth/google-ads/authorize", handlers.InsightHubGoogleAdsAuthorize)
 
 	ih.Get("/overview", handlers.InsightHubOverview)
 	ih.Get("/aggregate/accounts", handlers.InsightHubAggregateAccounts)

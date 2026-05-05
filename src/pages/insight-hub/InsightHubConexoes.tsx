@@ -9,6 +9,7 @@ import {
   fetchInsightHubConnections,
   selectConnectionAccount,
   startMetaAuthorize,
+  type GoogleAdsAccountOption,
   type InsightHubConnection,
   type MetaAdAccountOption,
   type MetaPageOption,
@@ -37,6 +38,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   facebook_insights: "Facebook (Página + Insights)",
   meta_ads: "Meta Ads (Ad Account)",
   instagram: "Instagram Business",
+  google_ads: "Google Ads",
 };
 
 export default function InsightHubConexoes() {
@@ -279,8 +281,10 @@ function SelectAccountDialog({
     mutationFn: () => {
       const pages = q.data?.pages ?? [];
       const ads = q.data?.adAccounts ?? [];
+      const gAds = q.data?.googleAdsAccounts ?? [];
       const page = pages.find((p) => p.id === chosen);
       const acc = ads.find((a) => a.id === chosen || a.account_id === chosen);
+      const ga = gAds.find((a) => `${a.loginCustomerId}:${a.id}` === chosen);
       if (page) {
         return selectConnectionAccount(connectionId as string, {
           externalAccountId: page.id,
@@ -292,6 +296,13 @@ function SelectAccountDialog({
         return selectConnectionAccount(connectionId as string, {
           externalAccountId: `act_${acc.account_id}`,
           displayLabel: acc.name ?? acc.account_id,
+        });
+      }
+      if (ga) {
+        return selectConnectionAccount(connectionId as string, {
+          externalAccountId: ga.id,
+          displayLabel: ga.name + (ga.manager ? " · MCC" : "") + (ga.hint === "sub" ? " · via MCC" : ""),
+          loginCustomerId: ga.loginCustomerId,
         });
       }
       return Promise.reject(new Error("Selecione uma conta"));
@@ -306,6 +317,7 @@ function SelectAccountDialog({
 
   const pages: MetaPageOption[] = q.data?.pages ?? [];
   const ads: MetaAdAccountOption[] = q.data?.adAccounts ?? [];
+  const googleAds: GoogleAdsAccountOption[] = q.data?.googleAdsAccounts ?? [];
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -349,6 +361,22 @@ function SelectAccountDialog({
                   {ads.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
                       {(a.name ?? a.account_id) + (a.currency ? ` · ${a.currency}` : "")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : googleAds.length ? (
+            <div className="grid gap-2">
+              <Label>Contas Google Ads / MCC</Label>
+              <Select value={chosen} onValueChange={setChosen}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {googleAds.map((a) => (
+                    <SelectItem key={`${a.loginCustomerId}:${a.id}`} value={`${a.loginCustomerId}:${a.id}`}>
+                      {a.name} ({a.id}){a.manager ? " · gestor" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
