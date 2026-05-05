@@ -49,9 +49,13 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      # SLACK_WEBHOOK_URL (secret): Incoming Webhook incorporado no bundle (fallback global).
+      # Alternativa: webhook só nas definições do cliente na app (localStorage), sem variável no CI.
       - name: Build (Vite)
         env:
           VITE_INTELLISEARCH_API_URL: ${{ vars.VITE_INTELLISEARCH_API_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          VITE_SLACK_RELAY_URL: ${{ vars.VITE_SLACK_RELAY_URL }}
         run: npm run build
 
       # Front (Vite): pasta = Document Root do domínio (no teu caso: public_html/)
