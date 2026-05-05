@@ -170,7 +170,8 @@ async function ihFetch<T>(path: string, init?: RequestInit): Promise<T> {
       /* ignore */
     }
     if (res.status === 404 && !msg) {
-      msg = "Rota Insight Hub não encontrada (HTTP 404). Faça deploy do binário Go com as rotas atualizadas.";
+      msg =
+        "Insight Hub (HTTP 404): atualize o binário Go **e** o ficheiro `public/api/ad-hub/proxy.php` no servidor (rewrite pode enviar o caminho errado ao Go). Faça deploy completo do `dist/` + API.";
     }
     throw new Error(msg || `HTTP ${res.status}`);
   }

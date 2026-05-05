@@ -31,7 +31,38 @@ function adhub_proxy_bind_extra_urls(string $envKey): array
     return $out;
 }
 
-$uri = $_SERVER['REQUEST_URI'] ?? '/';
+/**
+ * URI efetiva do pedido ao Go. Com RewriteRule → proxy.php, REQUEST_URI pode vir como
+ * /api/ad-hub/proxy.php e o Go recebe 404; REDIRECT_URL guarda o caminho real em muitos hosts.
+ */
+function adhub_effective_request_uri(): string
+{
+    $uri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
+    $redirect = (string) ($_SERVER['REDIRECT_URL'] ?? '');
+    if (
+        $redirect !== ''
+        && strncmp($redirect, '/api/ad-hub/', strlen('/api/ad-hub/')) === 0
+        && strpos($redirect, 'proxy.php') === false
+    ) {
+        $uri = $redirect;
+        $qs = (string) ($_SERVER['QUERY_STRING'] ?? '');
+        if ($qs !== '' && strpos($uri, '?') === false) {
+            $uri .= '?' . $qs;
+        }
+        return $uri;
+    }
+    $orig = (string) ($_SERVER['HTTP_X_ORIGINAL_URL'] ?? '');
+    if (
+        $orig !== ''
+        && strncmp($orig, '/api/ad-hub/', strlen('/api/ad-hub/')) === 0
+        && strpos($orig, 'proxy.php') === false
+    ) {
+        return $orig;
+    }
+    return $uri;
+}
+
+$uri = adhub_effective_request_uri();
 if (strpos($uri, '/api/ad-hub') !== 0) {
     http_response_code(404);
     header('Content-Type: application/json; charset=utf-8');
