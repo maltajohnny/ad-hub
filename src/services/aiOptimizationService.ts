@@ -1,7 +1,7 @@
 /**
  * Análise de performance de marketing via Google Gemini.
  * Modelo: `GEMINI_MODEL` no `.env`, ou `gemini-2.5-flash`.
- * Chave: `GEMINI_API_KEY`. `POST` para
+ * Chave: `GEMINI_API_KEY` ou `VITE_GEMINI_API_KEY`. `POST` para
  * `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=<chave>`.
  */
 import type { ChannelMetrics, FunnelMetrics, TrafficPerformanceReport } from "@/services/slackReportService";
