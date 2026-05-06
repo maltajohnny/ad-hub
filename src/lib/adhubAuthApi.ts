@@ -8,15 +8,55 @@ const TOKEN_KEY = "adhub_jwt";
 
 export const SERVER_MANAGED_PASSWORD = "\u0000server\u0000";
 
-/** Em dev, URLs relativas (proxy Vite → Go). Em build de produção, use VITE_ADHUB_API_URL se a API for noutro host. */
+/**
+ * Em dev, URLs relativas (proxy Vite → Go). Em produção, `VITE_ADHUB_API_URL` se a API for noutro host.
+ * Se o build incluir por engano `http://localhost:3041` e o utilizador abrir o site público, ignoramos —
+ * assim o browser usa o mesmo origin (`/api/ad-hub/...`) em vez de falhar em silêncio.
+ */
 export function adHubPublicApiBase(): string {
   if (import.meta.env.DEV) return "";
-  return (import.meta.env.VITE_ADHUB_API_URL ?? "").replace(/\/$/, "");
+  const raw = (import.meta.env.VITE_ADHUB_API_URL ?? "").trim().replace(/\/$/, "");
+  if (!raw) return "";
+  if (typeof window !== "undefined") {
+    try {
+      const u = new URL(raw);
+      const apiLocal = u.hostname === "localhost" || u.hostname === "127.0.0.1";
+      const pageLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      if (apiLocal && !pageLocal) return "";
+    } catch {
+      /* ignore bad env */
+    }
+  }
+  return raw;
 }
 
 export function adHubApiUrl(path: string): string {
   const p = path.startsWith("/") ? path : `/${path}`;
   return `${adHubPublicApiBase()}${p}`;
+}
+
+/** URL absoluta do ping (para mensagens de erro e diagnóstico). */
+export function adHubAuthPingAbsoluteUrl(): string {
+  const rel = adHubApiUrl("/api/ad-hub/auth/ping");
+  if (/^https?:\/\//i.test(rel)) return rel;
+  if (typeof window !== "undefined") {
+    try {
+      return new URL(rel, window.location.origin).href;
+    } catch {
+      return rel;
+    }
+  }
+  return rel;
+}
+
+function adHubPingFetchIsCrossOrigin(fetchUrl: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const resolved = new URL(fetchUrl, window.location.href);
+    return resolved.origin !== window.location.origin;
+  } catch {
+    return false;
+  }
 }
 
 export function getAdHubToken(): string | null {
@@ -46,25 +86,81 @@ export type AdHubAuthPingResult = {
   database?: string;
 };
 
-export async function adHubAuthPing(): Promise<AdHubAuthPingResult | null> {
+/** Falha antes de obter JSON do ping (rede, CORS, HTTP ≠ 2xx, HTML em vez de JSON). */
+export type AdHubAuthPingTransportError = {
+  transportError: true;
+  url: string;
+  kind: "network" | "http" | "not_json";
+  httpStatus?: number;
+  bodyPreview?: string;
+  hint?: string;
+};
+
+export async function adHubAuthPing(): Promise<AdHubAuthPingResult | AdHubAuthPingTransportError> {
+  const displayUrl = adHubAuthPingAbsoluteUrl();
+  const fetchPath = adHubApiUrl("/api/ad-hub/auth/ping");
+  const crossOrigin = adHubPingFetchIsCrossOrigin(fetchPath);
+
+  let res: Response;
   try {
-    const res = await fetch(adHubApiUrl("/api/ad-hub/auth/ping"), {
+    res = await fetch(fetchPath, {
       cache: "no-store",
-      credentials: "same-origin",
+      credentials: crossOrigin ? "omit" : "same-origin",
+      mode: "cors",
     });
-    if (!res.ok) return null;
-    return (await res.json()) as AdHubAuthPingResult;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      transportError: true,
+      url: displayUrl,
+      kind: "network",
+      hint: msg,
+    };
+  }
+
+  const text = await res.text();
+  if (!res.ok) {
+    return {
+      transportError: true,
+      url: displayUrl,
+      kind: "http",
+      httpStatus: res.status,
+      bodyPreview: text.trim().slice(0, 240),
+    };
+  }
+
+  const trimmed = text.trim();
+  if (trimmed.startsWith("<") || (trimmed.length > 0 && !trimmed.startsWith("{"))) {
+    return {
+      transportError: true,
+      url: displayUrl,
+      kind: "not_json",
+      bodyPreview: trimmed.slice(0, 240),
+      hint: "Resposta parece HTML (index da SPA ou 404) — confirme no servidor o proxy de /api/ad-hub para o processo Go.",
+    };
+  }
+
+  try {
+    return JSON.parse(text) as AdHubAuthPingResult;
   } catch {
-    return null;
+    return {
+      transportError: true,
+      url: displayUrl,
+      kind: "not_json",
+      bodyPreview: trimmed.slice(0, 240),
+    };
   }
 }
 
 /** Resposta válida do ping com MySQL ligado e JWT configurado no servidor. */
-export function isServerAuthLive(ping: { db: boolean; jwt_ready: boolean } | null | undefined): boolean {
-  return Boolean(ping?.db && ping?.jwt_ready);
+export function isServerAuthLive(
+  ping: AdHubAuthPingResult | AdHubAuthPingTransportError | null | undefined,
+): boolean {
+  if (!ping || ("transportError" in ping && ping.transportError)) return false;
+  return Boolean(ping.db && ping.jwt_ready);
 }
 
-export function useServerAuth(ping: { db: boolean; jwt_ready: boolean } | null): boolean {
+export function useServerAuth(ping: AdHubAuthPingResult | AdHubAuthPingTransportError | null): boolean {
   return isServerAuthLive(ping);
 }
 

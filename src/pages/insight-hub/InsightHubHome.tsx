@@ -2,7 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { fetchInsightHubBootstrap, type InsightHubBootstrap } from "@/lib/insightHubApi";
 import { useAuth } from "@/contexts/AuthContext";
-import { adHubAuthPing, isServerAuthLive, type AdHubAuthPingResult } from "@/lib/adhubAuthApi";
+import {
+  adHubAuthPing,
+  isServerAuthLive,
+  type AdHubAuthPingResult,
+  type AdHubAuthPingTransportError,
+} from "@/lib/adhubAuthApi";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,7 +42,7 @@ function pingInsightHint(p: AdHubAuthPingResult | null): string {
 export default function InsightHubHome() {
   const { user } = useAuth();
   const [plansOpen, setPlansOpen] = useState(false);
-  const [ping, setPing] = useState<AdHubAuthPingResult | null>(null);
+  const [ping, setPing] = useState<AdHubAuthPingResult | AdHubAuthPingTransportError | null>(null);
   const [pingReady, setPingReady] = useState(false);
   useEffect(() => {
     let cancel = false;
@@ -69,17 +74,45 @@ export default function InsightHubHome() {
     );
   }
 
-  if (!serverLive && ping === null) {
+  if (!serverLive && ping && "transportError" in ping) {
+    const err = ping;
     return (
       <div className="space-y-4">
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-sm">
-          <p className="font-medium text-foreground">O browser não obteve resposta válida do ping</p>
+          <p className="font-medium text-foreground">O browser não obteve JSON válido do ping</p>
           <p className="mt-2 text-muted-foreground">
-            No terminal o <code className="text-xs">curl https://ad-hub.digital/api/ad-hub/auth/ping</code> pode estar correto, mas o
-            pedido da página falhou (rede, HTTP ≠ 2xx ou bloqueio). Abra as DevTools (F12) → separador <strong>Rede</strong> → recarregue e
-            localize <code className="text-xs">ping</code>: confirme o URL (deve ser o mesmo site onde está logado, sem misturar{" "}
-            <code className="text-xs">www</code> com apex se o certificado/origin divergirem). Se usar build em CDN com{" "}
-            <code className="text-xs">VITE_ADHUB_API_URL</code>, esse origin tem de permitir CORS ou ser o mesmo host da página.
+            O pedido da página usa este URL:{" "}
+            <code className="break-all rounded bg-muted px-1 text-[11px] text-foreground">{err.url}</code>
+          </p>
+          <ul className="mt-3 list-inside list-disc space-y-1 text-muted-foreground">
+            <li>
+              <span className="font-medium text-foreground">Tipo:</span>{" "}
+              {err.kind === "network" && "rede / CORS / bloqueio"}
+              {err.kind === "http" && `HTTP ${err.httpStatus ?? "?"} (resposta não OK)`}
+              {err.kind === "not_json" && "corpo não é JSON (muitas vezes HTML da SPA ou 404)"}
+            </li>
+            {err.httpStatus != null ? (
+              <li>
+                Código HTTP: <span className="font-mono">{err.httpStatus}</span>
+              </li>
+            ) : null}
+            {err.hint ? (
+              <li className="break-words">
+                Detalhe: <span className="font-mono text-[11px]">{err.hint}</span>
+              </li>
+            ) : null}
+          </ul>
+          {err.bodyPreview ? (
+            <pre className="mt-3 max-h-28 overflow-auto rounded-md border border-border/60 bg-muted/40 p-2 text-[10px] leading-snug text-muted-foreground">
+              {err.bodyPreview}
+            </pre>
+          ) : null}
+          <p className="mt-4 text-muted-foreground">
+            No terminal, <code className="text-xs">curl {err.url}</code> pode funcionar se correr no servidor; no browser o mesmo path tem de
+            devolver JSON ou configurar <code className="text-xs">ADHUB_ALLOWED_ORIGINS</code> no Go com o origin exato da página (sem misturar{" "}
+            <code className="text-xs">www</code> com apex). Se o build tiver <code className="text-xs">VITE_ADHUB_API_URL</code> para outro
+            host, esse host tem de permitir CORS; com API no mesmo domínio, deixe <code className="text-xs">VITE_ADHUB_API_URL</code> vazio no
+            build.
           </p>
         </div>
       </div>

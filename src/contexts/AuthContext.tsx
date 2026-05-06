@@ -13,6 +13,8 @@ import {
 import {
   SERVER_MANAGED_PASSWORD,
   adHubAuthPing,
+  type AdHubAuthPingResult,
+  type AdHubAuthPingTransportError,
   adHubChangePassword,
   adHubCreateUser,
   adHubDeleteUser,
@@ -410,7 +412,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     persistRegistry(next);
   }, []);
 
-  const [serverAuthPing, setServerAuthPing] = useState<{ db: boolean; jwt_ready: boolean } | null>(null);
+  const [serverAuthPing, setServerAuthPing] = useState<AdHubAuthPingResult | AdHubAuthPingTransportError | null>(null);
   const serverAuth = useServerAuth(serverAuthPing);
   const [orgBilling, setOrgBilling] = useState<OrgBillingInfo | undefined>(undefined);
 
@@ -429,13 +431,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [serverAuth]);
 
   useEffect(() => {
-    void adHubAuthPing().then((p) => setServerAuthPing(p ?? null));
+    void adHubAuthPing().then((p) => setServerAuthPing(p));
   }, []);
 
   /** Atualiza ping ao voltar ao separador e de minuto a minuto (deploy / .env podem ficar prontos depois). */
   useEffect(() => {
     const refresh = () => {
-      void adHubAuthPing().then((p) => setServerAuthPing(p ?? null));
+      void adHubAuthPing().then((p) => setServerAuthPing(p));
     };
     const id = window.setInterval(refresh, 60_000);
     const onVis = () => {
@@ -928,8 +930,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
 
       const ping = await adHubAuthPing();
-      setServerAuthPing(ping ?? null);
-      const live = isServerAuthLive(ping ?? null);
+      setServerAuthPing(ping);
+      const live = isServerAuthLive(ping);
       const tok = getAdHubToken();
       const shouldUseServer = live || serverAuth || Boolean(tok);
 
