@@ -128,6 +128,10 @@ func main() {
 	bill.Post("/asaas-checkout", handlers.AdHubBillingCheckout)
 	bill.Post("/asaas-webhook", handlers.AdHubBillingWebhook)
 
+	// IA (Gemini): proxy — chave só no servidor; browser envia JWT de sessão AD-Hub.
+	app.Group("/api/ad-hub/ai", middleware.RequireAdHubSession).
+		Post("/gemini/generate", handlers.AdHubGeminiGenerate)
+
 	// Bootstrap não exige direito ativo — devolve {active:false} para o front mostrar planos.
 	app.Group("/api/ad-hub/insight-hub", middleware.RequireAdHubSession).
 		Get("/bootstrap", handlers.InsightHubBootstrap)
@@ -175,6 +179,6 @@ func main() {
 		services.StartInsightHubScheduler(interval, 5)
 	}
 
-	log.Printf("API a ouvir em :%s — /api/intellisearch/*, /api/ad-platform/*, /api/ad-hub/auth/*, /api/ad-hub/insight-hub/*", port)
+	log.Printf("API a ouvir em :%s — /api/intellisearch/*, /api/ad-platform/*, /api/ad-hub/auth/*, /api/ad-hub/insight-hub/*, /api/ad-hub/ai/*", port)
 	log.Fatal(app.Listen(":" + port))
 }

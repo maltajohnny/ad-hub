@@ -1,10 +1,11 @@
 /**
  * Análise de performance de marketing via Google Gemini.
  * Modelo: `GEMINI_MODEL` no `.env`, ou `gemini-2.5-flash`.
- * Chave: `GEMINI_API_KEY` ou `VITE_GEMINI_API_KEY`. `POST` para
- * `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=<chave>`.
+ * Chave: `GEMINI_API_KEY` em dev (browser direto) ou, sem chave no bundle, proxy `/api/ad-hub/ai/gemini/generate`
+ * com JWT (chave só em ~/apps/minha-api/.env no servidor).
  */
 import type { ChannelMetrics, FunnelMetrics, TrafficPerformanceReport } from "@/services/slackReportService";
+import { adHubApiUrl, getAdHubToken } from "@/lib/adhubAuthApi";
 
 export type CampaignAnalysisInput = {
   clientName: string;
@@ -88,12 +89,16 @@ function geminiGenerateUrl(apiKey: string): string {
 }
 
 export function isAiOptimizationConfigured(): boolean {
-  return Boolean(geminiApiKey());
+  if (geminiApiKey()) return true;
+  if (getAdHubToken()) return true;
+  return false;
 }
 
-/** Mensagem quando a chave Gemini está em falta no bundle ou `.env`. */
+/**
+ * Quando não há chave no bundle nem sessão AD-Hub para o proxy.
+ */
 export const IA_UNAVAILABLE_HINT =
-  "Defina GEMINI_API_KEY ou VITE_GEMINI_API_KEY no `.env`, reinicie `npm run dev`. Em produção: Secret GEMINI_API_KEY (ou VITE_GEMINI_API_KEY) no GitHub Actions e novo deploy.";
+  "IA: inicie sessão com login AD-Hub (a chave Gemini fica no servidor) ou defina GEMINI_API_KEY no `.env` local e `npm run dev`. Opcional no front: Secret GEMINI_API_KEY no deploy.";
 
 export function campaignAnalysisInputFromReport(r: TrafficPerformanceReport): CampaignAnalysisInput {
   return {
@@ -241,11 +246,21 @@ function normalizeResult(raw: unknown): CampaignOptimizationResult {
 
 function formatGeminiHttpError(status: number, rawText: string): string {
   let message: string | undefined;
+  let plainError: string | undefined;
   try {
-    const parsed = JSON.parse(rawText) as { error?: { message?: string; status?: string; code?: number } };
-    message = parsed.error?.message;
+    const parsed = JSON.parse(rawText) as {
+      error?: { message?: string; status?: string; code?: number } | string;
+    };
+    if (typeof parsed.error === "string") {
+      plainError = parsed.error.trim();
+    } else {
+      message = parsed.error?.message;
+    }
   } catch {
     /* ignorar */
+  }
+  if (plainError) {
+    return plainError;
   }
 
   if (status === 400 || status === 401 || status === 403) {
@@ -296,15 +311,41 @@ function extractGeminiText(parsed: GeminiGenerateResponse): string {
   return text;
 }
 
-/** Chama a API Gemini (`?key=GEMINI_API_KEY`) e devolve análise + recomendações (+ tiles). */
-async function callGeminiGenerate(userContent: string): Promise<CampaignOptimizationResult> {
-  const apiKey = geminiApiKey();
-  if (!apiKey) {
+type GeminiRequestBody = {
+  systemInstruction: { parts: { text: string }[] };
+  contents: { role: string; parts: { text: string }[] }[];
+  generationConfig: { temperature: number; responseMimeType: string };
+};
+
+/** Browser com chave → Google direto; sem chave (típico em produção) → API Go com JWT. */
+async function postGeminiGenerate(body: GeminiRequestBody): Promise<Response> {
+  const key = geminiApiKey();
+  if (key) {
+    return fetch(geminiGenerateUrl(key), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+  const token = getAdHubToken();
+  if (!token) {
     throw new Error(IA_UNAVAILABLE_HINT);
   }
+  return fetch(adHubApiUrl("/api/ad-hub/ai/gemini/generate"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+    credentials: "same-origin",
+  });
+}
 
-  const url = geminiGenerateUrl(apiKey);
-  const body = {
+/** Chama a API Gemini e devolve análise + recomendações (+ tiles). */
+async function callGeminiGenerate(userContent: string): Promise<CampaignOptimizationResult> {
+  const body: GeminiRequestBody = {
     systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
     contents: [{ role: "user", parts: [{ text: userContent }] }],
     generationConfig: {
@@ -313,13 +354,7 @@ async function callGeminiGenerate(userContent: string): Promise<CampaignOptimiza
     },
   };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  const res = await postGeminiGenerate(body);
 
   const rawText = await res.text();
   if (!res.ok) {
@@ -479,13 +514,7 @@ ${historyBlock || "Sem histórico anterior."}
 Pergunta atual do gestor:
 ${question}`;
 
-  const apiKey = geminiApiKey();
-  if (!apiKey) {
-    throw new Error(IA_UNAVAILABLE_HINT);
-  }
-
-  const url = geminiGenerateUrl(apiKey);
-  const body = {
+  const body: GeminiRequestBody = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents: [{ role: "user", parts: [{ text: userPrompt }] }],
     generationConfig: {
@@ -494,11 +523,7 @@ ${question}`;
     },
   };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const res = await postGeminiGenerate(body);
 
   const rawText = await res.text();
   if (!res.ok) {

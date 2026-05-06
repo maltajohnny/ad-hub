@@ -72,6 +72,7 @@ func LoadDotenv() {
 	// HostGator / deploy: se JWT ou MYSQL ainda vazios, ler só estas chaves de caminhos fixos
 	// (evita godotenv.Overload no .env inteiro de minha-api e sobrescritas indesejadas).
 	applyMysqlAndJWTFromDeployEnvFiles(wd)
+	applyGeminiAPIKeyFromDeployEnvFiles(wd)
 
 	if strings.TrimSpace(os.Getenv("SERPAPI_KEY")) == "" {
 		log.Print("intellisearch: SERPAPI_KEY vazia — confirme a linha no .env na raiz do repositório e reinicie a API")
@@ -163,6 +164,40 @@ func applySerpAPIKeyFromRootEnvFiles(wd string) {
 		if v := strings.TrimSpace(m["SERPAPI_KEY"]); v != "" {
 			os.Setenv("SERPAPI_KEY", v)
 			log.Printf("intellisearch: SERPAPI_KEY aplicada desde %s", p)
+			return
+		}
+	}
+}
+
+// applyGeminiAPIKeyFromDeployEnvFiles lê GEMINI_API_KEY de ~/apps/minha-api/.env se ainda vazia no processo.
+func applyGeminiAPIKeyFromDeployEnvFiles(wd string) {
+	if strings.TrimSpace(os.Getenv("GEMINI_API_KEY")) != "" {
+		return
+	}
+	candidates := []string{
+		filepath.Join(wd, ".env"),
+		filepath.Join(wd, "..", ".env"),
+		filepath.Join(wd, "..", "..", ".env"),
+		filepath.Join(wd, "..", "..", "ad-hub.digital", ".env"),
+	}
+	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
+		candidates = append(candidates,
+			filepath.Join(home, "apps", "minha-api", ".env"),
+			filepath.Join(home, "ad-hub.digital", ".env"),
+		)
+	}
+	for _, p := range candidates {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		m, err := godotenv.Parse(bytes.NewReader(data))
+		if err != nil {
+			continue
+		}
+		if v := strings.TrimSpace(m["GEMINI_API_KEY"]); v != "" {
+			os.Setenv("GEMINI_API_KEY", v)
+			log.Printf("adhub: GEMINI_API_KEY aplicada desde %s (proxy IA)", p)
 			return
 		}
 	}
