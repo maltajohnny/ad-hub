@@ -247,15 +247,25 @@ export async function startMetaAuthorize(body: {
   });
 }
 
+/**
+ * Callback OAuth Google Ads (path fixo na API Go). Deve ser o mesmo registo em
+ * Google Cloud → Credenciais → ID do cliente OAuth → URIs de redirecionamento autorizados.
+ */
+export function insightHubGoogleAdsRedirectUri(): string {
+  if (typeof window === "undefined") return "";
+  return `${window.location.origin}/api/ad-hub/insight-hub/oauth/google-ads/callback`;
+}
+
 export async function startGoogleAdsAuthorize(body: {
   brandId: string;
   returnPath?: string;
   redirectUri?: string;
 }): Promise<{ state: string; authorizeUrl: string }> {
+  const redirectUri = body.redirectUri?.trim() || insightHubGoogleAdsRedirectUri();
   return ihFetch<{ state: string; authorizeUrl: string }>("/api/ad-hub/insight-hub/oauth/google-ads/authorize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, redirectUri }),
   });
 }
 
