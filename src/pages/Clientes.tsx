@@ -72,6 +72,7 @@ import {
   analyzeCampaignPerformance,
   analyzeCampaignWithInstruction,
   campaignAnalysisInputFromReport,
+  IA_UNAVAILABLE_HINT,
   isAiOptimizationConfigured,
   type CampaignOptimizationResult,
 } from "@/services/aiOptimizationService";
@@ -346,7 +347,7 @@ function ClientExpandedPanel({
 
   const handleInstructionSubmit = async () => {
     if (!isAiOptimizationConfigured()) {
-      toast.error("O serviço de IA não está disponível no momento.");
+      toast.error(IA_UNAVAILABLE_HINT);
       return;
     }
     if (aiMode === "supervised" && !instruction.trim()) {
@@ -395,7 +396,7 @@ function ClientExpandedPanel({
 
   const handleGenerateOptimization = async () => {
     if (!isAiOptimizationConfigured()) {
-      toast.error("O serviço de IA não está disponível no momento.");
+      toast.error(IA_UNAVAILABLE_HINT);
       return;
     }
     setOptLoading(true);

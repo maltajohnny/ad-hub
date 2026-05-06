@@ -14,6 +14,7 @@ import { buildTrafficPerformanceReport } from "@/services/slackReportService";
 import {
   analyzeCampaignPerformance,
   campaignAnalysisInputFromReport,
+  IA_UNAVAILABLE_HINT,
   isAiOptimizationConfigured,
   type CampaignOptimizationTile,
 } from "@/services/aiOptimizationService";
@@ -194,7 +195,7 @@ const Dashboard = () => {
   const refreshAiRecommendations = useCallback(async () => {
     if (!currentClient) return;
     if (!isAiOptimizationConfigured()) {
-      toast.error("O serviço de IA não está disponível no momento.");
+      toast.error(IA_UNAVAILABLE_HINT);
       return;
     }
     setAiLiveLoading(true);

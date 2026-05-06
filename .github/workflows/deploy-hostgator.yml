@@ -4,6 +4,8 @@
 #   FTP_HOST     — servidor FTP (ex.: ftp.seudominio.com ou o IP do cPanel)
 #   FTP_USER     — utilizador FTP (muitas vezes o mesmo do cPanel, ex.: johnn315)
 #   FTP_PASSWORD — palavra-passe da conta FTP
+#   GEMINI_API_KEY — chave Google AI Studio (mesma do .env local); embute no JS em produção
+# Opcional — Variables: GEMINI_MODEL (ex. gemini-2.5-flash), SLACK_WEBHOOK_URL também como Secret acima
 #
 # IMPORTANTE — server-dir é RELATIVO à pasta inicial do utilizador FTP (nunca `/home3/...` absoluto).
 #
@@ -51,11 +53,14 @@ jobs:
 
       # SLACK_WEBHOOK_URL (secret): Incoming Webhook incorporado no bundle (fallback global).
       # Alternativa: webhook só nas definições do cliente na app (localStorage), sem variável no CI.
+      # GEMINI_API_KEY (secret): IA no browser (card Clientes, Dashboard). Sem isto o bundle não tem chave em produção.
       - name: Build (Vite)
         env:
           VITE_INTELLISEARCH_API_URL: ${{ vars.VITE_INTELLISEARCH_API_URL }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           VITE_SLACK_RELAY_URL: ${{ vars.VITE_SLACK_RELAY_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
         run: npm run build
 
       # Front (Vite): pasta = Document Root do domínio (no teu caso: public_html/)

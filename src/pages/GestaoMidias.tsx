@@ -77,6 +77,7 @@ import {
 } from "lucide-react";
 import {
   askCopyCopyrightGuidance,
+  IA_UNAVAILABLE_HINT,
   isAiOptimizationConfigured,
   type CopyChatMessage,
   type CopyCopyrightGuidanceResult,
@@ -1366,7 +1367,7 @@ const GestaoMidias = () => {
 
   const runCopyAiAction = async (action: CopyAiAction) => {
     if (!isAiOptimizationConfigured()) {
-      toast.error("O serviço de IA não está disponível no momento.");
+      toast.error(IA_UNAVAILABLE_HINT);
       return;
     }
     if (!copyAudience.trim() || !copyPainDesire.trim() || !copyOffer.trim()) {

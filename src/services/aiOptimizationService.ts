@@ -88,6 +88,10 @@ export function isAiOptimizationConfigured(): boolean {
   return Boolean(geminiApiKey());
 }
 
+/** Mensagem quando `GEMINI_API_KEY` está em falta no bundle ou `.env`. */
+export const IA_UNAVAILABLE_HINT =
+  "Defina GEMINI_API_KEY no `.env` na raiz e reinicie `npm run dev`. Em produção: GitHub Actions → Secret GEMINI_API_KEY e novo deploy.";
+
 export function campaignAnalysisInputFromReport(r: TrafficPerformanceReport): CampaignAnalysisInput {
   return {
     clientName: r.clientName,
