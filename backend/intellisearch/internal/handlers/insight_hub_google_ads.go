@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"os"
 	"strings"
@@ -76,37 +77,14 @@ func InsightHubGoogleAdsCallback(c *fiber.Ctx) error {
 	if state == "" || code == "" {
 		return redirectWithMsg(c, "/clientes/insight-hub/marcas?ih_error=missing_state")
 	}
-
-	ctx := context.Background()
-	st, err := repo.ConsumeOAuthState(ctx, state)
+	connID, returnPath, err := finalizeGoogleAdsOAuth(context.Background(), state, code)
 	if err != nil {
-		return redirectWithMsg(c, "/clientes/insight-hub/marcas?ih_error=invalid_state")
+		return redirectWithMsg(c, "/clientes/insight-hub/marcas?ih_error="+url.QueryEscape(err.Error()))
 	}
-	if strings.TrimSpace(st.Provider) != "google_ads" {
-		return redirectWithMsg(c, "/clientes/insight-hub/marcas?ih_error=wrong_provider")
-	}
-
-	refresh, _, err := services.ExchangeGoogleAdsOAuthCode(ctx, code, st.RedirectURI)
-	if err != nil {
-		return redirectWithMsg(c, "/clientes/insight-hub/marcas?ih_error="+url.QueryEscape("google_token_failed"))
-	}
-
-	tokenRef, err := repo.SaveInsightHubSecret(ctx, st.OrgID, &st.BrandID, []byte(refresh), nil)
-	if err != nil {
-		return redirectWithMsg(c, "/clientes/insight-hub/marcas?ih_error=secret_save_failed")
-	}
-
-	connID, err := repo.UpsertInsightHubConnection(ctx, st.OrgID, st.BrandID, "google_ads", "", "Google Ads — pendente seleção", tokenRef, "", "connected")
-	if err != nil {
-		return redirectWithMsg(c, "/clientes/insight-hub/marcas?ih_error=connection_save_failed")
-	}
-	_ = repo.EnsureInsightHubSyncState(ctx, st.OrgID, st.BrandID, connID, 1*time.Minute)
-
-	repo.WriteAuditLog(ctx, st.OrgID, "", "insight_hub.oauth.callback", "connection", connID, `{"provider":"google_ads"}`)
 
 	target := "/clientes/insight-hub/marcas?ih_connected=" + url.QueryEscape(connID)
-	if st.ReturnPath != "" {
-		target = st.ReturnPath
+	if returnPath != "" {
+		target = returnPath
 		sep := "?"
 		if strings.Contains(target, "?") {
 			sep = "&"
@@ -114,4 +92,65 @@ func InsightHubGoogleAdsCallback(c *fiber.Ctx) error {
 		target += sep + "ih_connected=" + url.QueryEscape(connID)
 	}
 	return redirectWithMsg(c, target)
+}
+
+// InsightHubGoogleAdsFinish POST — endpoint interno para bridge OAuth (Cloudflare Worker).
+func InsightHubGoogleAdsFinish(c *fiber.Ctx) error {
+	sharedSecret := strings.TrimSpace(os.Getenv("INSIGHT_HUB_OAUTH_CALLBACK_SHARED_SECRET"))
+	if sharedSecret == "" {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "INSIGHT_HUB_OAUTH_CALLBACK_SHARED_SECRET não definido"})
+	}
+	if strings.TrimSpace(c.Get("X-Callback-Secret")) != sharedSecret {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+	}
+	var body struct {
+		State string `json:"state"`
+		Code  string `json:"code"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "JSON inválido"})
+	}
+	state := strings.TrimSpace(body.State)
+	code := strings.TrimSpace(body.Code)
+	if state == "" || code == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing state/code"})
+	}
+	connID, returnPath, err := finalizeGoogleAdsOAuth(c.Context(), state, code)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{
+		"ok":         true,
+		"connection": connID,
+		"returnPath": returnPath,
+	})
+}
+
+func finalizeGoogleAdsOAuth(ctx context.Context, state, code string) (connID string, returnPath string, err error) {
+	st, err := repo.ConsumeOAuthState(ctx, state)
+	if err != nil {
+		return "", "", &insightHubErr{msg: "invalid_state"}
+	}
+	if strings.TrimSpace(st.Provider) != "google_ads" {
+		return "", "", &insightHubErr{msg: "wrong_provider"}
+	}
+
+	refresh, _, err := services.ExchangeGoogleAdsOAuthCode(ctx, code, st.RedirectURI)
+	if err != nil {
+		return "", "", &insightHubErr{msg: "google_token_failed"}
+	}
+
+	tokenRef, err := repo.SaveInsightHubSecret(ctx, st.OrgID, &st.BrandID, []byte(refresh), nil)
+	if err != nil {
+		return "", "", &insightHubErr{msg: "secret_save_failed"}
+	}
+
+	connID, err = repo.UpsertInsightHubConnection(ctx, st.OrgID, st.BrandID, "google_ads", "", "Google Ads — pendente seleção", tokenRef, "", "connected")
+	if err != nil {
+		return "", "", &insightHubErr{msg: "connection_save_failed"}
+	}
+	_ = repo.EnsureInsightHubSyncState(ctx, st.OrgID, st.BrandID, connID, 1*time.Minute)
+	metadata, _ := json.Marshal(fiber.Map{"provider": "google_ads", "channel": "bridge_or_callback"})
+	repo.WriteAuditLog(ctx, st.OrgID, "", "insight_hub.oauth.callback", "connection", connID, string(metadata))
+	return connID, st.ReturnPath, nil
 }

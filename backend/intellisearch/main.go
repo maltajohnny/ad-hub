@@ -60,9 +60,9 @@ func main() {
 	})
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: allowedOriginsCSV,
-		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-		AllowHeaders: "Origin,Content-Type,Accept,Authorization,Access-Token,X-AdHub-Internal-Key",
+		AllowOrigins:     allowedOriginsCSV,
+		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,Access-Token,X-AdHub-Internal-Key",
 		AllowCredentials: true,
 	}))
 	app.Use("/api", limiter.New(limiter.Config{
@@ -139,6 +139,7 @@ func main() {
 	// Callback OAuth Meta é público (Meta redireciona o browser); valida via state assinado.
 	app.Get("/api/ad-hub/insight-hub/oauth/meta/callback", handlers.InsightHubMetaCallback)
 	app.Get("/api/ad-hub/insight-hub/oauth/google-ads/callback", handlers.InsightHubGoogleAdsCallback)
+	app.Post("/api/ad-hub/insight-hub/oauth/google-ads/finish", handlers.InsightHubGoogleAdsFinish)
 
 	ih := app.Group("/api/ad-hub/insight-hub", middleware.RequireAdHubSession, middleware.CheckInsightHubAccess)
 	ih.Get("/brands", handlers.InsightHubListBrands)

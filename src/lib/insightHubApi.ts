@@ -253,6 +253,8 @@ export async function startMetaAuthorize(body: {
  */
 export function insightHubGoogleAdsRedirectUri(): string {
   if (typeof window === "undefined") return "";
+  const custom = import.meta.env.VITE_INSIGHT_HUB_GOOGLE_ADS_REDIRECT_URI?.trim();
+  if (custom) return custom;
   return `${window.location.origin}/api/ad-hub/insight-hub/oauth/google-ads/callback`;
 }
 

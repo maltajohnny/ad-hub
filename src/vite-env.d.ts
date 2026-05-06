@@ -40,6 +40,8 @@ interface ImportMetaEnv {
   readonly VITE_ADHUB_INTERNAL_API_KEY?: string;
   readonly VITE_TIKTOK_APP_ID?: string;
   readonly VITE_GOOGLE_OAUTH_CLIENT_ID?: string;
+  /** Redirect OAuth Google Ads opcional (ex.: URL do Cloudflare Worker bridge). */
+  readonly VITE_INSIGHT_HUB_GOOGLE_ADS_REDIRECT_URI?: string;
   /**
    * URL base da API IntelliSearch (Go). Vazio = mesmo origin (`/api/intellisearch/...`).
    * Obrigatório em deploy estático se a API estiver noutro domínio/subdomínio.
