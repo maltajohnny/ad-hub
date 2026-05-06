@@ -28,17 +28,12 @@ const defaultSettings = (): ClientIntegrationSettings => ({
   scheduleTime: "14:00",
 });
 
-/** Webhooks padrão por id de cliente (Incoming Webhooks do Slack). */
-export const DEFAULT_SLACK_WEBHOOK_BY_CLIENT_ID: Record<number, string> = {
-  1: "https://hooks.slack.com/services/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",
-  2: "https://hooks.slack.com/services/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",
-  3: "https://hooks.slack.com/services/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",
-  4: "https://hooks.slack.com/services/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",
-  5: "https://hooks.slack.com/services/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",
-  6: "https://hooks.slack.com/services/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",
-  7: "https://hooks.slack.com/services/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",
-  8: "https://hooks.slack.com/services/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",
-};
+/**
+ * Webhooks opcionais por id de cliente (Incoming Webhooks).
+ * Não coloque URLs reais aqui — o GitHub bloqueia push (secret scanning).
+ * Use `SLACK_WEBHOOK_URL` no `.env` / GitHub Secret ou as definições do cliente na app.
+ */
+export const DEFAULT_SLACK_WEBHOOK_BY_CLIENT_ID: Record<number, string> = {};
 
 type Store = Record<string, ClientIntegrationSettings>;
 
