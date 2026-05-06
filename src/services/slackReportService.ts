@@ -83,8 +83,12 @@ function pickRow(c: Client, channel: "Meta Ads" | "Google Ads" | "Instagram Ads"
 
 function formatSentAt(d: Date): string {
   return d.toLocaleString("pt-BR", {
-    dateStyle: "long",
-    timeStyle: "short",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   });
 }
 

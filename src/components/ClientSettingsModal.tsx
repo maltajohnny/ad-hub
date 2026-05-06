@@ -389,13 +389,15 @@ export function ClientSettingsModal({ clientId, open, onClose }: Props) {
               <Input
                 id="sched-time"
                 type="time"
+                lang="pt-BR"
                 value={form.scheduleTime}
                 onChange={(e) => update({ scheduleTime: e.target.value })}
-                className="bg-background border-border/50 h-9"
+                className="bg-background border-border/50 h-9 tabular-nums"
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Seleciona pelo menos um dia da semana. O envio tenta na janela de ~15 minutos após o horário (evita falhar
+              Horário em formato 24 h (ex.: 14:00). Seleciona pelo menos um dia da semana. O envio tenta na janela de ~15
+              minutos após o horário (evita falhar
               se o separador esteve em segundo plano). Alterar dias/horário ou voltar a <span className="font-medium">Ativo</span>{" "}
               limpa o bloqueio do dia — útil para testar outra vez no mesmo dia. Máximo 1 envio por cliente por dia.
             </p>
