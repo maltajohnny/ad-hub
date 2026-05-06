@@ -250,10 +250,14 @@ function formatGeminiHttpError(status: number, rawText: string): string {
 
   if (status === 400 || status === 401 || status === 403) {
     const lower = (message ?? rawText).toLowerCase();
-    if (lower.includes("leaked") || lower.includes("reported")) {
-      return "A Google revogou esta chave (divulgada em texto público). Crie uma chave nova em https://aistudio.google.com/apikey e atualize GEMINI_API_KEY no .env.";
+    const googleMsg = (message ?? "").trim();
+    if (googleMsg) {
+      if (lower.includes("leaked") || lower.includes("reported")) {
+        return `${googleMsg} — Crie outra chave em https://aistudio.google.com/apikey e atualize GEMINI_API_KEY (e o Secret no GitHub em produção).`;
+      }
+      return `Gemini (${status}): ${googleMsg}`;
     }
-    return "Chave da API Google Gemini inválida ou sem permissão. Verifique GEMINI_API_KEY e restrições da chave (API Generative Language ativa; em dev, referrers http://localhost:8080/*).";
+    return "Chave da API Google Gemini inválida ou sem permissão. Verifique GEMINI_API_KEY / VITE_GEMINI_API_KEY e na Google Cloud / AI Studio: API Generative Language ativa; restrições HTTP referrer (ex.: http://localhost:8080/*) se aplicável.";
   }
   if (status === 404) {
     return `Modelo Gemini não encontrado. Predefinição: ${DEFAULT_GEMINI_MODEL}. Defina GEMINI_MODEL no .env ou execute \`npm run gemini:list-models\` para ver ids disponíveis.`;
