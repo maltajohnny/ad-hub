@@ -90,7 +90,11 @@ $port = adhub_go_port();
 $p = (string) $port;
 
 $candidates = [];
-// 1) backend.local.php (prioridade — URL completa onde o Go responde)
+// 1–2) Sempre primeiro: loopback na porta do binário (ADHUB_GO_PORT / 3041). Assim um backend.local.php
+// ou env antigo com :3044 não é tentado antes do sítio correcto quando o Go está em :3041.
+$candidates[] = 'http://127.0.0.1:' . $p;
+$candidates[] = 'http://localhost:' . $p;
+// 3) backend.local.php — override quando CageFS/IP interno for necessário (não coloque porta errada)
 $localFile = __DIR__ . '/backend.local.php';
 if (is_readable($localFile)) {
     $override = include $localFile;
@@ -98,7 +102,7 @@ if (is_readable($localFile)) {
         $candidates[] = rtrim($override, '/');
     }
 }
-// 2) Um único backend explícito (SetEnv ADHUB_GO_BACKEND)
+// 4) SetEnv ADHUB_GO_BACKEND
 $envB = getenv('ADHUB_GO_BACKEND');
 if (!is_string($envB) || $envB === '') {
     $envB = isset($_SERVER['ADHUB_GO_BACKEND']) ? (string) $_SERVER['ADHUB_GO_BACKEND'] : '';
@@ -106,10 +110,7 @@ if (!is_string($envB) || $envB === '') {
 if (is_string($envB) && $envB !== '') {
     $candidates[] = rtrim($envB, '/');
 }
-// 3) Loopback com a MESMA porta que o binário — antes de BIND_EXTRA (evita falhar primeiro em :3044 por engano)
-$candidates[] = 'http://127.0.0.1:' . $p;
-$candidates[] = 'http://localhost:' . $p;
-// 4) URLs extra (IP público, etc.)
+// 5) URLs extra (vírgula)
 foreach (adhub_proxy_bind_extra_urls('ADHUB_GO_BIND_EXTRA') as $u) {
     $candidates[] = $u;
 }
