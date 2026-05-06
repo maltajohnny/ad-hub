@@ -164,11 +164,16 @@ export default function InsightHubHome() {
   }
 
   if (q.isError) {
+    const raw = (q.error as Error)?.message ?? "Erro desconhecido";
+    const tokenHint =
+      raw === "Token em falta"
+        ? "Falta o JWT da sessão (Authorization Bearer). O Insight Hub chama a API Go com o token que recebe após iniciar sessão com uma conta existente na base MySQL. Termine sessão, inicie sessão de novo com o mesmo utilizador/palavra-passe da API, e volte aqui."
+        : raw;
     return (
       <Card className="border-destructive/40 bg-destructive/5">
         <CardHeader>
           <CardTitle className="text-base">Não foi possível sincronizar</CardTitle>
-          <CardDescription>{(q.error as Error)?.message ?? "Erro desconhecido"}</CardDescription>
+          <CardDescription>{tokenHint}</CardDescription>
         </CardHeader>
         <CardContent>
           <Button type="button" variant="outline" size="sm" onClick={() => q.refetch()}>
