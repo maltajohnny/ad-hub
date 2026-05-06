@@ -67,13 +67,16 @@ export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash" as const;
 /** Path sem query (modelo fallback); em runtime: `?key=` + `GEMINI_API_KEY`. */
 export const GEMINI_GENERATE_CONTENT_PATH = `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent`;
 
+/** Aceita `GEMINI_API_KEY` ou `VITE_GEMINI_API_KEY` (CI / tutoriais Vite). */
 function geminiApiKey(): string | undefined {
-  const v = import.meta.env.GEMINI_API_KEY;
-  return typeof v === "string" && v.trim() ? v.trim() : undefined;
+  const raw = import.meta.env.VITE_GEMINI_API_KEY ?? import.meta.env.GEMINI_API_KEY;
+  const v = typeof raw === "string" ? raw.trim() : "";
+  return v || undefined;
 }
 
 function geminiModelId(): string {
-  const m = import.meta.env.GEMINI_MODEL;
+  const m =
+    import.meta.env.VITE_GEMINI_MODEL ?? import.meta.env.GEMINI_MODEL;
   return typeof m === "string" && m.trim() ? m.trim() : DEFAULT_GEMINI_MODEL;
 }
 
@@ -88,9 +91,9 @@ export function isAiOptimizationConfigured(): boolean {
   return Boolean(geminiApiKey());
 }
 
-/** Mensagem quando `GEMINI_API_KEY` está em falta no bundle ou `.env`. */
+/** Mensagem quando a chave Gemini está em falta no bundle ou `.env`. */
 export const IA_UNAVAILABLE_HINT =
-  "Defina GEMINI_API_KEY no `.env` na raiz e reinicie `npm run dev`. Em produção: GitHub Actions → Secret GEMINI_API_KEY e novo deploy.";
+  "Defina GEMINI_API_KEY ou VITE_GEMINI_API_KEY no `.env`, reinicie `npm run dev`. Em produção: Secret GEMINI_API_KEY (ou VITE_GEMINI_API_KEY) no GitHub Actions e novo deploy.";
 
 export function campaignAnalysisInputFromReport(r: TrafficPerformanceReport): CampaignAnalysisInput {
   return {
@@ -293,7 +296,7 @@ function extractGeminiText(parsed: GeminiGenerateResponse): string {
 async function callGeminiGenerate(userContent: string): Promise<CampaignOptimizationResult> {
   const apiKey = geminiApiKey();
   if (!apiKey) {
-    throw new Error("O serviço de IA não está disponível no momento.");
+    throw new Error(IA_UNAVAILABLE_HINT);
   }
 
   const url = geminiGenerateUrl(apiKey);
@@ -474,7 +477,7 @@ ${question}`;
 
   const apiKey = geminiApiKey();
   if (!apiKey) {
-    throw new Error("O serviço de IA não está disponível no momento.");
+    throw new Error(IA_UNAVAILABLE_HINT);
   }
 
   const url = geminiGenerateUrl(apiKey);

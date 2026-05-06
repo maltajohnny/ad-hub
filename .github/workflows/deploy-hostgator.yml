@@ -53,14 +53,16 @@ jobs:
 
       # SLACK_WEBHOOK_URL (secret): Incoming Webhook incorporado no bundle (fallback global).
       # Alternativa: webhook só nas definições do cliente na app (localStorage), sem variável no CI.
-      # GEMINI_API_KEY (secret): IA no browser (card Clientes, Dashboard). Sem isto o bundle não tem chave em produção.
+      # GEMINI_API_KEY (secret): IA no browser. Também exposto como VITE_* para compatibilidade com tutoriais Vite.
       - name: Build (Vite)
         env:
           VITE_INTELLISEARCH_API_URL: ${{ vars.VITE_INTELLISEARCH_API_URL }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           VITE_SLACK_RELAY_URL: ${{ vars.VITE_SLACK_RELAY_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          VITE_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          VITE_GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
         run: npm run build
 
       # Front (Vite): pasta = Document Root do domínio (no teu caso: public_html/)

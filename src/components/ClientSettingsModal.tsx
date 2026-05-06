@@ -159,7 +159,11 @@ export function ClientSettingsModal({ clientId, open, onClose }: Props) {
                   size="sm"
                   variant={form.scheduleEnabled ? "default" : "outline"}
                   className={form.scheduleEnabled ? "gradient-brand text-primary-foreground gap-1.5" : "gap-1.5"}
-                  onClick={() => update({ scheduleEnabled: true })}
+                  onClick={() => {
+                    const ws =
+                      form.scheduleWeekdays.length === 0 ? ([1, 2, 3, 4, 5] as number[]) : form.scheduleWeekdays;
+                    update({ scheduleEnabled: true, scheduleWeekdays: ws });
+                  }}
                 >
                   <PlayCircle className="h-4 w-4" />
                   Ativo
@@ -178,8 +182,8 @@ export function ClientSettingsModal({ clientId, open, onClose }: Props) {
               <p className="text-xs text-muted-foreground">
                 {form.scheduleEnabled ? (
                   <>
-                    <span className="text-foreground/90 font-medium">Envio ativo:</span> o relatório é enviado nas datas e
-                    horário configurados (com a app aberta).
+                    <span className="text-foreground/90 font-medium">Envio ativo:</span> dias da semana + horário (repete
+                    cada semana). A app tem de estar aberta no navegador — não há servidor a disparar sozinho.
                   </>
                 ) : (
                   <>
@@ -219,8 +223,8 @@ export function ClientSettingsModal({ clientId, open, onClose }: Props) {
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Com a app aberta, o envio corre no minuto indicado (máx. 1 envio por dia por cliente). Mantém o separador
-              com o horário local do navegador.
+              Seleciona pelo menos um dia da semana. O envio tenta na janela de alguns minutos após o horário (evita
+              falhar se o separador esteve em segundo plano). Máximo 1 envio por cliente por dia.
             </p>
           </div>
         </div>

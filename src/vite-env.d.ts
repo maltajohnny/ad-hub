@@ -21,8 +21,11 @@ interface ImportMetaEnv {
   readonly OPENAI_MODEL?: string;
   /** Chave API Google Gemini — usada em `?key=` no generateContent. */
   readonly GEMINI_API_KEY?: string;
+  /** Alias Vite da mesma chave (único Secret GEMINI_API_KEY no CI pode preencher ambos). */
+  readonly VITE_GEMINI_API_KEY?: string;
   /** Modelo (predef.: gemini-2.5-flash). */
   readonly GEMINI_MODEL?: string;
+  readonly VITE_GEMINI_MODEL?: string;
   /** App Meta — URL de redirect OAuth deve coincidir (ex.: https://localhost:8080/gestao-midias). */
   readonly VITE_META_APP_ID?: string;
   /** Opcional: override do redirect OAuth (predef.: origin + /gestao-midias). */

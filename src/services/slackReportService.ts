@@ -450,10 +450,19 @@ function todayKey(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-function matchesTime(d: Date, hhmm: string): boolean {
-  const [h, m] = hhmm.split(":").map((x) => parseInt(x, 10));
+/** Janela de minutos após o horário agendado (tabs em segundo plano atrasam setInterval). */
+const SCHEDULE_MATCH_WINDOW_MINUTES = 5;
+
+function matchesScheduleWindow(d: Date, hhmm: string): boolean {
+  const raw = hhmm.trim();
+  const parts = raw.split(":");
+  if (parts.length < 2) return false;
+  const h = parseInt(parts[0]!, 10);
+  const m = parseInt(parts[1]!, 10);
   if (Number.isNaN(h) || Number.isNaN(m)) return false;
-  return d.getHours() === h && d.getMinutes() === m;
+  const nowMin = d.getHours() * 60 + d.getMinutes();
+  const targetMin = h * 60 + m;
+  return nowMin >= targetMin && nowMin < targetMin + SCHEDULE_MATCH_WINDOW_MINUTES;
 }
 
 /** Verifica agendamentos guardados e envia quando dia/hora coincidem (máx. 1 envio por cliente por dia). */
@@ -469,7 +478,7 @@ export async function runScheduledReportChecks(): Promise<void> {
     if (!url) continue;
     if (settings.scheduleWeekdays.length === 0) continue;
     if (!settings.scheduleWeekdays.includes(day)) continue;
-    if (!matchesTime(now, settings.scheduleTime)) continue;
+    if (!matchesScheduleWindow(now, settings.scheduleTime)) continue;
     if (settings.lastScheduleDay === dayKey) continue;
 
     const r = await sendManualReport(c.id);
