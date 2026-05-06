@@ -1,9 +1,12 @@
 import { clientsData, type Client } from "@/data/clientsCatalog";
 import { getClientDetail } from "@/lib/clientDemoDetail";
 import {
+  DEFAULT_SLACK_REPORT_PREFS,
   loadClientIntegration,
   markScheduleSentForDay,
+  resolveSlackReportPreferences,
   type ClientIntegrationSettings,
+  type SlackReportPreferences,
 } from "@/lib/clientIntegrationSettings";
 import {
   buildDesempenhoLineChartUrl,
@@ -124,44 +127,69 @@ export function buildTrafficPerformanceReport(client: Client): TrafficPerformanc
   };
 }
 
-/** Texto em markdown simples (fallback + cópia legível). */
-export function formatReportMarkdown(r: TrafficPerformanceReport): string {
-  const ch = (name: string, icon: string, m: ChannelMetrics) =>
-    [
-      `${icon} *${name}*`,
-      `Investido: ${brl(m.investido)}`,
-      `Leads: ${m.leads}`,
-      `Conversões: ${m.conversoes}`,
-      `Receita: ${brl(m.receita)}`,
-      `CPL: ${brl(m.cpl)}`,
-      `ROI: ${m.roi.toFixed(1)}`,
-      "",
-    ].join("\n");
+function channelMarkdownLines(m: ChannelMetrics, ch: SlackReportPreferences["channels"]): string[] {
+  const lines: string[] = [];
+  if (ch.showInvested) lines.push(`Investido: ${brl(m.investido)}`);
+  if (ch.showLeads) lines.push(`Leads: ${m.leads}`);
+  if (ch.showConversions) lines.push(`Conversões: ${m.conversoes}`);
+  if (ch.showRevenue) lines.push(`Receita: ${brl(m.receita)}`);
+  if (ch.showCpl) lines.push(`CPL: ${brl(m.cpl)}`);
+  if (ch.showCostPerMessage) lines.push(`Custo por mensagem: ${brl(m.cpl)}`);
+  if (ch.showRoi) lines.push(`ROI: ${m.roi.toFixed(1)}`);
+  return lines;
+}
 
+function channelMarkdownBlock(name: string, icon: string, m: ChannelMetrics, ch: SlackReportPreferences["channels"]): string {
+  const lines = channelMarkdownLines(m, ch);
+  if (lines.length === 0) return "";
+  return [`${icon} *${name}*`, ...lines, ""].join("\n");
+}
+
+/** Texto em markdown simples (fallback + cópia legível). */
+export function formatReportMarkdown(
+  r: TrafficPerformanceReport,
+  prefs: SlackReportPreferences = DEFAULT_SLACK_REPORT_PREFS,
+): string {
+  const ch = prefs.channels;
   const f = r.funil;
-  const cabecalhoCliente = `*${r.clientName}* · consolidado (Google, Meta, Instagram) · enviado em _${r.sentAtLabel}_`;
-  return [
-    "📊 *RELATÓRIO DE PERFORMANCE DE TRÁFEGO*",
-    cabecalhoCliente,
-    "",
-    ch("Meta Ads", "📘", r.metaAds),
-    ch("Google Ads", "🔍", r.googleAds),
-    ch("Instagram Ads", "📸", r.instagramAds),
-    "",
-    "📈 *Gráficos (Slack):* desempenho por canal (linha) e distribuição de orçamento (roscas).",
-    compactChartSummary(r),
-    "",
-    "📈 *FUNIL DE PERFORMANCE*",
-    `Impressões: ${f.impressoes.toLocaleString("pt-BR")}`,
-    `Cliques: ${f.cliques.toLocaleString("pt-BR")}`,
-    `CTR: ${f.ctr.toFixed(2)}%`,
-    `CPC: ${brl(f.cpc)}`,
-    `CPM: ${brl(f.cpm)}`,
-    `CPA: ${brl(f.cpa)}`,
-    "",
-    "🤖 *INSIGHT DA IA*",
-    r.insightIA,
-  ].join("\n");
+  const fu = prefs.funnel;
+  const sec = prefs.sections;
+
+  const blocks: string[] = ["📊 *RELATÓRIO DE PERFORMANCE DE TRÁFEGO*", `*${r.clientName}* · consolidado (Google, Meta, Instagram) · enviado em _${r.sentAtLabel}_`, ""];
+
+  for (const [name, icon, m] of [
+    ["Meta Ads", "📘", r.metaAds],
+    ["Google Ads", "🔍", r.googleAds],
+    ["Instagram Ads", "📸", r.instagramAds],
+  ] as const) {
+    const part = channelMarkdownBlock(name, icon, m, ch);
+    if (part) blocks.push(part);
+  }
+
+  if (sec.showPerformanceChart || sec.showBudgetDonuts) {
+    blocks.push(
+      "📈 *Gráficos (Slack):* desempenho por canal (linha) e distribuição de orçamento (roscas).",
+      compactChartSummary(r),
+      "",
+    );
+  }
+
+  const funnelLines: string[] = [];
+  if (fu.showImpressions) funnelLines.push(`Impressões: ${f.impressoes.toLocaleString("pt-BR")}`);
+  if (fu.showClicks) funnelLines.push(`Cliques: ${f.cliques.toLocaleString("pt-BR")}`);
+  if (fu.showCtr) funnelLines.push(`CTR: ${f.ctr.toFixed(2)}%`);
+  if (fu.showCpc) funnelLines.push(`CPC: ${brl(f.cpc)}`);
+  if (fu.showCpm) funnelLines.push(`CPM: ${brl(f.cpm)}`);
+  if (fu.showCpa) funnelLines.push(`CPA: ${brl(f.cpa)}`);
+  if (funnelLines.length > 0) {
+    blocks.push("📈 *FUNIL DE PERFORMANCE*", ...funnelLines, "");
+  }
+
+  if (sec.showAiInsight) {
+    blocks.push("🤖 *INSIGHT DA IA*", r.insightIA);
+  }
+
+  return blocks.join("\n");
 }
 
 type SlackBlock = Record<string, unknown>;
@@ -176,6 +204,7 @@ export type BuildSlackBlocksOptions = {
    * false: duas imagens QuickChart empilhadas (ex.: envio sem relay no servidor).
    */
   relayMerge?: boolean;
+  prefs?: SlackReportPreferences;
 };
 
 function budgetDoughnutUrls(r: TrafficPerformanceReport) {
@@ -186,34 +215,50 @@ function budgetDoughnutUrls(r: TrafficPerformanceReport) {
   };
 }
 
+function channelFields(m: ChannelMetrics, ch: SlackReportPreferences["channels"]): SlackBlock[] {
+  const fields: SlackBlock[] = [];
+  if (ch.showInvested) fields.push(fieldBlock("Investido", brl(m.investido)));
+  if (ch.showLeads) fields.push(fieldBlock("Leads", String(m.leads)));
+  if (ch.showConversions) fields.push(fieldBlock("Conversões", String(m.conversoes)));
+  if (ch.showRevenue) fields.push(fieldBlock("Receita", brl(m.receita)));
+  if (ch.showCpl) fields.push(fieldBlock("CPL", brl(m.cpl)));
+  if (ch.showCostPerMessage) fields.push(fieldBlock("Custo por mensagem", brl(m.cpl)));
+  if (ch.showRoi) fields.push(fieldBlock("ROI", `${m.roi.toFixed(1)}×`));
+  return fields;
+}
+
+function channelSection(title: string, emoji: string, m: ChannelMetrics, ch: SlackReportPreferences["channels"]): SlackBlock[] {
+  const fields = channelFields(m, ch);
+  if (fields.length === 0) return [];
+  return [
+    { type: "section", text: { type: "mrkdwn", text: `${emoji} *${title}*` } },
+    { type: "section", fields },
+    { type: "divider" },
+  ];
+}
+
 /** Payload Slack Block Kit: colunas com ícones (campos aparecem em 2 colunas). */
 export function buildSlackBlocks(r: TrafficPerformanceReport, options?: BuildSlackBlocksOptions): SlackBlock[] {
   const relayMerge = options?.relayMerge === true;
+  const prefs = options?.prefs ?? DEFAULT_SLACK_REPORT_PREFS;
+  const chPrefs = prefs.channels;
+  const fu = prefs.funnel;
+  const sec = prefs.sections;
+
   const lineChartUrl =
-    r.performanceSeries.length > 0 ? buildDesempenhoLineChartUrl(r.performanceSeries) : null;
+    sec.showPerformanceChart && r.performanceSeries.length > 0 ? buildDesempenhoLineChartUrl(r.performanceSeries) : null;
   const { left: doughnutAtualUrl, right: doughnutIaUrl } = budgetDoughnutUrls(r);
 
-  const channelSection = (title: string, emoji: string, m: ChannelMetrics): SlackBlock[] => [
-    {
-      type: "section",
-      text: { type: "mrkdwn", text: `${emoji} *${title}*` },
-    },
-    {
-      type: "section",
-      fields: [
-        fieldBlock("Investido", brl(m.investido)),
-        fieldBlock("Leads", String(m.leads)),
-        fieldBlock("Conversões", String(m.conversoes)),
-        fieldBlock("Receita", brl(m.receita)),
-        fieldBlock("CPL", brl(m.cpl)),
-        fieldBlock("ROI", `${m.roi.toFixed(1)}×`),
-      ],
-    },
-    { type: "divider" },
-  ];
-
   const f = r.funil;
-  return [
+  const funnelFields: SlackBlock[] = [];
+  if (fu.showImpressions) funnelFields.push(fieldBlock("Impressões", f.impressoes.toLocaleString("pt-BR")));
+  if (fu.showClicks) funnelFields.push(fieldBlock("Cliques", f.cliques.toLocaleString("pt-BR")));
+  if (fu.showCtr) funnelFields.push(fieldBlock("CTR", `${f.ctr.toFixed(2)}%`));
+  if (fu.showCpc) funnelFields.push(fieldBlock("CPC", brl(f.cpc)));
+  if (fu.showCpm) funnelFields.push(fieldBlock("CPM", brl(f.cpm)));
+  if (fu.showCpa) funnelFields.push(fieldBlock("CPA", brl(f.cpa)));
+
+  const out: SlackBlock[] = [
     {
       type: "header",
       text: { type: "plain_text", text: "📊 Relatório de performance de tráfego", emoji: true },
@@ -228,78 +273,81 @@ export function buildSlackBlocks(r: TrafficPerformanceReport, options?: BuildSla
       ],
     },
     { type: "divider" },
-    ...channelSection("Meta Ads", "📘", r.metaAds),
-    ...channelSection("Google Ads", "🔍", r.googleAds),
-    ...channelSection("Instagram Ads", "📸", r.instagramAds),
-    {
+    ...channelSection("Meta Ads", "📘", r.metaAds, chPrefs),
+    ...channelSection("Google Ads", "🔍", r.googleAds, chPrefs),
+    ...channelSection("Instagram Ads", "📸", r.instagramAds, chPrefs),
+  ];
+
+  if (sec.showPerformanceChart) {
+    out.push({
       type: "section",
       text: {
         type: "mrkdwn",
         text: "📈 *Desempenho por canal*\n_Receita / resultado agregado — últimos 6 meses (simulado)_",
       },
-    },
-    ...(lineChartUrl
-      ? ([
+    });
+    if (lineChartUrl) {
+      out.push({
+        type: "image",
+        image_url: lineChartUrl,
+        alt_text: "Gráfico de linhas escuro: Meta, Google e Instagram (6 meses)",
+      });
+    }
+    out.push({ type: "divider" });
+  }
+
+  if (sec.showBudgetDonuts) {
+    out.push(
+      ...(relayMerge
+        ? ([
+            {
+              type: "image",
+              image_url: doughnutAtualUrl,
+              alt_text:
+                "Orçamento: duas roscas lado a lado (atual e recomendado pela IA) — Meta, Google, Instagram",
+            },
+          ] as SlackBlock[])
+        : ([
+            {
+              type: "image",
+              image_url: doughnutAtualUrl,
+              alt_text: "Distribuição atual: Meta, Google e Instagram",
+            },
+            {
+              type: "image",
+              image_url: doughnutIaUrl,
+              alt_text: "Recomendado pela IA: Meta, Google e Instagram",
+            },
+          ] as SlackBlock[])),
+      {
+        type: "context",
+        elements: [
           {
-            type: "image",
-            image_url: lineChartUrl,
-            alt_text: "Gráfico de linhas escuro: Meta, Google e Instagram (6 meses)",
+            type: "mrkdwn",
+            text: "🍩 _Distribuição de orçamento — à esquerda: atual · à direita: recomendado pela IA_",
           },
-        ] as SlackBlock[])
-      : []),
-    { type: "divider" },
-    ...(relayMerge
-      ? ([
-          {
-            type: "image",
-            image_url: doughnutAtualUrl,
-            alt_text:
-              "Orçamento: duas roscas lado a lado (atual e recomendado pela IA) — Meta, Google, Instagram",
-          },
-        ] as SlackBlock[])
-      : ([
-          {
-            type: "image",
-            image_url: doughnutAtualUrl,
-            alt_text: "Distribuição atual: Meta, Google e Instagram",
-          },
-          {
-            type: "image",
-            image_url: doughnutIaUrl,
-            alt_text: "Recomendado pela IA: Meta, Google e Instagram",
-          },
-        ] as SlackBlock[])),
-    {
-      type: "context",
-      elements: [
-        {
-          type: "mrkdwn",
-          text: "🍩 _Distribuição de orçamento — à esquerda: atual · à direita: recomendado pela IA_",
-        },
-      ],
-    },
-    { type: "divider" },
-    {
-      type: "section",
-      text: { type: "mrkdwn", text: "📈 *FUNIL DE PERFORMANCE*" },
-    },
-    {
-      type: "section",
-      fields: [
-        fieldBlock("Impressões", f.impressoes.toLocaleString("pt-BR")),
-        fieldBlock("Cliques", f.cliques.toLocaleString("pt-BR")),
-        fieldBlock("CTR", `${f.ctr.toFixed(2)}%`),
-        fieldBlock("CPC", brl(f.cpc)),
-        fieldBlock("CPM", brl(f.cpm)),
-        fieldBlock("CPA", brl(f.cpa)),
-      ],
-    },
-    { type: "divider" },
-    {
+        ],
+      },
+      { type: "divider" },
+    );
+  }
+
+  if (funnelFields.length > 0) {
+    out.push(
+      { type: "section", text: { type: "mrkdwn", text: "📈 *FUNIL DE PERFORMANCE*" } },
+      { type: "section", fields: funnelFields },
+      { type: "divider" },
+    );
+  }
+
+  if (sec.showAiInsight) {
+    out.push({
       type: "section",
       text: { type: "mrkdwn", text: `🤖 *INSIGHT DA IA*\n${r.insightIA}` },
-    },
-  ];
+    });
+  }
+
+  return out;
 }
 
 export type SendReportResult = { ok: true } | { ok: false; error: string };
@@ -324,18 +372,20 @@ function slackRelayUrls(): string[] {
 export async function sendReportToSlack(
   reportData: TrafficPerformanceReport,
   webhookUrl?: string,
+  prefs?: SlackReportPreferences,
 ): Promise<SendReportResult> {
   const url = (webhookUrl?.trim() || envWebhook() || "").trim();
   if (!url) {
     return { ok: false, error: "Nenhum webhook configurado (defina nas definições do cliente ou VITE_SLACK_WEBHOOK_URL)." };
   }
 
-  const text = formatReportMarkdown(reportData);
+  const p = prefs ?? DEFAULT_SLACK_REPORT_PREFS;
+  const text = formatReportMarkdown(reportData, p);
   const useBrowserRelay = typeof window !== "undefined";
-  const blocks = buildSlackBlocks(reportData, { relayMerge: useBrowserRelay });
+  const blocks = buildSlackBlocks(reportData, { relayMerge: useBrowserRelay, prefs: p });
   const { left: budgetLeft, right: budgetRight } = budgetDoughnutUrls(reportData);
   const body: Record<string, unknown> = { text, blocks };
-  if (useBrowserRelay) {
+  if (useBrowserRelay && p.sections.showBudgetDonuts) {
     body.budgetMerge = { left: budgetLeft, right: budgetRight };
   }
 
@@ -427,9 +477,11 @@ export async function sendManualReport(clientId: number): Promise<SendReportResu
   if (!client) {
     return { ok: false, error: "Cliente não encontrado." };
   }
+  const settings = loadClientIntegration(clientId);
   const report = buildTrafficPerformanceReport(client);
-  const url = resolveWebhookForClient(clientId);
-  return sendReportToSlack(report, url);
+  const url = resolveWebhookForClient(clientId, settings);
+  const prefs = resolveSlackReportPreferences(settings);
+  return sendReportToSlack(report, url, prefs);
 }
 
 /**
@@ -450,8 +502,8 @@ function todayKey(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-/** Janela de minutos após o horário agendado (tabs em segundo plano atrasam setInterval). */
-const SCHEDULE_MATCH_WINDOW_MINUTES = 5;
+/** Janela de minutos após o horário agendado (tabs em segundo plano / timer atrasam o tick). */
+const SCHEDULE_MATCH_WINDOW_MINUTES = 15;
 
 function matchesScheduleWindow(d: Date, hhmm: string): boolean {
   const raw = hhmm.trim();
