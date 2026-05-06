@@ -1,9 +1,25 @@
 <?php
 /**
  * Proxy /api/ad-hub/* → API Go (auth utilizadores MySQL).
- * Mesma lógica de candidatos que api/intellisearch/proxy.php (PORT 3041).
+ * Porta predef.: 3041 (igual ao `PORT` no .env ao lado do binário). Override: SetEnv ADHUB_GO_PORT 3042
  */
 declare(strict_types=1);
+
+/** Porta onde o Go escuta (deve coincidir com PORT no .env da API, não com PORT do Apache). */
+function adhub_go_port(): int
+{
+    $raw = getenv('ADHUB_GO_PORT');
+    if (!is_string($raw) || $raw === '') {
+        $raw = isset($_SERVER['ADHUB_GO_PORT']) ? (string) $_SERVER['ADHUB_GO_PORT'] : '';
+    }
+    if ($raw !== '' && ctype_digit($raw)) {
+        $p = (int) $raw;
+        if ($p > 0 && $p <= 65535) {
+            return $p;
+        }
+    }
+    return 3041;
+}
 
 /**
  * @return list<string>
@@ -70,8 +86,11 @@ if (strpos($uri, '/api/ad-hub') !== 0) {
     exit;
 }
 
+$port = adhub_go_port();
+$p = (string) $port;
+
 $candidates = [];
-// 1) backend.local.php primeiro (HostGator: porta fixa sem depender de env no cPanel)
+// 1) backend.local.php (prioridade — URL completa onde o Go responde)
 $localFile = __DIR__ . '/backend.local.php';
 if (is_readable($localFile)) {
     $override = include $localFile;
@@ -79,6 +98,7 @@ if (is_readable($localFile)) {
         $candidates[] = rtrim($override, '/');
     }
 }
+// 2) Um único backend explícito (SetEnv ADHUB_GO_BACKEND)
 $envB = getenv('ADHUB_GO_BACKEND');
 if (!is_string($envB) || $envB === '') {
     $envB = isset($_SERVER['ADHUB_GO_BACKEND']) ? (string) $_SERVER['ADHUB_GO_BACKEND'] : '';
@@ -86,18 +106,20 @@ if (!is_string($envB) || $envB === '') {
 if (is_string($envB) && $envB !== '') {
     $candidates[] = rtrim($envB, '/');
 }
+// 3) Loopback com a MESMA porta que o binário — antes de BIND_EXTRA (evita falhar primeiro em :3044 por engano)
+$candidates[] = 'http://127.0.0.1:' . $p;
+$candidates[] = 'http://localhost:' . $p;
+// 4) URLs extra (IP público, etc.)
 foreach (adhub_proxy_bind_extra_urls('ADHUB_GO_BIND_EXTRA') as $u) {
     $candidates[] = $u;
 }
 $reqHost = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
 if ($reqHost === 'ad-hub.digital' || $reqHost === 'www.ad-hub.digital') {
-    $candidates[] = 'http://162.241.2.132:3041';
+    $candidates[] = 'http://162.241.2.132:' . $p;
 }
-$candidates[] = 'http://127.0.0.1:3041';
-$candidates[] = 'http://localhost:3041';
 $serverAddr = isset($_SERVER['SERVER_ADDR']) ? (string) $_SERVER['SERVER_ADDR'] : '';
 if ($serverAddr !== '' && filter_var($serverAddr, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-    $candidates[] = 'http://' . $serverAddr . ':3041';
+    $candidates[] = 'http://' . $serverAddr . ':' . $p;
 }
 $candidates = array_values(array_unique($candidates));
 
@@ -159,5 +181,6 @@ header('Content-Type: application/json; charset=utf-8');
 echo json_encode([
     'error' => 'proxy: API Go (ad-hub) inacessível. Tentado: ' . implode(', ', $candidates),
     'detail' => $lastErr,
-    'hint' => 'Se o IP público:3041 já foi tentado e falhou, o PHP não consegue falar com o Go neste alojamento. IntelliSearch: variável de build VITE_INTELLISEARCH_API_URL=https://… (subdomínio HTTPS com proxy para o Go). Auth /api/ad-hub usa o mesmo proxy PHP até o hosting desbloquear ou expor o Go em HTTPS.',
+    'go_port' => $port,
+    'hint' => 'SSH: curl -sS http://127.0.0.1:' . $p . '/api/ad-hub/auth/ping — se falhar, o binário Go não está a correr ou PORT no .env da API ≠ ' . $p . '. Confirme ps/systemctl/screen e ~/apps/minha-api/.env. Remova portas erradas de ADHUB_GO_BIND_EXTRA no Apache. Se curl SSH OK mas o site falha (CageFS), use backend.local.php com o URL que funcionar ou subdomínio HTTPS → reverse proxy para o Go.',
 ], JSON_UNESCAPED_UNICODE);

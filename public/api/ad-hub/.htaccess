@@ -7,5 +7,10 @@ RewriteRule . proxy.php [L]
 </IfModule>
 
 <IfModule mod_env.c>
+# Porta onde o binário Go escuta (igual a PORT em ~/apps/minha-api/.env). Predef.: 3041 no proxy.php.
+# SetEnv ADHUB_GO_PORT 3041
+#
+# URLs extra só se precisar; a porta tem de bater certo com o Go. Um URL errado (ex.: :3044) faz perder tempo
+# a tentar — o proxy agora tenta 127.0.0.1:PORT antes disto.
 SetEnv ADHUB_GO_BIND_EXTRA http://162.241.2.132:3041
 </IfModule>
