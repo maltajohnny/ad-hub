@@ -33,6 +33,28 @@ const WEEKDAYS: { v: number; label: string }[] = [
   { v: 6, label: "Sáb" },
 ];
 
+/** Evita `<input type="time">`: no macOS o picker nativo pode ser 12 h (AM/PM) conforme o SO. */
+function parseScheduleHHMM(raw: string): { hour: number; minute: number } {
+  const parts = raw.trim().split(":");
+  let hour = Number.parseInt(parts[0] ?? "14", 10);
+  let minute = Number.parseInt(parts[1] ?? "0", 10);
+  if (Number.isNaN(hour)) hour = 14;
+  if (Number.isNaN(minute)) minute = 0;
+  return {
+    hour: Math.min(23, Math.max(0, hour)),
+    minute: Math.min(59, Math.max(0, minute)),
+  };
+}
+
+function formatScheduleHHMM(hour: number, minute: number): string {
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+const SCHEDULE_TIME_SELECT_CLASS = cn(
+  "h-9 min-w-[4.25rem] rounded-md border border-input bg-background px-2 py-1 text-sm tabular-nums",
+  "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+);
+
 type Props = {
   clientId: number | null;
   open: boolean;
@@ -82,6 +104,8 @@ export function ClientSettingsModal({ clientId, open, onClose }: Props) {
     update({ slackReportPrefs: { ...prefs, funnel: { ...prefs.funnel, ...patch } } });
   const setSections = (patch: Partial<typeof prefs.sections>) =>
     update({ slackReportPrefs: { ...prefs, sections: { ...prefs.sections, ...patch } } });
+
+  const { hour: schedHour, minute: schedMinute } = parseScheduleHHMM(form.scheduleTime);
 
   const toggleDay = (v: number) => {
     const set = new Set(form.scheduleWeekdays);
@@ -382,18 +406,47 @@ export function ClientSettingsModal({ clientId, open, onClose }: Props) {
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-2 max-w-[200px]">
-              <Label htmlFor="sched-time" className="text-xs shrink-0">
-                Horário
-              </Label>
-              <Input
-                id="sched-time"
-                type="time"
-                lang="pt-BR"
-                value={form.scheduleTime}
-                onChange={(e) => update({ scheduleTime: e.target.value })}
-                className="bg-background border-border/50 h-9 tabular-nums"
-              />
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span id="sched-time-label" className="text-xs shrink-0 font-medium leading-none">
+                Horário (24 h)
+              </span>
+              <div className="flex items-center gap-1.5" role="group" aria-labelledby="sched-time-label">
+                <select
+                  id="sched-hour"
+                  aria-label="Hora"
+                  value={schedHour}
+                  onChange={(e) => {
+                    const h = Number.parseInt(e.target.value, 10);
+                    update({ scheduleTime: formatScheduleHHMM(Number.isNaN(h) ? 0 : h, schedMinute) });
+                  }}
+                  className={SCHEDULE_TIME_SELECT_CLASS}
+                >
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <option key={h} value={h}>
+                      {String(h).padStart(2, "0")}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-muted-foreground text-sm tabular-nums select-none" aria-hidden>
+                  :
+                </span>
+                <select
+                  id="sched-minute"
+                  aria-label="Minutos"
+                  value={schedMinute}
+                  onChange={(e) => {
+                    const m = Number.parseInt(e.target.value, 10);
+                    update({ scheduleTime: formatScheduleHHMM(schedHour, Number.isNaN(m) ? 0 : m) });
+                  }}
+                  className={SCHEDULE_TIME_SELECT_CLASS}
+                >
+                  {Array.from({ length: 60 }, (_, m) => (
+                    <option key={m} value={m}>
+                      {String(m).padStart(2, "0")}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <p className="text-[11px] text-muted-foreground">
               Horário em formato 24 h (ex.: 14:00). Seleciona pelo menos um dia da semana. O envio tenta na janela de ~15
