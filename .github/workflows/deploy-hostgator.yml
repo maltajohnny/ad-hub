@@ -63,6 +63,8 @@ jobs:
           VITE_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           VITE_GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          # OAuth Google Ads via Cloudflare Worker (mesmo valor que Google Cloud redirect URI).
+          VITE_INSIGHT_HUB_GOOGLE_ADS_REDIRECT_URI: ${{ vars.VITE_INSIGHT_HUB_GOOGLE_ADS_REDIRECT_URI || 'https://google-ads-worker.ad-hub.workers.dev/google-ads/callback' }}
         run: npm run build
 
       # Front (Vite): pasta = Document Root do domínio (no teu caso: public_html/)
