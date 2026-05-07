@@ -137,6 +137,7 @@ $auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
 if ($auth === '' && !empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
     $auth = (string) $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
 }
+$callbackSecret = (string) ($_SERVER['HTTP_X_CALLBACK_SECRET'] ?? '');
 
 $lastErr = '';
 $body = false;
@@ -147,6 +148,9 @@ foreach ($candidates as $backend) {
     $headers = ['Accept: application/json'];
     if ($auth !== '') {
         $headers[] = 'Authorization: ' . $auth;
+    }
+    if ($callbackSecret !== '') {
+        $headers[] = 'X-Callback-Secret: ' . $callbackSecret;
     }
     $ct = $_SERVER['CONTENT_TYPE'] ?? '';
     if ($ct !== '' && ($method === 'POST' || $method === 'PATCH' || $method === 'PUT')) {
