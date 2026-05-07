@@ -1,7 +1,7 @@
 <?php
 /**
  * Proxy /api/ad-hub/* → API Go (auth utilizadores MySQL).
- * Porta predef.: 3041 (igual ao `PORT` no .env ao lado do binário). Override: SetEnv ADHUB_GO_PORT 3042
+ * Porta predef.: 3042 (igual ao `PORT` no .env ao lado do binário). Override: SetEnv ADHUB_GO_PORT
  */
 declare(strict_types=1);
 
@@ -18,7 +18,7 @@ function adhub_go_port(): int
             return $p;
         }
     }
-    return 3041;
+    return 3042;
 }
 
 /**
