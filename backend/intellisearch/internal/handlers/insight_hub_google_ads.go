@@ -16,6 +16,21 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// Callback público registado no Google Cloud + Cloudflare Worker (evita ModSecurity no HostGator).
+const googleAdsOAuthBridgeRedirectURI = "https://google-ads-worker.ad-hub.workers.dev/google-ads/callback"
+
+func rewriteLegacyInsightHubGoogleAdsRedirect(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	lower := strings.ToLower(s)
+	if strings.Contains(lower, "ad-hub.digital") && strings.Contains(lower, "/api/ad-hub/insight-hub/oauth/google-ads/callback") {
+		return googleAdsOAuthBridgeRedirectURI
+	}
+	return s
+}
+
 // InsightHubGoogleAdsAuthorize POST — inicia OAuth Google (Ads API).
 func InsightHubGoogleAdsAuthorize(c *fiber.Ctx) error {
 	access := middleware.MustInsightHubAccess(c)
@@ -40,6 +55,7 @@ func InsightHubGoogleAdsAuthorize(c *fiber.Ctx) error {
 	if redirect == "" {
 		redirect = strings.TrimSpace(os.Getenv("INSIGHT_HUB_GOOGLE_ADS_REDIRECT_URI"))
 	}
+	redirect = rewriteLegacyInsightHubGoogleAdsRedirect(redirect)
 	if redirect == "" {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"error": "Defina INSIGHT_HUB_GOOGLE_ADS_REDIRECT_URI no .env ou envie redirectUri no payload.",
