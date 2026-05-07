@@ -247,14 +247,22 @@ export async function startMetaAuthorize(body: {
   });
 }
 
+/** Bridge público (Cloudflare Worker). Igual à URI autorizada no cliente OAuth Google Ads. */
+const GOOGLE_ADS_OAUTH_BRIDGE_REDIRECT_URI =
+  "https://google-ads-worker.ad-hub.workers.dev/google-ads/callback";
+
 /**
- * Callback OAuth Google Ads (path fixo na API Go). Deve ser o mesmo registo em
- * Google Cloud → Credenciais → ID do cliente OAuth → URIs de redirecionamento autorizados.
+ * Redirect OAuth Google Ads. Em produção no domínio principal usa o Worker (evita ModSecurity no callback same-origin).
+ * `VITE_INSIGHT_HUB_GOOGLE_ADS_REDIRECT_URI` continua a poder sobrepor (build ou override).
  */
 export function insightHubGoogleAdsRedirectUri(): string {
   if (typeof window === "undefined") return "";
   const custom = import.meta.env.VITE_INSIGHT_HUB_GOOGLE_ADS_REDIRECT_URI?.trim();
   if (custom) return custom;
+  const host = window.location.hostname.toLowerCase();
+  if (host === "ad-hub.digital" || host === "www.ad-hub.digital") {
+    return GOOGLE_ADS_OAUTH_BRIDGE_REDIRECT_URI;
+  }
   return `${window.location.origin}/api/ad-hub/insight-hub/oauth/google-ads/callback`;
 }
 
