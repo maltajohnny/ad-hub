@@ -9,6 +9,8 @@ set -euo pipefail
 #######################################
 
 # ===== Config =====
+# Mesma ligação que: ssh -i ~/.ssh/ssh_access -o IdentitiesOnly=yes johnn315@162.241.2.132
+# Override: SSH_USER / SSH_HOST / SSH_KEY
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/ssh_access}"
 # Só esta identidade (+ sem agent) evita "Too many authentication failures".
 # Por defeito NÃO usamos BatchMode: se entrares com palavra-passe no ssh, o script também pode pedir na mesma sessão.
