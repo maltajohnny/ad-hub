@@ -133,8 +133,7 @@ func main() {
 		Post("/gemini/generate", handlers.AdHubGeminiGenerate)
 
 	// Bootstrap não exige direito ativo — devolve {active:false} para o front mostrar planos.
-	app.Group("/api/ad-hub/insight-hub", middleware.RequireAdHubSession).
-		Get("/bootstrap", handlers.InsightHubBootstrap)
+	app.Get("/api/ad-hub/insight-hub/bootstrap", middleware.RequireAdHubSession, handlers.InsightHubBootstrap)
 
 	// Callback OAuth Meta é público (Meta redireciona o browser); valida via state assinado.
 	app.Get("/api/ad-hub/insight-hub/oauth/meta/callback", handlers.InsightHubMetaCallback)
