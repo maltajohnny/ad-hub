@@ -18,6 +18,8 @@ SSH_OPTS=(
   -o IdentityAgent=none
   -o IdentitiesOnly=yes
   -o PubkeyAuthentication=yes
+  -o ServerAliveInterval=15
+  -o ServerAliveCountMax=4
   -i "$SSH_KEY"
 )
 if [[ "${SSH_BATCH:-0}" == "1" ]]; then
@@ -33,6 +35,8 @@ SSH_USER="${SSH_USER:-johnn315}"
 SSH_HOST="${SSH_HOST:-162.241.2.132}"
 REMOTE_DIR="${REMOTE_DIR:-/home3/johnn315/apps/minha-api}"
 BIN_NAME="${BIN_NAME:-api}"
+# Se o jailshell reportar a porta 3041 ocupada sem PID (falso positivo), usar SKIP_PORT_CHECK=1 ./deploy-hostgator.sh
+SKIP_PORT_CHECK="${SKIP_PORT_CHECK:-0}"
 PROJECT_ROOT="$(pwd)"
 BUILD_DIR="${PROJECT_ROOT}/.deploy"
 LOCAL_BIN="${BUILD_DIR}/${BIN_NAME}"
@@ -94,10 +98,20 @@ ssh_deploy "${SSH_USER}@${SSH_HOST}" "set -euo pipefail; \
   mv -f '${BIN_NAME}.new' '${BIN_NAME}'; \
   chmod +x '${BIN_NAME}' 'restart-api.sh'"
 
+log "PASSO 4b/6 - Libertar porta 3041 no servidor (NAO usar pkill -f com path — mata a sessao SSH)..."
+ssh_deploy "${SSH_USER}@${SSH_HOST}" "set +e; cd '${REMOTE_DIR}'; \
+  if [ -f '${BIN_NAME}.pid' ]; then kill -9 \$(tr -d '[:space:]' < '${BIN_NAME}.pid') 2>/dev/null; fi; \
+  rm -f '${BIN_NAME}.pid'; \
+  if command -v fuser >/dev/null 2>&1; then fuser -k './${BIN_NAME}' 2>/dev/null; fi; \
+  sleep 2; \
+  command -v fuser >/dev/null 2>&1 && fuser -k 3041/tcp 2>/dev/null; sleep 2; \
+  command -v fuser >/dev/null 2>&1 && fuser -k 3041/tcp 2>/dev/null; \
+  exit 0"
+
 log "PASSO 5/6 - Reiniciando API remotamente..."
 ssh_deploy "${SSH_USER}@${SSH_HOST}" "set -euo pipefail; \
   cd '${REMOTE_DIR}'; \
-  ./restart-api.sh '${BIN_NAME}'"
+  SKIP_PORT_CHECK='${SKIP_PORT_CHECK}' ./restart-api.sh '${BIN_NAME}'"
 
 log "PASSO 6/6 - Verificando status remoto..."
 ssh_deploy "${SSH_USER}@${SSH_HOST}" "set -euo pipefail; \
