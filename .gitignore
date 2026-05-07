@@ -16,6 +16,7 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!.env.production
 
 # Override opcional no servidor (URL interna do Go para proxy PHP IntelliSearch)
 public/api/intellisearch/backend.local.php
