@@ -82,8 +82,15 @@ pids_listening_on_tcp_port() {
 
 tcp_port_in_use() {
   local p="$1"
-  # NÃO usar grep cego em ":PORT" sobre ss -tlnp — no jailshell a linha users:(...,pid=IGUAL_À_PORTA,...)
-  # pode coincidir com a porta e manter a porta "ocupada" para sempre.
+  # HostGator/jailshell: `ss`/`lsof` acusam a porta ocupada sem PID correcto (falso positivo infinito).
+  # O Go expõe GET /health — se responder, há listener nosso ou outro serviço nessa porta.
+  if command -v curl >/dev/null 2>&1; then
+    if curl -sf -m 3 --connect-timeout 2 "http://127.0.0.1:${p}/health" >/dev/null 2>&1; then
+      return 0
+    fi
+    return 1
+  fi
+  # Fallback sem curl (raro):
   if command -v ss >/dev/null 2>&1; then
     if ss -ltnH "sport = :${p}" 2>/dev/null | grep -q .; then
       return 0
@@ -92,7 +99,6 @@ tcp_port_in_use() {
   if command -v lsof >/dev/null 2>&1; then
     lsof -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 && return 0
   fi
-  # Não usar /dev/tcp aqui: em alguns jailshells dá falso “ocupado” ou comportamento estranho.
   return 1
 }
 
